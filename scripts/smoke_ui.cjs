@@ -23,12 +23,18 @@ function expect(expr,message){assert.ok(expr,message)}
 (async()=>{
  await new Promise(resolve=>setImmediate(resolve));
  expect(document.querySelector('#loginemail'),'login screen');
+ expect(document.querySelector('.login-top .powered-by img'),'Seebot Powered by image in sign-in header');
+ assert.equal(document.querySelector('.login-top .powered-by img').getAttribute('src'),'assets/powered-by-seebot.svg');
+ assert.ok(fs.existsSync('assets/powered-by-seebot.svg'),'Seebot SVG was committed');
  window.fillDemo('admin@demo.seebot.ai');
  window.login({preventDefault(){}});
  expect(document.querySelector('.ops-nav'),'admin dashboard');
+ expect(document.querySelector('.ops-head-first .powered-by img'),'Seebot Powered by image in dashboard header');
  window.openTask('task_demo1');
  expect(document.querySelector('.studio-grid'),'studio rendered');
  expect(document.querySelector('.sponsor-rail'),'sponsor sidebar rendered');
+ expect(document.querySelector('.focusbar .powered-by img'),'Seebot Powered by image in studio header');
+ assert.equal(document.querySelectorAll('.sponsor-rail .rail-state-dot').length,0,'separate sponsor status dots removed');
  expect(document.querySelector('#taskActionMenu'),'task actions dropdown rendered');
  expect(!document.querySelector('.rail-header'),'oversized sponsor header removed');
  expect(!document.querySelector('.rail-group-heading'),'sponsor categories hidden');
