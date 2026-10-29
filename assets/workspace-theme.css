@@ -972,3 +972,52 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
  }
  .login-central .demo-roles button{min-height:44px!important;}
 }
+
+/* Brand state chips: one action toggles a sponsor between OFF and LIVE.
+   Status is a label inside the existing button, not a second hit target. */
+.app-focus .sponsor-rail .rail-brand{
+ position:relative!important;
+ padding:8px 74px 8px 12px!important;
+}
+.app-focus .sponsor-rail .rail-brand.isactive{
+ background:#20352c!important;
+ border-color:#4fc493!important;
+ box-shadow:0 0 0 1px #4fc49355!important;
+}
+.app-focus .sponsor-rail .rail-brand .rail-live-pill{
+ position:absolute;
+ right:11px;top:50%;transform:translateY(-50%);
+ display:inline-flex;align-items:center;justify-content:center;
+ width:56px;height:25px;padding:4px 7px;
+ border-radius:999px;
+ font:800 10px/1 'IBM Plex Mono',monospace!important;
+ letter-spacing:.01em!important;
+ pointer-events:none;white-space:nowrap;
+}
+.app-focus .sponsor-rail .rail-brand .rail-live-pill.off{
+ background:#48262b;color:#ff9aa1;border:1px solid #7a3a41;
+}
+.app-focus .sponsor-rail .rail-brand .rail-live-pill.on{
+ background:#184c35;color:#91edba;border:1px solid #3ea979;
+}
+.app-focus .sponsor-rail .rail-logo{
+ min-width:0!important;
+ width:100%!important;
+ display:grid!important;place-items:center!important;
+}
+.app-focus .sponsor-rail .rail-logo .tinylogo,
+.app-focus .sponsor-rail .rail-logo .tinylogo img,
+.tinylogo img,.logo-preview img{
+ background:transparent!important;
+}
+.logo-preview {background:#252527!important;border-radius:12px!important;}
+.logo-preview img{object-fit:contain!important;}
+@media(max-width:680px){
+ .app-focus .sponsor-rail .rail-brand{
+  padding:7px 60px 7px 7px!important;
+ }
+ .app-focus .sponsor-rail .rail-brand .rail-live-pill{
+  right:6px;width:47px;height:22px;
+  padding:3px 5px;font-size:9px!important;
+ }
+}
