@@ -1097,9 +1097,66 @@ window.setSeekStep=value=>{
 window.togglePlay=()=>{if(!videoEl)return notify('Attach a video to play. You can still scrub timestamps to test tagging.');if(videoEl.paused){videoEl.play().catch(()=>notify('Video playback unavailable for this source.'))}else videoEl.pause()};
 window.cycleRate=()=>{let values=[1,1.25,1.5,2];let cur=videoEl?.playbackRate||1;let next=values[(values.indexOf(cur)+1)%values.length];if(videoEl)videoEl.playbackRate=next;document.getElementById('rateButton').textContent=next+'×'};
 function updateClock(){let t=currentTask();if(!t)return;t.observedTime=Math.max(t.observedTime||0,tick);let e=document.getElementById('vidtime');if(e)e.textContent=`${fmt(tick)} / ${fmt(t.duration)}`;let r=document.getElementById('seek');if(r){r.max=t.duration;r.value=tick};let c=document.getElementById('currentT');if(c)c.textContent=fmt(tick);let p=document.querySelectorAll('.track .playhead');p.forEach(x=>x.style.left=(100*tick/t.duration)+'%');let b=document.getElementById('playbutton');if(b&&videoEl)b.innerHTML=icons(videoEl.paused?'play':'pause')}
-function attachVideo(){videoEl=document.getElementById('matchVideo');if(!videoEl)return;videoEl.addEventListener('timeupdate',()=>{tick=videoEl.currentTime;updateClock();if(Math.floor(tick)%4===0)save()});videoEl.addEventListener('play',updateClock);videoEl.addEventListener('pause',updateClock);videoEl.addEventListener('loadedmetadata',()=>{let t=currentTask();if(t&&Number.isFinite(videoEl.duration)&&videoEl.duration>1){if(Math.abs(videoEl.duration-t.duration)>2){t.duration=Math.round(videoEl.duration*100)/100;save();refreshStudio()}updateClock()}});videoEl.addEventListener('error',()=>notify('Unable to play this source. Use a local video or a direct HTTPS MP4 URL.'));videoEl.addEventListener('ended',updateClock)}
-window.chooseVideo=()=>document.getElementById('videofile').click();
-document.getElementById('videofile').addEventListener('change',e=>{let f=e.target.files[0];let t=currentTask();if(!f||!t)return;if(!f.type.startsWith('video/'))return notify('Select a video file.');if(localVideos[t.id])URL.revokeObjectURL(localVideos[t.id]);localVideos[t.id]=URL.createObjectURL(f);t.videoName=f.name;save();render();notify('Video loaded for this browser session. Upload is not persisted.')});
+function attachVideo(){
+ videoEl=document.getElementById('matchVideo');if(!videoEl)return;
+ const el=videoEl;
+ el.addEventListener('timeupdate',()=>{tick=el.currentTime;updateClock();if(Math.floor(tick)%4===0)save()});
+ el.addEventListener('play',updateClock);
+ el.addEventListener('pause',updateClock);
+ el.addEventListener('loadedmetadata',()=>{
+  const t=currentTask();if(!t)return;
+  if(Number.isFinite(el.duration)&&el.duration>1){
+   if(Math.abs(el.duration-t.duration)>2){
+    t.duration=Math.round(el.duration*100)/100;
+    save();refreshStudio();
+   }
+   const notice=document.getElementById('videoFileStatus');
+   const res=el.videoWidth&&el.videoHeight?el.videoWidth+' × '+el.videoHeight:'';
+   if(notice&&localVideos[t.id])notice.textContent='LOCAL FILE: '+(t.videoName||'Video')+
+    (res?' · '+res:'')+' · '+fmt(el.duration)+' · Not uploaded or shared. Reselect after refresh.';
+   updateClock();
+  }
+ });
+ el.addEventListener('error',()=>{
+  const msg='This browser could not decode the video. Try H.264 MP4 or WebM, or check the HTTPS source.';
+  const notice=document.getElementById('videoFileStatus');
+  if(notice)notice.textContent=msg;
+  notify(msg);
+ });
+ el.addEventListener('ended',updateClock);
+}
+window.chooseVideo=()=>{
+ if(!currentTask())return notify('Open a match before selecting a video.');
+ const picker=document.getElementById('videofile');
+ if(!picker)return notify('Local video picker is unavailable.');
+ picker.value=''; // Allows selecting the same file again to reconnect it.
+ picker.click();
+};
+window.attachLocalVideoFile=file=>{
+ const t=currentTask();if(!t||!file)return false;
+ if(!file.type.startsWith('video/')&&!/\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(file.name||'')){
+  notify('Choose a video file, such as MP4 or WebM.');return false;
+ }
+ let url;
+ try{url=URL.createObjectURL(file)}catch(err){
+  notify('Could not open this local video. Try selecting it again.');return false;
+ }
+ const prior=localVideos[t.id];
+ localVideos[t.id]=url;
+ if(prior)URL.revokeObjectURL(prior);
+ t.videoName=file.name;
+ t.videoSize=file.size;
+ t.videoMime=file.type||'unknown';
+ tick=0;
+ save();
+ render();
+ notify('Local video opened. It was not uploaded; select it again after refreshing.');
+ return true;
+};
+document.getElementById('videofile').addEventListener('change',e=>{
+ const file=e.target.files&&e.target.files[0];
+ if(file)attachLocalVideoFile(file);
+});
 function runKeydown(e){if(view!=='studio'||modalOpen||e.target.matches('input,textarea,select,[contenteditable]'))return;if(e.code==='Space'){e.preventDefault();togglePlay()}else if(e.key==='ArrowLeft'){e.preventDefault();skipByStep(-1)}else if(e.key==='ArrowRight'){e.preventDefault();skipByStep(1)}}
 document.addEventListener('keydown',runKeydown);
 window.submitMyTask=()=>{
