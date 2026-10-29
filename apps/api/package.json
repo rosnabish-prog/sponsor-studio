@@ -1,0 +1,45 @@
+{
+  "name": "@sponsor-studio/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "npm run build && node dist/main.js",
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "maintenance:sessions": "node dist/maintenance.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1159.0",
+    "@aws-sdk/client-sesv2": "^3.1159.0",
+    "@aws-sdk/cloudfront-signer": "^3.1157.0",
+    "@aws-sdk/s3-request-presigner": "^3.1159.0",
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/platform-express": "^11.1.0",
+    "@nestjs/throttler": "^6.5.0",
+    "@node-rs/argon2": "^2.0.0",
+    "@prisma/adapter-pg": "^7.0.0",
+    "@prisma/client": "^7.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.0.0",
+    "pg": "^8.16.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
+    "prisma": "^7.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

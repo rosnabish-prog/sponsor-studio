@@ -1,0 +1,38 @@
+name: Sponsor Studio visual regression
+
+on:
+  push:
+    branches: [feature/react-typescript-migration]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compare-to-original:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start reference and migrated builds
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/sponsor-studio-original" 054d63efdf8e3304716a5a4f1645fb7a7c684d0e
+          python3 -m http.server 4174 --bind 127.0.0.1 --directory "$RUNNER_TEMP/sponsor-studio-original" > "$RUNNER_TEMP/sponsor-reference.log" 2>&1 &
+          npm run dev -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/sponsor-candidate.log" 2>&1 &
+      - name: Compare desktop and mobile screenshots
+        run: npm run test:visual
+      - name: Upload visual diffs and browser trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sponsor-studio-visual-regression
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14

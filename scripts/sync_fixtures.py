@@ -13,7 +13,7 @@ from pathlib import Path
 
 APP = "6ad8b0035891124905a4079c"
 BASE = f"https://stats.buildup.club/api/apps/{APP}/entities/"
-OUT = Path("data/fixtures.json")
+OUT = Path("public/data/fixtures.json")
 HEADERS = {"Accept": "application/json", "User-Agent": "SponsorStudio-FixtureSync/1.0"}
 
 def public_list(entity):

@@ -1,6 +1,11 @@
 .DS_Store
 Thumbs.db
 node_modules/
+dist/
+test-results/
+playwright-report/
+*.tsbuildinfo
 .env
 .env.*
 !.env.example
+apps/api/src/generated/

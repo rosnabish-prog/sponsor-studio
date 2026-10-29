@@ -3,6 +3,9 @@ on:
   push:
     paths:
       - index.html
+      - src/**
+      - public/**
+      - package*.json
       - scripts/smoke_ui.cjs
       - .github/workflows/smoke-ui.yml
   workflow_dispatch:
@@ -16,7 +19,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install UI automation dependency
-        run: npm install --no-save jsdom@27
+          cache: npm
+      - name: Install frontend and UI automation dependencies
+        run: npm ci
       - name: Test studio interactions and annotation intervals
         run: node scripts/smoke_ui.cjs

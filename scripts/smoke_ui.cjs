@@ -1,11 +1,18 @@
 const {JSDOM,VirtualConsole}=require('jsdom');
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
+const {buildSync}=require('esbuild');
 const errors=[];
 const virtualConsole=new VirtualConsole();
 virtualConsole.on('jsdomError',e=>errors.push(String(e)));
-const html=fs.readFileSync('index.html','utf8');
-const dom=new JSDOM(html,{url:'http://localhost/',runScripts:'dangerously',virtualConsole,
+const controller=fs.readFileSync('src/state/studioController.ts','utf8');
+const template=fs.readFileSync('index.html','utf8');
+const originalCSS=fs.readFileSync('src/styles/original.css','utf8');
+// Bundle the same React entry used in production into an executable IIFE for
+// jsdom. This exercises the real React mount and the unchanged annotation UI.
+const built=buildSync({entryPoints:['src/main.tsx'],bundle:true,write:false,
+ format:'iife',platform:'browser',target:'es2022',loader:{'.css':'empty'}});
+const dom=new JSDOM(template,{url:'http://localhost/',runScripts:'dangerously',virtualConsole,
  beforeParse(window){
   window.confirm=()=>{throw new Error('Native browser confirmation must not be used')};
   window.fetch=async()=>({ok:false,status:404});
@@ -14,6 +21,7 @@ const dom=new JSDOM(html,{url:'http://localhost/',runScripts:'dangerously',virtu
   window.HTMLMediaElement.prototype.pause=()=>{};
  }});
 const {window}=dom,document=window.document;
+window.eval(built.outputFiles[0].text);
 function db(){
  const key=Object.keys(window.localStorage).find(k=>k.includes('sponsor')||k.includes('messi'));
  const matches=Object.keys(window.localStorage).map(k=>{try{return JSON.parse(window.localStorage.getItem(k))}catch{return null}});
@@ -21,9 +29,9 @@ function db(){
 }
 function expect(expr,message){assert.ok(expr,message)}
 (async()=>{
- await new Promise(resolve=>setImmediate(resolve));
+ await new Promise(resolve=>setTimeout(resolve,100));
  expect(document.querySelector('#loginemail'),'login screen');
- const loginTheme=fs.readFileSync('assets/workspace-theme.css','utf8');
+ const loginTheme=fs.readFileSync('src/styles/workspace-theme.css','utf8');
  assert.ok(loginTheme.includes('.login-kicker{')&&loginTheme.includes('font-weight:850!important'),'sponsor intelligence heading visibly bold');
  assert.equal(document.querySelector('.login-kicker').textContent,'SPONSOR INTELLIGENCE / MATCH OPERATIONS','correct login label');
  assert.equal(document.querySelectorAll('.demo-roles button').length,3,'all demo choices retained');
@@ -32,10 +40,11 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.ok(loginTheme.includes('min-height:70px!important'),'account buttons have comfortable click targets');
  expect(document.querySelector('.login-top .powered-by img'),'Seebot Powered by image in sign-in header');
  assert.equal(document.querySelector('.login-top .powered-by img').getAttribute('src'),'assets/seebot-wordmark-orange-20261029.svg');
- assert.ok(fs.existsSync('assets/seebot-wordmark-orange-20261029.svg'),'New uncached Seebot SVG was committed');
- const orangeLogo=fs.readFileSync('assets/seebot-wordmark-orange-20261029.svg','utf8');
+ assert.ok(fs.existsSync('public/assets/seebot-wordmark-orange-20261029.svg'),'New uncached Seebot SVG was committed');
+ const orangeLogo=fs.readFileSync('public/assets/seebot-wordmark-orange-20261029.svg','utf8');
  assert.ok(orangeLogo.includes('#FF7A3D')&&!orangeLogo.includes('#F4F5F5'),'Seebot wordmark uses supplied orange rather than old white');
- assert.equal((html.match(/src="assets\/seebot-wordmark-orange-20261029.svg"/g)||[]).length,3,'all three headers point to new orange logo');
+ assert.ok(fs.readFileSync('src/components/LoginScreen.tsx','utf8').includes('assets/seebot-wordmark-orange-20261029.svg'),'login retains new orange logo');
+ assert.ok(fs.readFileSync('src/components/AppShell.tsx','utf8').includes('assets/seebot-wordmark-orange-20261029.svg'),'React headers point to orange logo');
  window.fillDemo('admin@demo.seebot.ai');
  window.login({preventDefault(){}});
  expect(document.querySelector('.ops-nav'),'admin dashboard');
@@ -43,11 +52,25 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.equal(document.querySelectorAll('link[rel="preload"][as="font"]').length,2,'primary and metadata fonts preload before first render');
  assert.ok(document.querySelector('link[href^="assets/fonts.css?v="]'),'font faces are local and loaded from assets');
  assert.ok(document.querySelector('link[rel="preload"][href="assets/fonts/ibm-plex-mono-700-latin.woff2"]'),'visible metadata font weight preloaded');
- assert.ok(document.querySelector('link[href="assets/workspace-theme.css?v=typography-20261029-r2"]'),'theme uses new cache key');
  assert.deepEqual([...document.querySelectorAll('.taskrow .taskbadge')].map(b=>b.textContent.trim()),['M30','M29','M13'],'recent match badges use BuildUp fixture codes, not list positions');
- expect(document.querySelector('link[href^="assets/workspace-theme.css?v="]'),'complete style system loaded');
- assert.ok(fs.existsSync('assets/workspace-theme.css'),'reference-inspired theme file committed');
- const selectTheme=fs.readFileSync('assets/workspace-theme.css','utf8');
+ assert.equal(document.querySelectorAll('.statcard').length,4,'native dashboard preserves four overview metrics');
+ assert.equal(document.querySelectorAll('.ops-nav .nav').length,6,'native React shell has six admin routes');
+ window.navigate('tasks');
+ assert.equal(document.querySelectorAll('.match-tile').length,3,'native matches screen preserves all assignments');
+ expect(document.querySelector('.fixture-catalog'),'native matches screen retains official catalog');
+ window.navigate('sponsors');
+ assert.equal(document.querySelectorAll('.groupcard').length,2,'native sponsor library preserves reusable groups');
+ assert.equal(document.querySelectorAll('.sponsor-mini').length,8,'native sponsor library preserves every sponsor');
+ window.navigate('attributes');
+ assert.equal(document.querySelectorAll('.groupcard').length,2,'native attribute screen has both event and camera lists');
+ window.navigate('users');
+ assert.equal(document.querySelectorAll('.table tbody tr').length,3,'native team screen retains account rows');
+ window.navigate('reports');
+ expect(document.querySelector('.insights-dashboard'),'native insights screen retains analytics');
+ window.navigate('dashboard');
+ expect(fs.readFileSync('src/main.tsx','utf8').includes("import './styles/workspace-theme.css'"),'complete style system loaded');
+ assert.ok(fs.existsSync('src/styles/workspace-theme.css'),'reference-inspired theme file committed');
+ const selectTheme=fs.readFileSync('src/styles/workspace-theme.css','utf8');
  assert.ok(selectTheme.includes('select:not([multiple])')&&selectTheme.includes('appearance:none!important'),'all single-choice selects use consistent custom arrows');
  assert.ok(selectTheme.includes('background-position:right 18px center!important'),'desktop dropdown chevrons are inset 18px from right edge');
  assert.ok(selectTheme.includes('padding-right:46px!important'),'dropdown option labels have room before chevron');
@@ -62,7 +85,7 @@ function expect(expr,message){assert.ok(expr,message)}
  const mediaRegion=document.querySelector('.studio-media-column');
  assert.equal(mediaRegion.tabIndex,0,'left pane can receive keyboard focus');
  assert.equal(mediaRegion.getAttribute('role'),'region','left pane is labeled as a scrollable region');
- const theme=fs.readFileSync('assets/workspace-theme.css','utf8');
+ const theme=fs.readFileSync('src/styles/workspace-theme.css','utf8');
  assert.ok(theme.includes('html:has(.app-focus),body:has(.app-focus)'),'desktop locks document scrolling in studio');
  assert.ok(theme.includes('overflow-y:auto!important'),'scrolling remains enabled in both panes');
  assert.ok(theme.includes('overscroll-behavior-y:contain!important'),'scrolling is isolated within the hovered pane');
@@ -82,20 +105,20 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(!document.querySelector('.rail-group-heading'),'sponsor categories hidden');
  expect(!document.querySelector('.rail-brand-name'),'sponsor names hidden from cards');
  expect(document.querySelector('.rail-brand').hasAttribute('aria-label'),'logo-first sponsor remains accessible');
- const sponsorStyle=fs.readFileSync('assets/workspace-theme.css','utf8');
+ const sponsorStyle=fs.readFileSync('src/styles/workspace-theme.css','utf8');
  assert.ok(sponsorStyle.includes('.app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo .tinylogo img'),'larger sponsor image styling exists');
  assert.ok(sponsorStyle.includes('height:44px!important')&&sponsorStyle.includes('height:72px!important'),'compact 44px sponsor images in 72px cards');
  assert.ok(sponsorStyle.includes('max-width:68%!important'),'sponsor images occupy less of each card width');
  assert.ok(sponsorStyle.includes('grid-template-columns:minmax(0,1fr)!important'),'mobile sponsor logos get full row width');
  assert.ok(sponsorStyle.includes('object-fit:contain!important'),'logo scaling preserves aspect ratio');
  assert.ok(sponsorStyle.includes('.rail-brand .rail-live-pill'),'OFF and LIVE status pill styling is retained');
- const transparentTheme=fs.readFileSync('assets/workspace-theme.css','utf8');
+ const transparentTheme=fs.readFileSync('src/styles/workspace-theme.css','utf8');
  assert.ok(transparentTheme.includes('.tinylogo img,.logo-preview img')&&transparentTheme.includes('background:transparent!important'),'logo images have no CSS white background');
- assert.ok(html.includes("sourceContext.clearRect(0,0,sw,sh)")&&html.includes("ctx.clearRect(0,0,ow,oh)")&&html.includes("output.toDataURL('image/png')"),'logo conversion keeps transparent pixels and outputs PNG');
- assert.ok(html.includes('function logoAlphaBounds(pixels,width,height)'),'uploaded logo content bounds are detected by alpha');
- assert.ok(html.includes('const bounds=logoAlphaBounds(rgba,sw,sh)'),'empty transparent thumbnail margins are trimmed');
- assert.ok(html.includes('optimizeStoredSponsorLogos();'),'previously uploaded transparent PNG thumbnails are upgraded');
- assert.ok(!html.includes("ctx.fillStyle='white'")&&!html.includes("toDataURL('image/jpeg',.76)"),'logo processor no longer flattens alpha to white JPEG');
+ assert.ok(controller.includes("sourceContext.clearRect(0,0,sw,sh)")&&controller.includes("ctx.clearRect(0,0,ow,oh)")&&controller.includes("output.toDataURL('image/png')"),'logo conversion keeps transparent pixels and outputs PNG');
+ assert.ok(controller.includes('function logoAlphaBounds(pixels:Uint8ClampedArray,width:number,height:number)'),'uploaded logo content bounds are detected by alpha');
+ assert.ok(controller.includes('const bounds=logoAlphaBounds(rgba,sw,sh)'),'empty transparent thumbnail margins are trimmed');
+ assert.ok(controller.includes('optimizeStoredSponsorLogos();'),'previously uploaded transparent PNG thumbnails are upgraded');
+ assert.ok(!controller.includes("ctx.fillStyle='white'")&&!controller.includes("toDataURL('image/jpeg',.76)"),'logo processor no longer flattens alpha to white JPEG');
  assert.ok(loginTheme.includes('font-weight:850!important'),'bold login heading style remains intact');
  assert.ok(document.querySelector('#taskActionMenu').querySelectorAll('button').length>=5,'task actions moved to dropdown');
  expect(document.querySelector('.video-box'),'video player rendered');
@@ -158,7 +181,7 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.deepEqual(task.cameras.map(c=>[c.start,c.end]),[[20,30],[30,40]],'camera intervals close correctly');
  expect(document.querySelector('#logBody').textContent.includes('00:20'),'event ending present in log');
  expect(!document.querySelector('#sponsorRail').textContent.includes('No sponsors assigned'),'sponsor list still rendered');
- expect(html.includes('position:static!important;top:auto!important'),'video scrolls with page');
+ expect(originalCSS.includes('position:static!important;top:auto!important'),'video scrolls with page');
  expect(document.querySelector('.task-actions-dropdown'),'title-level action menu present');
 
  expect(document.querySelector('.rail-compact-heading h2')?.textContent==='SPONSORS','compact sponsor heading retained');
@@ -359,7 +382,7 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.ok(document.getElementById('videoSourceState').textContent.includes('NOT UPLOADED'),'local video is never misleadingly presented as uploaded');
  assert.ok(document.getElementById('videoFileStatus').textContent.includes('reference-clip.mp4'),'video file name shown in player');
  assert.equal(db().tasks.find(t=>t.id==='task_demo1').videoName,'reference-clip.mp4','file metadata saved for reconnect');
- const videoTheme=fs.readFileSync('assets/workspace-theme.css','utf8');
+ const videoTheme=fs.readFileSync('src/styles/workspace-theme.css','utf8');
  assert.ok(videoTheme.includes('.vidframe.video-native-frame video'),'video content size rule exists');
  assert.ok(videoTheme.includes('object-fit:contain!important'),'video rendered without cropping');
  assert.ok(videoTheme.includes('aspect-ratio:auto!important'),'video is not forced to a 16:9 frame');

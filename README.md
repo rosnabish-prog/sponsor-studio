@@ -1,6 +1,20 @@
 # Messi Cup 2026 — Sponsor Intelligence Studio
 
-A branded, interactive **frontend demonstration** for sponsor-exposure annotation in football broadcasts.
+A branded, interactive **React + TypeScript frontend demonstration** for sponsor-exposure annotation in football broadcasts.
+
+## Frontend architecture (React migration)
+
+The application now builds with **React 19, TypeScript, and Vite**. All eight top-level screens—login, dashboard, matches, Annotation Studio, sponsor library, attributes, team, and insights—are native JSX components in `src/components/`. Navigation and both header layouts are React-owned, with the existing classes, colors and visual assets preserved. The original stylesheet and its subsequent orange overrides are imported, in that order, from `src/styles/`; static image assets remain in `public/assets/`.
+
+**Migration status:** All eight screens, Annotation Studio controls and timeline, recorded-action editors, modal forms, insights report and tournament rollup are native React components. No HTML string rendering adapter remains. The demo annotation controller lives in `src/state/studioController.ts` and passes strict TypeScript checks, while pure analytics are implemented in `src/domain/analytics.ts`. `ScreenHost` coordinates typed controller snapshots with React. This is a frontend migration, not a replacement for production authentication or shared storage.
+
+By default the frontend still runs as a local-storage-only demonstration. With `VITE_BACKEND_ENABLED=true` it uses the new NestJS API for authentication, workspaces, tasks, annotation writes and shared catalog data. The default GitHub Pages deployment does **not** enable the API.
+
+## P0 backend foundation (feature branch)
+
+The new `apps/api` workspace contains a NestJS API with PostgreSQL/Prisma schema and migrations, Argon2id email/password accounts, revocable sessions, workspace membership, persistent tasks, analyst assignments, sponsor/event/camera annotation intervals, submission/reopen actions, shared catalog and audit records. The React frontend can now use this API when the live mode environment flag is set.
+
+See [API setup, endpoint reference, private video prerequisites and remaining P0 gaps](apps/api/README.md) before deploying it. The multipart upload and signed CloudFront playback code needs real AWS infrastructure. Email/password recovery is implemented through Amazon SES when configured; email verification, user invitations and production hardening remain outstanding. GitHub Actions checks PostgreSQL integration, live React workflows and production container builds.
 
 ## What is included
 
@@ -14,13 +28,41 @@ A branded, interactive **frontend demonstration** for sponsor-exposure annotatio
 
 ## Run locally
 
-Either open `index.html` in a browser, or (recommended) run a local static server:
+Install dependencies and start the Vite development server (Node.js 22+):
 
 ```bash
-python3 -m http.server 8080
+npm ci
+npm run dev
 ```
 
-Visit `http://localhost:8080`.
+Visit the local URL shown by Vite (normally `http://127.0.0.1:5173`). Opening `index.html` directly as a file no longer works because the browser now loads a bundled React application.
+
+To verify changes before committing:
+
+```bash
+npm test
+npm run build
+npm run preview
+```
+
+### Screenshot comparison against the original design
+
+The `Sponsor Studio visual regression` GitHub Actions workflow launches both the
+original static frontend (commit `054d63efdf8e3304716a5a4f1645fb7a7c684d0e`)
+and the migrated React frontend. Six Playwright/Chromium screenshot scenarios
+cover desktop login, dashboard, Annotation Studio, and Insights plus mobile login
+and Annotation Studio. Each records reference, React, and diff PNGs; the test
+checks major content position and pixel differences and uploads the diff images
+as a workflow artifact.
+
+Locally, to reproduce, serve the original checkout on port 4174 and run the
+React dev server on port 4173, install Playwright Chromium with
+`npx playwright install chromium`, and run `npm run test:visual`.
+
+Screenshot checks are design regression safeguards, not a guarantee of perfect
+pixel identity or complete behavior. The `npm test` command runs strict
+TypeScript checks and the annotation interaction suite without requiring a
+browser; GitHub Actions runs the visual comparison separately.
 
 ### Fonts
 
@@ -41,26 +83,27 @@ Use the demo-account buttons on the login screen to autofill. `Restore demo acco
 
 ## Publish the **demo** with GitHub Pages
 
-1. Create a separate repository for this project, e.g. `messi-cup-sponsor-studio`.
-2. Add this repository's files and push to `main`.
-3. Go to **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-4. The included `.github/workflows/deploy-pages.yml` publishes `index.html` on every push to `main`.
-5. View the live URL in **Settings → Pages** or the deployment summary of the Actions workflow.
+1. Open **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+2. Push the tested code to `main` when ready for a public demo release.
+3. The included `.github/workflows/deploy-pages.yml` runs `npm ci` and `npm run build` with the repository's GitHub Pages base path and publishes only the resulting `dist/` files.
+4. View the live URL in **Settings → Pages** or the deployment summary of the Actions workflow.
 
 If the GitHub Pages site or repository is public, its JavaScript, demo accounts, and demo data are public too. **Do not load client footage or confidential sponsor data into this prototype.**
 
 ## Important production limitations
 
-This is **not** a production-ready multiuser service. It uses browser-local storage, not a shared server database. Sign-in, sign-out, password reset, and role checks are **demo-only UI flows**, not secure backend-enforced authentication. Different browsers do not share assignments or annotations. FTP/SFTP sources are metadata only; the browser cannot ingest them directly. Logo uploads are stored in browser storage and can exceed browser storage limits. Local video attachments are not uploaded or shared.
+The **default GitHub Pages demo** is not a production-ready multiuser service. It uses browser-local storage, so demo accounts, assignments, uploaded logos and annotations are not shared between devices.
 
-For real analysts, production deployment requires:
+The **separately enabled API mode** uses NestJS sessions, server-enforced workspace permissions, PostgreSQL persistence, shared catalogs/tasks/annotations, SES password recovery and S3/CloudFront video APIs. This mode is still **not production-ready** until AWS services, email verification/invitations, operational monitoring/backups and deployment checks have been completed. FTP/SFTP sources are metadata only; actual transfer/transcoding is not implemented.
 
-1. A real authentication provider (e.g. Supabase Auth, AWS Cognito), verified email reset/invite flows, and backend-enforced role-based authorization.
-2. Durable PostgreSQL storage for tasks, sponsor groups, assignments, timestamp intervals, editing history, and completion state.
-3. Secure, resumable API writes and realtime updates, with analyst ownership per track and revision conflict protection.
-4. Video storage and private signed URLs; an FTP/SFTP ingest worker to transfer to playable HTTPS media (and transcode if needed).
-5. Versioned JSON exports, audit logs, supervisor review and correction workflows.
-6. Auth/session, export, and concurrency tests before exposing to a client.
+For real analysts, production deployment still requires:
+
+1. Provisioned and secured AWS infrastructure: RDS/PostgreSQL, ECS API, private S3, CloudFront with trusted key groups, SES and IAM.
+2. Verified email ownership, invitation acceptance, and organization onboarding before granting external access.
+3. Operational controls: alarms, backups, restore drills, session-cleanup scheduling, production network restrictions and secrets management.
+4. Pagination and performance/load testing for long 4K footage, many concurrent analysts, and large match portfolios.
+5. A real ingestion/transcode pipeline if FTP/SFTP or non-browser-compatible video formats are required.
+6. Production end-to-end tests against actual AWS buckets, the CDN and the deployed origin.
 
 GitHub Pages hosts static frontend files only. It cannot by itself run the authentication and annotation backend. For production, connect this frontend to backend services or deploy the full stack to AWS.
 
@@ -68,7 +111,7 @@ GitHub Pages hosts static frontend files only. It cannot by itself run the authe
 ## Visual and demo updates (October 29, 2026)
 
 - Fully dark styling follows the Messi Cup Stats Hub design language: black canvas, heavy condensed headings, mono metadata, thin rules.
-- Uses the supplied official `assets/mc26-wordmark.svg` locally; never relies on a third-party logo host for the tournament wordmark.
+- Uses the supplied official `public/assets/mc26-wordmark.svg` locally; never relies on a third-party logo host for the tournament wordmark.
 - Gradient is exclusively used for match overview scorecards, not login or dashboard.
 - Demo sign-in form is centrally laid out and uses explicit JavaScript submit listeners, without Google sign-in.
 - Sample match tasks use real published Messi Cup 2026 fixtures rather than fabricated pairs, plus a fixture selection control when creating admin tasks. The original bundled fixtures serve as an offline fallback. The page now loads `data/fixtures.json` generated from the public BuildUp read-only match feed. References: https://stats.buildup.club/matches and https://messicup.com/en/schedule.
@@ -85,7 +128,7 @@ The public data refresh is handled by `.github/workflows/sync-fixtures.yml`:
 - Once per day outside the tournament, so changes to published schedules remain discoverable.
 - Manual run is available via **Actions → Refresh BuildUp Messi Cup fixtures → Run workflow**.
 
-`scripts/sync_fixtures.py` retrieves public read-only Match and Team entity records from `stats.buildup.club`, then normalizes fixture code, date, scheduled kickoff (ET), team names, logos, venue, status, score, stage and group into `data/fixtures.json`. It refuses to overwrite the known-good snapshot on bad or incomplete responses, and only commits actual changes. GitHub Pages automatically redeploys on that commit. The web page checks for updated fixture JSON every 5 minutes while open, and falls back to the bundled schedule if the file cannot be loaded.
+`scripts/sync_fixtures.py` retrieves public read-only Match and Team entity records from `stats.buildup.club`, then normalizes fixture code, date, scheduled kickoff (ET), team names, logos, venue, status, score, stage and group into `public/data/fixtures.json`. It refuses to overwrite the known-good snapshot on bad or incomplete responses, and only commits actual changes. GitHub Pages automatically redeploys on that commit. The web page checks for updated fixture JSON every 5 minutes while open, and falls back to the bundled schedule if the file cannot be loaded.
 
 Under **Matches**, administrators can filter the official match catalog by date and prefill a new annotation task. Importing a fixture does not automatically assign analysts or create a task; the administrator still controls that decision.
 
@@ -170,7 +213,7 @@ This release focuses on eight measures chosen for low-effort but commercially us
 
 ## October 29 reference-inspired orange workspace redesign
 
-The full frontend now shares a single responsive **dark-charcoal and warm-orange** design system in `assets/workspace-theme.css`: 20px-style rounded cards, pill navigation and filters, soft elevated buttons, branded orange call-to-action surfaces, and subtle interaction feedback. The supplied **Seebot logo** now appears as a compact `POWERED BY` lockup immediately beside the Messi Cup logo on the login, admin, and annotation headers (rather than the far right).
+The full frontend now shares a single responsive **dark-charcoal and warm-orange** design system in `src/styles/workspace-theme.css`: 20px-style rounded cards, pill navigation and filters, soft elevated buttons, branded orange call-to-action surfaces, and subtle interaction feedback. The supplied **Seebot logo** now appears as a compact `POWERED BY` lockup immediately beside the Messi Cup logo on the login, admin, and annotation headers (rather than the far right).
 
 The Admin overview has an orange tournament fixture ribbon that opens **Matches**; that page contains the existing searchable/filtered assigned tasks as responsive match cards, followed by the official fixture catalog for task creation. The dashboard retains a production-queue table for operational scanning, avoiding duplicate full catalogs.
 
