@@ -9,8 +9,10 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
   const { NestFactory } = await import('@nestjs/core');
   const { ValidationPipe } = await import('@nestjs/common');
   const { default: cookieParser } = await import('cookie-parser');
-  const { AppModule } = await import('../src/modules/app.module');
-  const app = await NestFactory.create(AppModule, { logger: false });
+  // Integration tests run against the compiled NestJS output. esbuild/tsx does not
+  // emit the decorator metadata that NestJS dependency injection requires.
+  const { AppModule } = await import('../dist/modules/app.module.js');
+  const app = await NestFactory.create(AppModule, { logger: ['error'] });
   app.use(cookieParser());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.setGlobalPrefix('api');
