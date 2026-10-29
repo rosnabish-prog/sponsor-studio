@@ -1,6 +1,7 @@
 import type { StudioScreenModel } from '../types/screen';
 import { formatTimestamp } from '../domain/intervals';
 import { StudioControls, StudioLogs, StudioRail, StudioTimeline } from './StudioWidgets';
+import { apiEnabled } from '../api/client';
 
 function Icon({ name }: { name: string }) {
   return <svg className="ic"><use href={`#i-${name}`} /></svg>;
@@ -15,7 +16,7 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
     <details className="task-actions" id="taskActionMenu">
       <summary aria-label="Task actions"><span>ACTIONS</span><span className="menu-glyph" aria-hidden="true">⋯</span></summary>
       <div className="task-menu-content">
-        <StudioAction onClick={() => window.chooseVideo?.()}><Icon name="video" /> OPEN LOCAL VIDEO</StudioAction>
+        <StudioAction onClick={() => window.chooseVideo?.()}><Icon name="video" /> {apiEnabled?'UPLOAD PRIVATE VIDEO':'OPEN LOCAL VIDEO'}</StudioAction>
         <StudioAction onClick={() => window.exportTask?.(model.id)}><Icon name="download" /> EXPORT JSON</StudioAction>
         <StudioAction className="task-menu-complete" onClick={() => window.submitMyTask?.()}><Icon name="check" /> MARK COMPLETE</StudioAction>
         {isAdmin && <>
@@ -33,7 +34,7 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
 
 function VideoPanel({ model }: { model: StudioScreenModel }) {
   const { videoSrc, isLocalVideo, videoName, videoType } = model;
-  const sourceState = isLocalVideo ? 'LOCAL VIDEO · NOT UPLOADED' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : videoName ? 'LOCAL FILE DISCONNECTED' : 'NO VIDEO ATTACHED';
+  const sourceState = videoType === 's3' ? 'PRIVATE VIDEO · CLOUDFRONT' : isLocalVideo ? 'LOCAL VIDEO · NOT UPLOADED' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : videoName ? 'LOCAL FILE DISCONNECTED' : 'NO VIDEO ATTACHED';
   const sourceNote = isLocalVideo
     ? model.videoError || (model.videoDimensions
       ? `LOCAL FILE: ${videoName || 'Video'} · ${model.videoDimensions} · ${formatTimestamp(model.duration)} · Not uploaded or shared. Reselect after refresh.`

@@ -128,12 +128,13 @@ export class TaskService {
     if (role !== 'OWNER' && role !== 'ADMIN' && assigned !== actorId) throw new ForbiddenException('Not assigned to this stream');
     const field = stream === 'sponsors' ? 'sponsorsSubmittedAt' : 'contextSubmittedAt';
     if (task[field]) throw new ConflictException('Stream already submitted');
-    const active = await this.db.annotation.count({ where: {
-      taskId, end: null,
-      kind: stream === 'sponsors' ? 'SPONSOR' : { in: ['EVENT', 'CAMERA'] },
-    } });
-    if (active) throw new ConflictException('Close active annotation intervals before submitting');
     return this.db.$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "Task" WHERE "id"::text = ${taskId} AND "workspaceId"::text = ${workspaceId} FOR UPDATE`;
+      const active = await tx.annotation.count({ where: {
+        taskId, end: null,
+        kind: stream === 'sponsors' ? 'SPONSOR' : { in: ['EVENT', 'CAMERA'] },
+      } });
+      if (active) throw new ConflictException('Close active annotation intervals before submitting');
       const updated = await tx.task.updateMany({ where: { id: taskId, [field]: null }, data: { [field]: new Date() } });
       if (!updated.count) throw new ConflictException('Stream already submitted');
       await tx.auditLog.create({ data: { workspaceId, actorId, action: 'STREAM_SUBMITTED', subjectId: taskId, details: { stream } } });

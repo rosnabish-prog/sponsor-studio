@@ -3,7 +3,7 @@ import {
   Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards,
 } from '@nestjs/common';
 import { IsEnum, IsNumber, IsOptional, IsString, Length, Min } from 'class-validator';
-import { AnnotationKind } from '../generated/prisma/client';
+import { AnnotationKind, type Prisma } from '../generated/prisma/client';
 import { AuthRequest, SessionGuard } from './auth';
 import { DatabaseService } from './database';
 import { checkAnnotationTimes, mayEditStream } from './permissions';
@@ -29,6 +29,14 @@ export class UpdateAnnotationDto {
 export class AnnotationService {
   constructor(private readonly db: DatabaseService, private readonly tasks: TaskService) {}
 
+  private async lockStream(tx:Prisma.TransactionClient,workspaceId:string,taskId:string,kind:AnnotationKind){
+    await tx.$queryRaw`SELECT "id" FROM "Task" WHERE "id"::text = ${taskId} AND "workspaceId"::text = ${workspaceId} FOR UPDATE`;
+    const task=await tx.task.findUnique({where:{id:taskId}});
+    if(!task||(kind==='SPONSOR'?task.sponsorsSubmittedAt:task.contextSubmittedAt)) {
+      throw new ConflictException('Annotation stream has been submitted');
+    }
+  }
+
   async list(workspaceId: string, taskId: string, userId: string) {
     await this.tasks.find(workspaceId, taskId, userId);
     return this.db.annotation.findMany({ where: { taskId }, orderBy: [{ start: 'asc' }, { createdAt: 'asc' }] });
@@ -51,7 +59,8 @@ export class AnnotationService {
     if (input.kind !== 'SPONSOR' && (input.placement || input.quality)) {
       throw new BadRequestException('Placement and quality apply only to sponsor annotations');
     }
-    return this.db.$transaction(async tx => {
+    try{return await this.db.$transaction(async tx => {
+      await this.lockStream(tx,workspaceId,taskId,input.kind);
       if (input.end == null) {
         const active = await tx.annotation.findFirst({ where: {
           taskId, end: null,
@@ -66,7 +75,10 @@ export class AnnotationService {
       } });
       await tx.auditLog.create({ data: { workspaceId, actorId: userId, action: 'ANNOTATION_CREATED', subjectId: annotation.id } });
       return annotation;
-    });
+    });}catch(error){
+      if((error as {code?:string}).code==='P2002')throw new ConflictException('Another active interval already exists');
+      throw error;
+    }
   }
 
   async update(workspaceId: string, taskId: string, annotationId: string, userId: string, input: UpdateAnnotationDto) {
@@ -83,6 +95,7 @@ export class AnnotationService {
       throw new BadRequestException('Only camera annotations can change labels');
     }
     return this.db.$transaction(async tx => {
+      await this.lockStream(tx,workspaceId,taskId,current.kind);
       const annotation = await tx.annotation.update({ where: { id: annotationId }, data: input });
       await tx.auditLog.create({ data: { workspaceId, actorId: userId, action: 'ANNOTATION_UPDATED', subjectId: annotationId } });
       return annotation;
@@ -94,6 +107,7 @@ export class AnnotationService {
     if (!current) throw new NotFoundException('Annotation not found');
     await this.requireStreamEdit(workspaceId, taskId, userId, current.kind);
     return this.db.$transaction(async tx => {
+      await this.lockStream(tx,workspaceId,taskId,current.kind);
       await tx.annotation.delete({ where: { id: annotationId } });
       await tx.auditLog.create({ data: { workspaceId, actorId: userId, action: 'ANNOTATION_DELETED', subjectId: annotationId } });
       return { ok: true };

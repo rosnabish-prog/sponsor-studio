@@ -61,9 +61,9 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Launch API and production-mode frontend
         run: |
-          npm run dev:api > "$RUNNER_TEMP/sponsor-api.log" 2>&1 &
+          npm run start --workspace @sponsor-studio/api > "$RUNNER_TEMP/sponsor-api.log" 2>&1 &
           VITE_BACKEND_ENABLED=true npm run dev -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/sponsor-ui.log" 2>&1 &
-          curl --retry 20 --retry-connrefused --retry-delay 2 --fail http://127.0.0.1:3001/api/health
+          curl --retry 20 --retry-connrefused --retry-delay 2 --fail http://127.0.0.1:3001/api/health || { tail -n 60 "$RUNNER_TEMP/sponsor-api.log"; exit 1; }
           curl --retry 20 --retry-connrefused --retry-delay 2 --fail http://127.0.0.1:4173/
       - name: React login, task and annotation integration
         run: npm run test:live

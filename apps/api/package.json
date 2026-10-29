@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "commonjs",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "npm run build && node dist/main.js",
     "build": "prisma generate && tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "test": "node --import tsx --test tests/*.test.ts",
