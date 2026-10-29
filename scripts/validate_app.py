@@ -38,6 +38,15 @@ assert 'chooseFixtureDay' in html
 assert 'app-focus' in html
 assert 'deleteSponsor' in html
 assert 'fixtureCatalog' in html
+assert 'assets/workspace-theme.css' in html, 'Theme CSS must be linked by the application'
+assert 'identity-lockup' in html, 'Partner logo lockup missing'
+assert 'dashboard-banner' in html, 'Orange workspace dashboard ribbon missing'
+assert 'match-tile-grid' in html, 'Responsive match cards missing'
+theme=Path('assets/workspace-theme.css').read_text(encoding='utf-8')
+for selector in ['.identity-lockup', '.ops-nav', '.dashboard-banner', '.match-tile', '.studio-grid', '.sponsor-rail', '.insight-block', '.modal', '.login-central', '@media(max-width:680px)']:
+    assert selector in theme, f'Theme missing {selector}'
+assert theme.count('{')==theme.count('}'), 'Theme CSS delimiters unbalanced'
+assert Path('assets/powered-by-seebot.svg').exists()
 payload=json.loads(Path('data/fixtures.json').read_text(encoding='utf-8'))
 assert len(payload.get('matches',[]))>=10
 assert len(payload.get('clubs',[]))>=10
