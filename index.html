@@ -699,6 +699,49 @@ input[type="range"]{accent-color:#e6e6e6!important}.toast{background:#ddd!import
 @media(max-width:550px){.intel-moment-summary{grid-template-columns:1fr}.intel-breakdown-label{flex-wrap:wrap}.intel-breakdown-label strong{white-space:normal}}
 .insight-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:780px){.insight-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Seebot attribution at the far right of all top headers */
+.powered-by{
+ display:flex;align-items:center;gap:8px;flex-shrink:0;
+ color:#9c9c9c;background:transparent;white-space:nowrap;
+}
+.powered-by>span{
+ font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+ letter-spacing:.085em;color:#999;
+}
+.powered-by>img{
+ display:block;width:94px;height:26px;max-width:none;object-fit:contain;
+}
+.focusactions>.powered-by{margin-left:14px;padding-left:15px;border-left:1px solid #434343;}
+.ops-user>.powered-by{margin-left:8px;padding-left:14px;border-left:1px solid #434343;}
+.ops-head-first>.ops-user{flex:0 1 auto;min-width:0;}
+.login-top{display:flex;align-items:center;justify-content:space-between;gap:20px;}
+.login-top>.powered-by{margin-left:auto;}
+/* The chosen sponsor is still highlighted through its pressed border; no separate red/green status dot */
+.app-focus .rail-brand .rail-state-dot{display:none!important;}
+@media(max-width:1100px){
+ .ops-head-first{gap:14px;}
+ .ops-year{font-size:10px;}
+ .ops-year i{margin:0 8px;}
+ .ops-user>.powered-by{padding-left:9px;margin-left:0;}
+ .powered-by>img{width:81px;height:23px;}
+}
+@media(max-width:760px){
+ .powered-by>span{font-size:8px;}
+ .ops-year{display:none;}
+ .ops-user>span{display:none;}
+ .focusactions>.powered-by{margin-left:4px;padding-left:8px;}
+ .powered-by>img{width:70px;height:21px;}
+}
+@media(max-width:490px){
+ .powered-by>span{display:none;}
+ .ops-user>.powered-by{padding-left:6px;}
+ .focusactions>.powered-by{padding-left:5px;}
+ .focusactions{gap:4px!important;}
+ .focusactions .button{padding:6px 7px!important;font-size:10px!important;}
+ .powered-by>img{width:65px;height:19px;}
+ .login-top{gap:8px;}
+}
 </style>
 </head>
 <body>
@@ -868,9 +911,9 @@ window.acceptInAppConfirm=()=>{
 const formVal=(id)=>document.getElementById(id)?.value||'';
 function layout(title,subtitle,body,extra=''){let user=me(),isAdmin=user.role==='admin';
 if(view==='studio'){
- return `<div class="app app-focus"><header class="focusbar"><button type="button" class="focusbrand brand-home" onclick="navigate('dashboard')" aria-label="Go to Sponsor Studio dashboard" title="Back to dashboard"><img src="assets/mc26-wordmark.svg" alt="Messi Cup 26"><span>SPONSOR STUDIO / TAGGING</span></button><div class="focusactions"><button class="button ghost" onclick="showReport('${esc(selectedTaskId)}')">${icons('chart')} INSIGHTS</button><button class="button ghost" onclick="logout()">SIGN OUT</button></div></header><main class="focuscontent">${body}</main></div>`;
-}let nav=[['dashboard','Overview','grid'],['tasks','Matches','video'],['reports','Insights','chart'],...(isAdmin?[['sponsors','Sponsors','tags'],['attributes','Attributes','settings'],['users','Team','users']]:[])];return `<div class="app"><header class="ops-header"><div class="ops-head-first"><button type="button" class="ops-brand brand-home" onclick="navigate('dashboard')" aria-label="Go to Sponsor Studio dashboard" title="Back to dashboard"><img src="assets/mc26-wordmark.svg" alt="MESSI CUP 26"><span>THE SPONSOR STUDIO</span></button><div class="ops-year">● 2026 TOURNAMENT <i></i> OCT 25 – NOV 1</div><div class="ops-user"><span>${esc(user.name)} <small>/ ${user.role.toUpperCase()}</small></span><button onclick="logout()" aria-label="Sign out">${icons('logout')} SIGN OUT</button></div></div><nav class="ops-nav" aria-label="Main navigation"><div class="ops-nav-items">${nav.map(n=>`<button class="nav ${view===n[0]?'active':''}" onclick="navigate('${n[0]}')">${icons(n[2])}${esc(n[1])}</button>`).join('')}</div><span class="ops-global-tag">16 CLUBS. ONE GLOBAL STAGE.</span></nav></header><main class="content">${body}</main></div>`}
-function loginView(){document.getElementById('root').innerHTML=`<div class="login-page"><header class="login-top"><img src="assets/mc26-wordmark.svg" alt="Messi Cup 2026"><span>2026 TOURNAMENT <b>·</b> OCT 25 – NOV 1</span></header><main class="login-central"><img class="login-wordmark" src="assets/mc26-wordmark.svg" alt="Messi Cup 2026"><div class="login-kicker">SPONSOR INTELLIGENCE / MATCH OPERATIONS</div><h1>${forgot?'RESET DEMO ACCESS':'SIGN IN.'}</h1><p>${forgot?'For this demonstration, change a local demo account password. Production email recovery requires a server.':'Access your assigned matches, track sponsor visibility, and analyze key broadcast moments.'}</p><form id="signInForm" class="loginform"><div class="field"><label for="loginemail">EMAIL ADDRESS</label><input id="loginemail" name="email" type="email" placeholder="name@organization.com" autocomplete="username" required></div>${forgot?`<div class="field"><label for="newpwd">NEW DEMO PASSWORD</label><input id="newpwd" type="password" minlength="8" placeholder="Minimum 8 characters" autocomplete="new-password" required></div>`:`<div class="field"><div class="row between"><label for="loginpass">PASSWORD</label><a href="#" onclick="event.preventDefault();toggleForgot(true)">Forgot password?</a></div><input id="loginpass" name="password" type="password" placeholder="Enter password" autocomplete="current-password" required></div>`}<div id="authError" role="alert" aria-live="polite" class="auth-error"></div><button class="button primary auth-submit" type="submit">${forgot?'RESET PASSWORD':'SIGN IN'} ${icons('arrow')}</button>${forgot?`<button type="button" class="button ghost auth-back" onclick="toggleForgot(false)">BACK TO SIGN IN</button>`:''}</form><div class="demo-line"><span>DEMO ACCESS</span><span>NO LIVE USER ACCOUNTS CONNECTED</span></div><div class="demo-roles"><button type="button" onclick="fillDemo('admin@demo.seebot.ai')">USE ADMIN ACCOUNT</button><button type="button" onclick="fillDemo('analyst@demo.seebot.ai')">USE ANALYST ACCOUNT</button><button type="button" onclick="fillDemo('events@demo.seebot.ai')">EVENTS ANALYST</button></div><p class="demo-password">Demo password: <code>Demo1234!</code> <button type="button" onclick="resetDemoData()">RESET DEMO</button></p></main><footer class="login-footer"><span>MESSI CUP 26' / SPONSOR INTELLIGENCE</span><span>LOCAL PROTOTYPE · NOT PRODUCTION AUTHENTICATION</span></footer></div>`;document.getElementById('signInForm').addEventListener('submit',forgot?window.resetDemo:window.login)}
+ return `<div class="app app-focus"><header class="focusbar"><button type="button" class="focusbrand brand-home" onclick="navigate('dashboard')" aria-label="Go to Sponsor Studio dashboard" title="Back to dashboard"><img src="assets/mc26-wordmark.svg" alt="Messi Cup 26"><span>SPONSOR STUDIO / TAGGING</span></button><div class="focusactions"><button class="button ghost" onclick="showReport('${esc(selectedTaskId)}')">${icons('chart')} INSIGHTS</button><button class="button ghost" onclick="logout()">SIGN OUT</button><div class="powered-by"><span>POWERED BY</span><img src="assets/powered-by-seebot.svg" alt="Seebot" loading="eager"></div></div></header><main class="focuscontent">${body}</main></div>`;
+}let nav=[['dashboard','Overview','grid'],['tasks','Matches','video'],['reports','Insights','chart'],...(isAdmin?[['sponsors','Sponsors','tags'],['attributes','Attributes','settings'],['users','Team','users']]:[])];return `<div class="app"><header class="ops-header"><div class="ops-head-first"><button type="button" class="ops-brand brand-home" onclick="navigate('dashboard')" aria-label="Go to Sponsor Studio dashboard" title="Back to dashboard"><img src="assets/mc26-wordmark.svg" alt="MESSI CUP 26"><span>THE SPONSOR STUDIO</span></button><div class="ops-year">● 2026 TOURNAMENT <i></i> OCT 25 – NOV 1</div><div class="ops-user"><span>${esc(user.name)} <small>/ ${user.role.toUpperCase()}</small></span><button onclick="logout()" aria-label="Sign out">${icons('logout')} SIGN OUT</button><div class="powered-by"><span>POWERED BY</span><img src="assets/powered-by-seebot.svg" alt="Seebot" loading="eager"></div></div></div><nav class="ops-nav" aria-label="Main navigation"><div class="ops-nav-items">${nav.map(n=>`<button class="nav ${view===n[0]?'active':''}" onclick="navigate('${n[0]}')">${icons(n[2])}${esc(n[1])}</button>`).join('')}</div><span class="ops-global-tag">16 CLUBS. ONE GLOBAL STAGE.</span></nav></header><main class="content">${body}</main></div>`}
+function loginView(){document.getElementById('root').innerHTML=`<div class="login-page"><header class="login-top"><img src="assets/mc26-wordmark.svg" alt="Messi Cup 2026"><span>2026 TOURNAMENT <b>·</b> OCT 25 – NOV 1</span><div class="powered-by"><span>POWERED BY</span><img src="assets/powered-by-seebot.svg" alt="Seebot" loading="eager"></div></header><main class="login-central"><img class="login-wordmark" src="assets/mc26-wordmark.svg" alt="Messi Cup 2026"><div class="login-kicker">SPONSOR INTELLIGENCE / MATCH OPERATIONS</div><h1>${forgot?'RESET DEMO ACCESS':'SIGN IN.'}</h1><p>${forgot?'For this demonstration, change a local demo account password. Production email recovery requires a server.':'Access your assigned matches, track sponsor visibility, and analyze key broadcast moments.'}</p><form id="signInForm" class="loginform"><div class="field"><label for="loginemail">EMAIL ADDRESS</label><input id="loginemail" name="email" type="email" placeholder="name@organization.com" autocomplete="username" required></div>${forgot?`<div class="field"><label for="newpwd">NEW DEMO PASSWORD</label><input id="newpwd" type="password" minlength="8" placeholder="Minimum 8 characters" autocomplete="new-password" required></div>`:`<div class="field"><div class="row between"><label for="loginpass">PASSWORD</label><a href="#" onclick="event.preventDefault();toggleForgot(true)">Forgot password?</a></div><input id="loginpass" name="password" type="password" placeholder="Enter password" autocomplete="current-password" required></div>`}<div id="authError" role="alert" aria-live="polite" class="auth-error"></div><button class="button primary auth-submit" type="submit">${forgot?'RESET PASSWORD':'SIGN IN'} ${icons('arrow')}</button>${forgot?`<button type="button" class="button ghost auth-back" onclick="toggleForgot(false)">BACK TO SIGN IN</button>`:''}</form><div class="demo-line"><span>DEMO ACCESS</span><span>NO LIVE USER ACCOUNTS CONNECTED</span></div><div class="demo-roles"><button type="button" onclick="fillDemo('admin@demo.seebot.ai')">USE ADMIN ACCOUNT</button><button type="button" onclick="fillDemo('analyst@demo.seebot.ai')">USE ANALYST ACCOUNT</button><button type="button" onclick="fillDemo('events@demo.seebot.ai')">EVENTS ANALYST</button></div><p class="demo-password">Demo password: <code>Demo1234!</code> <button type="button" onclick="resetDemoData()">RESET DEMO</button></p></main><footer class="login-footer"><span>MESSI CUP 26' / SPONSOR INTELLIGENCE</span><span>LOCAL PROTOTYPE · NOT PRODUCTION AUTHENTICATION</span></footer></div>`;document.getElementById('signInForm').addEventListener('submit',forgot?window.resetDemo:window.login)}
 window.fillDemo=email=>{document.getElementById('loginemail').value=email;if(document.getElementById('loginpass'))document.getElementById('loginpass').value='Demo1234!'};
 window.toggleForgot=b=>{forgot=b;render()};
 window.login=e=>{e.preventDefault();let email=formVal('loginemail').trim().toLowerCase(),pwd=formVal('loginpass');let u=db.users.find(x=>x.email.toLowerCase()===email&&x.password===pwd);if(!u){let err=document.getElementById('authError');if(err)err.textContent='Incorrect demo email or password. Select a sample account or restore demo accounts below.';return}logged=u.id;session.setItem(SESSION,logged);view='dashboard';render()};
@@ -904,9 +947,9 @@ function sponsorRailHTML(t){
   const active=t.sponsors.some(row=>row.sponsorId===sp.id&&row.end==null);
   return `<button class="rail-brand ${active?'isactive':''}" type="button"
   onclick="tagSponsor('${esc(sp.id)}')" ${canTag?'':'disabled'}
-  aria-label="${esc(sp.name)} — ${active?'Visible':'Not visible'}"
-  aria-pressed="${active}" title="${esc(sp.name)} · ${active?'Visible':'Not visible'}">
-  <span class="rail-logo">${logo(sp)}</span><span class="rail-state-dot ${active?'on':'off'}" aria-hidden="true"></span>
+  aria-label="Toggle ${esc(sp.name)} visibility"
+  aria-pressed="${active}" title="${esc(sp.name)}">
+  <span class="rail-logo">${logo(sp)}</span>
   </button>`;
  }).join('')}</div>`;
 }
