@@ -29,9 +29,14 @@ function expect(expr,message){assert.ok(expr,message)}
  window.fillDemo('admin@demo.seebot.ai');
  window.login({preventDefault(){}});
  expect(document.querySelector('.ops-nav'),'admin dashboard');
+ expect(document.querySelector('.dashboard-banner'),'workspace has warm orange schedule ribbon');
+ expect(document.querySelector('link[href="assets/workspace-theme.css"]'),'complete style system loaded');
+ assert.ok(fs.existsSync('assets/workspace-theme.css'),'reference-inspired theme file committed');
+ expect(document.querySelector('.identity-lockup .powered-by img'),'Seebot logo sits beside Messi Cup logo');
  expect(document.querySelector('.ops-head-first .powered-by img'),'Seebot Powered by image in dashboard header');
  window.openTask('task_demo1');
  expect(document.querySelector('.studio-grid'),'studio rendered');
+ expect(document.querySelector('.focusbar .identity-lockup .powered-by img'),'paired Seebot lockup in studio header');
  expect(document.querySelector('.sponsor-rail'),'sponsor sidebar rendered');
  expect(document.querySelector('.focusbar .powered-by img'),'Seebot Powered by image in studio header');
  assert.equal(document.querySelectorAll('.sponsor-rail .rail-state-dot').length,0,'separate sponsor status dots removed');
@@ -204,9 +209,9 @@ function expect(expr,message){assert.ok(expr,message)}
  document.querySelector('.rail-brand').click();
  assert.equal(db().tasks.find(t=>t.id===assigned.id).sponsors.length,1,'first annotation starts new match');
  window.navigate('tasks');
- const taskRow=[...document.querySelectorAll('tr')].find(tr=>tr.textContent.includes('TEST-M99'));
- expect(taskRow,'new match appears in task list');
- expect(taskRow.querySelector('.status.progress'),'first annotation automatically puts match In Progress');
+ const taskTile=[...document.querySelectorAll('.match-tile')].find(tile=>tile.textContent.includes('TEST-M99'));
+ expect(taskTile,'new match appears in task cards');
+ expect(taskTile.querySelector('.status.progress'),'first annotation automatically puts match In Progress');
  window.openTask(assigned.id);
  window.seekVideo(33);
  document.querySelector('.rail-brand').click();
