@@ -227,6 +227,8 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(document.querySelector('#modal .modalbody'),'modal has independently scrollable form body');
  document.querySelector('#taskname').value='Test Sponsor Match';
  document.querySelector('#tasknumber').value='TEST-M99';
+ assert.equal(document.querySelector('#tsponsor').value,'','new tasks start with no sponsor analyst');
+ assert.equal(document.querySelector('#tcontext').value,'','new tasks start with no events analyst');
  document.querySelector('#tsponsor').value=testUser.id;
  document.querySelector('#tcontext').value=testUser.id;
  window.saveTask('');
@@ -234,6 +236,38 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(assigned,'task creation works');
  assert.equal(assigned.sponsorAnalystId,testUser.id);
  assert.equal(assigned.contextAnalystId,testUser.id);
+ // Direct assignment from Actions, without opening the large Edit Task form.
+ window.openTask(assigned.id);
+ const taskAssignButton=[...document.querySelectorAll('#taskActionMenu button')]
+  .find(button=>button.textContent.includes('ASSIGN TASK'));
+ expect(taskAssignButton,'Actions menu includes Assign Task for administrators');
+ taskAssignButton.click();
+ expect(document.querySelector('#assignSponsorWorker'),'assignment modal shows sponsor analyst');
+ expect(document.querySelector('#assignContextWorker'),'assignment modal shows events analyst');
+ assert.equal(document.querySelector('#assignSponsorWorker').value,testUser.id,'current sponsor assignment preselected');
+ assert.equal(document.querySelector('#assignContextWorker').value,testUser.id,'current events assignment preselected');
+ expect(!document.querySelector('#taskname'),'focused assignment modal does not include full task editor');
+ document.querySelector('#assignSponsorWorker').value='';
+ document.querySelector('#assignContextWorker').value='u_analyst2';
+ document.querySelector('#modal .modalfoot .button.ghost').click();
+ assert.equal(db().tasks.find(t=>t.id===assigned.id).sponsorAnalystId,testUser.id,'Cancel does not update assignment');
+ window.assignTaskModal(assigned.id);
+ document.querySelector('#assignSponsorWorker').value='';
+ document.querySelector('#assignContextWorker').value='u_analyst2';
+ document.querySelector('#modal .modalfoot .button.primary').click();
+ const updatedAssignment=db().tasks.find(t=>t.id===assigned.id);
+ assert.equal(updatedAssignment.sponsorAnalystId,'','sponsor stream may be left unassigned');
+ assert.equal(updatedAssignment.contextAnalystId,'u_analyst2','events stream reassigned independently');
+ assert.equal(updatedAssignment.number,'TEST-M99','assignment does not change task details');
+ assert.equal(updatedAssignment.sponsors.length,0,'assignment does not change existing annotation data');
+ assert.equal(document.querySelector('.studio-meta').textContent.includes('Jamie Cruz'),true,'studio reflects the new assignment');
+ window.assignTaskModal(assigned.id);
+ document.querySelector('#assignSponsorWorker').value=testUser.id;
+ document.querySelector('#assignContextWorker').value=testUser.id;
+ window.saveTaskAssignment(assigned.id);
+ assert.equal(db().tasks.find(t=>t.id===assigned.id).sponsorAnalystId,testUser.id,'workers can be assigned later');
+ assert.equal(db().tasks.find(t=>t.id===assigned.id).contextAnalystId,testUser.id,'both streams can use the same analyst');
+
  // Insights are derived from annotations and support sponsor filtering.
  window.openTask('task_demo1');
  window.seekVideo(12);
