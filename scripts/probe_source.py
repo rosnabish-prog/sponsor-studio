@@ -48,3 +48,9 @@ for obj in [x for x in p.scripts if x["src"]][:3]:
             print("JS_SNIP",key,js[max(0,match.start()-160):match.end()+260][:420].replace(chr(10),' '))
     allurls=re.findall(r'https?://[^\\s"\x27<>\\\\]+',js)
     print("JS_URLS",json.dumps(sorted(set(allurls))[:50])[:4000])
+
+    for key in ('entities.Match','entities.Matches','entities.match','.Match.list','.Match.filter','appBaseUrl','apiBaseUrl','appId','/entities/','base44','api.base44.com','match_number','match_date','start_time','home_team'):
+        mm=list(re.finditer(re.escape(key),js,re.I))
+        print("DATAKEY",key,"COUNT",len(mm))
+        for match in mm[-7:]:
+            print("DATA_SNIP",key,js[max(0,match.start()-220):match.end()+320][:550].replace(chr(10),' '))
