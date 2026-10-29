@@ -74,7 +74,10 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.ok(sponsorStyle.includes('.rail-brand .rail-live-pill'),'OFF and LIVE status pill styling is retained');
  const transparentTheme=fs.readFileSync('assets/workspace-theme.css','utf8');
  assert.ok(transparentTheme.includes('.tinylogo img,.logo-preview img')&&transparentTheme.includes('background:transparent!important'),'logo images have no CSS white background');
- assert.ok(html.includes("ctx.clearRect(0,0,w,h)")&&html.includes("canvas.toDataURL('image/png')"),'logo conversion preserves PNG alpha');
+ assert.ok(html.includes("sourceContext.clearRect(0,0,sw,sh)")&&html.includes("ctx.clearRect(0,0,ow,oh)")&&html.includes("output.toDataURL('image/png')"),'logo conversion keeps transparent pixels and outputs PNG');
+ assert.ok(html.includes('function logoAlphaBounds(pixels,width,height)'),'uploaded logo content bounds are detected by alpha');
+ assert.ok(html.includes('const bounds=logoAlphaBounds(rgba,sw,sh)'),'empty transparent thumbnail margins are trimmed');
+ assert.ok(html.includes('optimizeStoredSponsorLogos();'),'previously uploaded transparent PNG thumbnails are upgraded');
  assert.ok(!html.includes("ctx.fillStyle='white'")&&!html.includes("toDataURL('image/jpeg',.76)"),'logo processor no longer flattens alpha to white JPEG');
  assert.ok(loginTheme.includes('font-weight:850!important'),'bold login heading style remains intact');
  assert.ok(document.querySelector('#taskActionMenu').querySelectorAll('button').length>=5,'task actions moved to dropdown');
