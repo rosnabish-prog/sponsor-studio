@@ -62,6 +62,15 @@ model Workspace {
   tasks       Task[]
   videos      VideoAsset[]
   audits      AuditLog[]
+  catalog      WorkspaceCatalog?
+}
+
+model WorkspaceCatalog {
+  workspaceId String    @id @db.Uuid
+  payload     Json
+  version     Int       @default(1)
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 model Membership {
@@ -83,6 +92,7 @@ model Task {
   number           String       @db.VarChar(100)
   name             String       @db.VarChar(250)
   fixtureId        String?      @db.VarChar(100)
+  metadata         Json?
   matchDate        DateTime?
   durationSeconds  Int          @default(0)
   sponsorAnalystId String?      @db.Uuid
@@ -124,6 +134,8 @@ model VideoAsset {
   workspaceId String      @db.Uuid
   taskId      String      @db.Uuid
   objectKey   String      @unique
+  uploadId    String?
+  partSize    Int         @default(16777216)
   filename    String      @db.VarChar(255)
   mimeType    String      @db.VarChar(100)
   sizeBytes   BigInt?

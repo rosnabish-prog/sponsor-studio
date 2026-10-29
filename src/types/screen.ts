@@ -1,11 +1,15 @@
 import type { StudioData, Fixture, Sponsor, TagAttribute, TaskSummary } from './models';
 
-export type ScreenId = 'login' | 'dashboard' | 'tasks' | 'studio' | 'sponsors' | 'attributes' | 'users' | 'reports';
+export type ScreenId = 'login' | 'workspace' | 'dashboard' | 'tasks' | 'studio' | 'sponsors' | 'attributes' | 'users' | 'reports';
 
 export interface ScreenContext {
   user?: { name: string; role: 'admin' | 'analyst' };
   taskId?: string;
   forgot?: boolean;
+  registering?: boolean;
+  apiEnabled?: boolean;
+  workspaces?: {id:string;name:string;slug:string}[];
+  workspaceName?: string;
   data?: StudioData;
   viewerId?: string;
   fixtures?: Fixture[];

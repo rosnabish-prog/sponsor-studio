@@ -19,6 +19,7 @@ export class CreateAnnotationDto {
 }
 
 export class UpdateAnnotationDto {
+  @IsOptional() @IsString() @Length(1, 100) labelId?: string;
   @IsOptional() @IsNumber({ allowNaN: false, allowInfinity: false }) end?: number | null;
   @IsOptional() @IsString() @Length(1, 100) placement?: string | null;
   @IsOptional() @IsString() @Length(1, 100) quality?: string | null;
@@ -77,6 +78,9 @@ export class AnnotationService {
     catch (error) { throw new BadRequestException((error as Error).message); }
     if (current.kind !== 'SPONSOR' && (input.placement !== undefined || input.quality !== undefined)) {
       throw new BadRequestException('Placement and quality apply only to sponsor annotations');
+    }
+    if (input.labelId !== undefined && current.kind !== 'CAMERA') {
+      throw new BadRequestException('Only camera annotations can change labels');
     }
     return this.db.$transaction(async tx => {
       const annotation = await tx.annotation.update({ where: { id: annotationId }, data: input });

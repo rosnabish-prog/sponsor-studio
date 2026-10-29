@@ -41,14 +41,24 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
     const workspace = await run('/workspaces', 'POST', { name: 'Integration Test' }, alice.cookie);
     assert.equal(workspace.status, 201, JSON.stringify(workspace.json));
     const workspaceId: string = workspace.json.id;
+    const emptyCatalog=await run(`/workspaces/${workspaceId}/catalog`,'GET',undefined,alice.cookie);
+    assert.equal(emptyCatalog.json.version,0);
+    const definitions={sponsorGroups:[{id:'sg_main',name:'Main',sponsors:[{id:'s_test',name:'Test sponsor'}]}],eventGroups:[],cameraGroups:[]};
+    const savedCatalog=await run(`/workspaces/${workspaceId}/catalog`,'PUT',{payload:definitions,version:0},alice.cookie);
+    assert.equal(savedCatalog.status,200,JSON.stringify(savedCatalog.json));
+    assert.equal(savedCatalog.json.version,1);
+    assert.equal((await run(`/workspaces/${workspaceId}/catalog`,'PUT',{payload:definitions,version:0},alice.cookie)).status,409);
     assert.equal((await run(`/workspaces/${workspaceId}/tasks`, 'GET', undefined, bob.cookie)).status, 404);
     assert.equal((await run(`/workspaces/${workspaceId}/members`, 'POST', { email: `bob-${suffix}@example.org`, role: 'ANALYST' }, alice.cookie)).status, 201);
     const task = await run(`/workspaces/${workspaceId}/tasks`, 'POST', {
       number: `M-${suffix}`, name: 'Test match', durationSeconds: 100, sponsorAnalystId: bob.json.user.id,
+      metadata:{sponsorGroupIds:['sg_main'],eventGroupIds:[],cameraGroupIds:[],videoType:'none',videoUrl:''},
     }, alice.cookie);
     assert.equal(task.status, 201, JSON.stringify(task.json));
+    assert.deepEqual(task.json.metadata.sponsorGroupIds,['sg_main']);
     const path = `/workspaces/${workspaceId}/tasks/${task.json.id}`;
     assert.equal((await run(path, 'GET', undefined, bob.cookie)).status, 200);
+    assert.equal((await run(path+'/videos','POST',{filename:'video.mp4',mimeType:'video/mp4',sizeBytes:10_000_000},bob.cookie)).status,503);
     assert.equal((await run(`/workspaces/${workspaceId}/tasks`, 'POST', { number: 'NO', name: 'No' }, bob.cookie)).status, 403);
     const annotation = await run(path + '/annotations', 'POST', { kind: 'SPONSOR', labelId: 's_test', start: 20 }, bob.cookie);
     assert.equal(annotation.status, 201, JSON.stringify(annotation.json));

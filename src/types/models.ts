@@ -76,11 +76,12 @@ export interface TaskSummary {
   events: EventAnnotation[];
   cameras: CameraAnnotation[];
   submitted: { sponsors: boolean; context: boolean };
-  videoType?: 'none' | 'https' | 'ftp';
+  videoType?: 'none' | 'https' | 'ftp' | 's3';
   videoUrl?: string;
   videoName?: string;
   videoSize?: number;
   videoMime?: string;
+  videoAssetId?: string;
   observedTime?: number;
   periods?: { firstEnd: number; secondStart: number } | null;
   createdAt?: string;

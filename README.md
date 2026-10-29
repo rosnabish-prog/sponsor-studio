@@ -8,13 +8,13 @@ The application now builds with **React 19, TypeScript, and Vite**. All eight to
 
 **Migration status:** All eight screens, Annotation Studio controls and timeline, recorded-action editors, modal forms, insights report and tournament rollup are native React components. No HTML string rendering adapter remains. The demo annotation controller lives in `src/state/studioController.ts` and passes strict TypeScript checks, while pure analytics are implemented in `src/domain/analytics.ts`. `ScreenHost` coordinates typed controller snapshots with React. This is a frontend migration, not a replacement for production authentication or shared storage.
 
-The frontend is still a local-storage-only demo, not a secure multiuser production application.
+By default the frontend still runs as a local-storage-only demonstration. With `VITE_BACKEND_ENABLED=true` it uses the new NestJS API for authentication, workspaces, tasks, annotation writes and shared catalog data. The default GitHub Pages deployment does **not** enable the API.
 
 ## P0 backend foundation (feature branch)
 
-The new `apps/api` workspace contains a NestJS API with PostgreSQL/Prisma schema and initial migration, Argon2id email/password accounts, revocable sessions, workspace membership, persistent tasks, analyst assignments, sponsor/event/camera annotation intervals, submission/reopen actions and audit records. It is intentionally deployed **separately** from the existing GitHub Pages demo. The React frontend does not yet use this API.
+The new `apps/api` workspace contains a NestJS API with PostgreSQL/Prisma schema and migrations, Argon2id email/password accounts, revocable sessions, workspace membership, persistent tasks, analyst assignments, sponsor/event/camera annotation intervals, submission/reopen actions, shared catalog and audit records. The React frontend can now use this API when the live mode environment flag is set.
 
-See [API setup, endpoint reference and remaining P0 gaps](apps/api/README.md) before trying to deploy it. In particular, S3/CloudFront uploads and playback, email verification, UI/API integration and complete real-database end-to-end coverage remain outstanding.
+See [API setup, endpoint reference, private video prerequisites and remaining P0 gaps](apps/api/README.md) before deploying it. The multipart upload and signed CloudFront playback code needs real AWS infrastructure, and email verification/invitations and production hardening remain outstanding.
 
 ## What is included
 

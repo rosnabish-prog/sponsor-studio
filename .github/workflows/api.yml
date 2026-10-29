@@ -4,6 +4,11 @@ on:
   push:
     paths:
       - 'apps/api/**'
+      - 'src/api/**'
+      - 'src/state/**'
+      - 'src/components/**'
+      - 'tests/live-api.spec.ts'
+      - 'vite.config.ts'
       - 'package*.json'
       - '.github/workflows/api.yml'
   pull_request:
@@ -36,7 +41,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://sponsor:sponsor_ci@localhost:5432/sponsor_test?schema=public
       TEST_DATABASE_URL: postgresql://sponsor:sponsor_ci@localhost:5432/sponsor_test?schema=public
-      APP_ORIGIN: http://localhost:5173
+      APP_ORIGIN: http://127.0.0.1:4173
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,3 +57,21 @@ jobs:
         run: npm run test:api
       - name: Existing frontend build
         run: npm run build
+      - name: Install headless Chromium for live UI integration
+        run: npx playwright install --with-deps chromium
+      - name: Launch API and production-mode frontend
+        run: |
+          npm run dev:api > "$RUNNER_TEMP/sponsor-api.log" 2>&1 &
+          VITE_BACKEND_ENABLED=true npm run dev -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/sponsor-ui.log" 2>&1 &
+          curl --retry 20 --retry-connrefused --retry-delay 2 --fail http://127.0.0.1:3001/api/health
+          curl --retry 20 --retry-connrefused --retry-delay 2 --fail http://127.0.0.1:4173/
+      - name: React login, task and annotation integration
+        run: npm run test:live
+      - name: Upload browser debug trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-live-ui-traces
+          path: |
+            test-results/
+            playwright-report/

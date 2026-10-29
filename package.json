@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test:visual": "playwright test tests/visual-regression.spec.ts",
+    "test:live": "playwright test tests/live-api.spec.ts",
     "test": "npm run typecheck && python3 scripts/validate_app.py && node scripts/smoke_ui.cjs && npm run test:api",
     "dev:api": "npm run dev --workspace @sponsor-studio/api",
     "build:api": "npm run build --workspace @sponsor-studio/api",

@@ -2,8 +2,9 @@ import {
   BadRequestException, Body, ConflictException, Controller, ForbiddenException,
   Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards,
 } from '@nestjs/common';
-import { IsDateString, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 import { AuthRequest, SessionGuard } from './auth';
+import type { Prisma } from '../generated/prisma/client';
 import { DatabaseService } from './database';
 import { canAccessTask, mustManage } from './permissions';
 import { WorkspaceService } from './workspaces';
@@ -16,6 +17,7 @@ export class CreateTaskDto {
   @IsOptional() @IsInt() @Min(0) @Max(864_000) durationSeconds?: number;
   @IsOptional() @IsUUID() sponsorAnalystId?: string;
   @IsOptional() @IsUUID() contextAnalystId?: string;
+  @IsOptional() @IsObject() metadata?: unknown;
 }
 
 export class UpdateTaskDto {
@@ -23,6 +25,28 @@ export class UpdateTaskDto {
   @IsOptional() @IsInt() @Min(0) @Max(864_000) durationSeconds?: number;
   @IsOptional() @IsUUID() sponsorAnalystId?: string;
   @IsOptional() @IsUUID() contextAnalystId?: string;
+  @IsOptional() @IsObject() metadata?: unknown;
+}
+
+function validateMetadata(value: unknown): Prisma.InputJsonValue | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new BadRequestException('Invalid task metadata');
+  const data = value as Record<string, unknown>;
+  const ids = (key: string) => {
+    const list = data[key];
+    if (!Array.isArray(list) || list.length > 100 || list.some(v => typeof v !== 'string' || v.length > 100)) {
+      throw new BadRequestException(`Invalid ${key}`);
+    }
+    return list as string[];
+  };
+  const safe = {
+    sponsorGroupIds: ids('sponsorGroupIds'), eventGroupIds: ids('eventGroupIds'), cameraGroupIds: ids('cameraGroupIds'),
+    periods: data.periods && typeof data.periods === 'object' ? data.periods : null,
+    videoType: ['none','https','ftp','s3'].includes(String(data.videoType)) ? data.videoType : 'none',
+    videoUrl: typeof data.videoUrl === 'string' ? data.videoUrl.slice(0, 2048) : '',
+  };
+  if (JSON.stringify(safe).length > 10_000) throw new BadRequestException('Task metadata too large');
+  return safe as Prisma.InputJsonValue;
 }
 
 export class TaskStreamDto {
@@ -38,7 +62,9 @@ export class TaskService {
     const where = member.role === 'OWNER' || member.role === 'ADMIN' || member.role === 'REVIEWER'
       ? { workspaceId }
       : { workspaceId, OR: [{ sponsorAnalystId: userId }, { contextAnalystId: userId }] };
-    return this.db.task.findMany({ where, orderBy: { createdAt: 'desc' } });
+    return this.db.task.findMany({ where, include: { annotations: true, videos: {
+      where: { status: 'READY' }, select: { id: true, filename: true, mimeType: true }, orderBy: { createdAt: 'desc' }, take: 1,
+    } }, orderBy: { createdAt: 'desc' } });
   }
 
   async find(workspaceId: string, taskId: string, userId: string) {
@@ -67,6 +93,7 @@ export class TaskService {
           workspaceId, number: input.number.trim(), name: input.name.trim(), fixtureId: input.fixtureId,
           matchDate: input.matchDate ? new Date(input.matchDate) : undefined,
           durationSeconds: input.durationSeconds ?? 0,
+          metadata: validateMetadata(input.metadata),
           sponsorAnalystId: input.sponsorAnalystId, contextAnalystId: input.contextAnalystId,
         } });
         await tx.auditLog.create({ data: { workspaceId, actorId, action: 'TASK_CREATED', subjectId: task.id } });
@@ -89,7 +116,7 @@ export class TaskService {
       if (invalidAnnotation) throw new ConflictException('Existing annotations extend beyond the new duration');
     }
     return this.db.$transaction(async tx => {
-      const changed = await tx.task.update({ where: { id: taskId }, data: input });
+      const changed = await tx.task.update({ where: { id: taskId }, data: { ...input, metadata: validateMetadata(input.metadata) } });
       await tx.auditLog.create({ data: { workspaceId, actorId, action: 'TASK_UPDATED', subjectId: taskId } });
       return changed;
     });

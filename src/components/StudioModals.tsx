@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { apiEnabled } from '../api/client';
 import type { Fixture, Sponsor, SponsorGroup, StudioData, TagGroup, TaskSummary, TeamMember } from '../types/models';
 
 export type DialogModel =
@@ -65,9 +66,9 @@ function TaskModal({ task, data, fixtures }: Extract<DialogModel, { type: 'task'
       <Field full title="Camera angle attribute lists"><GroupChoices name="cgroups" groups={data.cameraGroups} selected={task?.cameraGroupIds || ['cg_basic']} /></Field>
       <Field title="Sponsor visibility analyst"><select id="tsponsor" defaultValue={task?.sponsorAnalystId || ''}><Options users={data.users} /></select><small>Assign the same person in both fields for an all-in-one task.</small></Field>
       <Field title="Events & camera analyst"><select id="tcontext" defaultValue={task?.contextAnalystId || ''}><Options users={data.users} /></select><small>Or assign separately for two synchronized work streams.</small></Field>
-      <Field title="Video source"><select id="taskvideosrc" defaultValue={task?.videoType || 'none'}><option value="none">Attach local video later</option><option value="https">Direct HTTPS video URL</option><option value="ftp">FTP / SFTP source (metadata)</option></select></Field>
-      <Field title="Source URL (optional)"><input id="taskurl" defaultValue={task?.videoUrl || ''} placeholder="https://… or sftp://…" /><small>FTP/SFTP requires backend ingestion before video playback.</small></Field>
-    </div><div className="infohint">Required for production: server-side video ingestion, secure role-based authentication, live syncing and durable media storage. This demo keeps task data in this browser only.</div></div>
+      <Field title="Video source"><select id="taskvideosrc" defaultValue={task?.videoType || 'none'}><option value="none">Attach video later</option><option value="https">Direct HTTPS video URL</option><option value="ftp">FTP / SFTP source (metadata)</option>{apiEnabled && <option value="s3">Private AWS S3 video</option>}</select></Field>
+      <Field title="Source URL (optional)"><input id="taskurl" defaultValue={task?.videoType==='s3'?'':task?.videoUrl||''} placeholder="https://… or sftp://…" /><small>{apiEnabled?'Use Attach Video in Annotation Studio to securely upload to S3.':'FTP/SFTP requires backend ingestion before video playback.'}</small></Field>
+    </div>{!apiEnabled && <div className="infohint">Required for production: server-side video ingestion, secure role-based authentication, live syncing and durable media storage. This demo keeps task data in this browser only.</div>}</div>
     <Footer><Cancel /><Save>{task ? 'Save changes' : 'Create task'}</Save></Footer>
   </form>;
 }
@@ -110,7 +111,8 @@ function UserModal({ user }: Extract<DialogModel, { type: 'user' }>) {
   return <form onSubmit={event => { event.preventDefault(); window.saveUser?.(user?.id || ''); }}><div className="modalbody"><div className="formgrid">
     <Field title="Full name"><input id="uname" defaultValue={user?.name || ''} /></Field>
     <Field title="Work email"><input id="uemail" type="email" defaultValue={user?.email || ''} /></Field>
-    <Field full title={`Demo password ${user ? '(leave empty to keep current)' : ''}`}><input id="upass" type="password" placeholder="At least 8 characters" autoComplete="new-password" /></Field>
+    {apiEnabled ? <p className="field full">This analyst must create an account first. Enter their registered email to add them to this workspace.</p> :
+      <Field full title={`Demo password ${user ? '(leave empty to keep current)' : ''}`}><input id="upass" type="password" placeholder="At least 8 characters" autoComplete="new-password" /></Field>}
   </div></div><Footer><Cancel /><Save>Save analyst</Save></Footer></form>;
 }
 
