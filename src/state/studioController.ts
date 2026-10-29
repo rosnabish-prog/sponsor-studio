@@ -144,7 +144,8 @@ let selectedTaskId='',reportTaskId='',taskFilter='all',insightFocusId='',fixture
 let studioTab:'all'|'sponsors'|'events'|'cameras'='all';
 let tick=0,seekStep=5,videoEl:HTMLVideoElement|null=null,modalOpen=false;
 const localVideos:Record<string,{url:string;name:string}>={};
-function clearLocalVideos(){for(const video of Object.values(localVideos))URL.revokeObjectURL(video.url);for(const id of Object.keys(localVideos))delete localVideos[id];}
+const videoDurations:Record<string,number>={};
+function clearLocalVideos(){for(const video of Object.values(localVideos))URL.revokeObjectURL(video.url);for(const id of Object.keys(localVideos))delete localVideos[id];for(const id of Object.keys(videoDurations))delete videoDurations[id];}
 const me=()=>db.users.find(x=>x.id===logged)||(remoteUser&&logged?{...remoteUser,password:'',role:'admin' as const}:undefined);const currentTask=()=>db.tasks.find(x=>x.id===selectedTaskId);const reportTask=()=>db.tasks.find(x=>x.id===reportTaskId)||db.tasks[0];const visibleTasks=()=>me()?.role==='admin'?db.tasks:db.tasks.filter(t=>t.sponsorAnalystId===logged||t.contextAnalystId===logged);
 const taskStatus=(t:TaskSummary):'ready'|'progress'|'done'=>t.submitted?.sponsors&&t.submitted?.context?'done':t.sponsors.length||t.events.length||t.cameras.length||t.submitted?.sponsors||t.submitted?.context?'progress':'ready';
 const foundUser=(id:string)=>db.users.find(u=>u.id===id);const nameUser=(id:string)=>foundUser(id)?.name||'Unassigned';
@@ -156,7 +157,8 @@ const camerasFor=(t:TaskSummary)=>db.cameraGroups.filter(g=>t.cameraGroupIds.inc
 const labelFor=(t:TaskSummary,type:'sponsors'|'events'|'cameras',id:string)=>({sponsors:sponsorFor(t),events:eventsFor(t),cameras:camerasFor(t)})[type].find(i=>i.id===id)?.name||id;
 // Each presence interval has one optional primary placement and one optional visibility-quality rating.
 // Unclassified intervals stay unclassified; do not infer placement or readability from sponsor identity.
-const seconds=(t:TaskSummary)=>clamp(tick,0,t.duration||3600);
+const videoDuration=(t:TaskSummary)=>videoDurations[t.id]||t.duration||3600;
+const seconds=(t:TaskSummary)=>clamp(tick,0,videoDuration(t));
 const insightData=(t:TaskSummary)=>computeInsights(t,{sponsors:sponsorFor(t),events:eventsFor(t),cameras:camerasFor(t)});
 function notify(message:string){window.dispatchEvent(new CustomEvent('studio-toast',{detail:message}));}
 let pendingInAppConfirm:(()=>void)|null=null;
@@ -284,7 +286,7 @@ window.deleteLog=(key,id)=>{const t=currentTask(),kind=key==='sponsors'?'sponsor
   else t.cameras=t.cameras.filter(x=>x.id!==id);
   save();refreshStudio();notify('Annotation removed');
  },{actionLabel:'REMOVE ANNOTATION'});};
-window.seekVideo=val=>{const t=currentTask();if(!t)return;tick=clamp(Number(val)||0,0,t.duration||3600);if(videoEl&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();save();refreshStudio();};
+window.seekVideo=val=>{const t=currentTask();if(!t)return;tick=clamp(Number(val)||0,0,videoDuration(t));if(videoEl&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();save();refreshStudio();};
 window.skipVideo=(n:number)=>window.seekVideo?.((videoEl&&Number.isFinite(videoEl.currentTime)?videoEl.currentTime:tick)+n);
 window.skipByStep=direction=>window.skipVideo?.((Number(direction)||0)*seekStep);
 window.setSeekStep=value=>{seekStep=value===10?10:5;refreshStudio();};
@@ -305,8 +307,9 @@ function attachVideo(){
  el.addEventListener('loadedmetadata',()=>{
   const t=currentTask();if(!t)return;
   if(Number.isFinite(el.duration)&&el.duration>1){
-   if(!localVideos[t.id]&&Math.abs(el.duration-t.duration)>2){
-    t.duration=Math.round(el.duration*100)/100;
+   videoDurations[t.id]=el.duration;
+   if(me()?.role==='admin'&&Math.round(el.duration)!==Math.round(t.duration)){
+    t.duration=Math.round(el.duration);
     save();refreshStudio();
    }
    videoDimensions=el.videoWidth&&el.videoHeight?el.videoWidth+' × '+el.videoHeight:'';
@@ -336,6 +339,7 @@ window.attachLocalVideoFile=(file:File)=>{
   try{url=URL.createObjectURL(file)}catch{return notify('Could not open the selected video.'),false}
   if(localVideos[t.id])URL.revokeObjectURL(localVideos[t.id].url);
   localVideos[t.id]={url,name:file.name};
+  delete videoDurations[t.id];
   videoDimensions='';videoError='';tick=0;
   render();notify('Video opened locally. Select it again after refreshing.');
  return true;
@@ -357,7 +361,7 @@ window.submitMyTask=()=>{
  const parts=[mineS?'sponsor visibility':'',mineC?'events & camera':''].filter(Boolean).join(' and ');
  confirmInApp('Submit annotation streams',`Submit ${parts}? These streams will be locked until an administrator reopens them.`,()=>{
   if(mineS)t.submitted.sponsors=true;
-  if(mineC){t.submitted.context=true;t.cameras.forEach(x=>{if(x.end==null)x.end=t.duration})}
+  if(mineC){t.submitted.context=true;t.cameras.forEach(x=>{if(x.end==null)x.end=videoDuration(t)})}
   save();render();notify('Assigned work submitted.');
  },{actionLabel:'SUBMIT',danger:false});
 };
@@ -612,7 +616,7 @@ function render(){
  const heading=t?studioSidebarHeading():null;
  const currentCamera=t?.cameras.find(x=>x.end==null);
  const studioModel=t?{
-  id:t.id,number:t.number,name:t.name,date:t.date,duration:t.duration,
+  id:t.id,number:t.number,name:t.name,date:t.date,duration:videoDuration(t),
   videoName:localVideo?.name||t.videoName,videoType:t.videoType,videoSrc,isLocalVideo:!!localVideo,
   status:taskStatus(t),sponsorAnalyst:nameUser(t.sponsorAnalystId),contextAnalyst:nameUser(t.contextAnalystId),
   canSponsor:canEdit(t,'sponsors'),canContext:canEdit(t,'context'),
