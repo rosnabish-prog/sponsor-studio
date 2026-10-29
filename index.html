@@ -383,7 +383,7 @@ function controlsHTML(t){
 }
 function timelineHTML(t){let dur=t.duration||3600,now=tick;const track=(name,items,type,point=false)=>`<div class="trackrow"><span class="trackname" title="${esc(name)}">${esc(name)}</span><div class="track" onclick="seekFromTrack(event,this)">${items.map(x=>{let left=100*clamp(x.start,0,dur)/dur,right=100*clamp(x.end==null?Math.max(x.start,t.observedTime||0,tick):x.end,0,dur)/dur;return `<span title="${esc(name)}: ${fmt(x.start)}${point?'':' – '+fmt(x.end==null?now:x.end)}" class="block ${type} ${x.end==null?'open':''} ${point?'dotpoint':''}" style="left:${left}%;width:${point?'.15':Math.max(.15,right-left)}%"></span>`}).join('')}<span class="playhead" style="left:${100*now/dur}%"></span></div></div>`;
 let rows=[];if(studioTab==='all'||studioTab==='sponsors')for(let s of sponsorFor(t))rows.push(track(s.name,t.sponsors.filter(x=>x.sponsorId===s.id),'sponsor'));
-if(studioTab==='all'||studioTab==='events')for(let e of eventsFor(t))rows.push(track(e.name,t.events.filter(x=>x.eventId===e.id),'event',e.kind==='point'));
+if(studioTab==='all'||studioTab==='events')for(let e of eventsFor(t))rows.push(track(e.name,t.events.filter(x=>x.eventId===e.id),'event'));
 if(studioTab==='all'||studioTab==='cameras')for(let c of camerasFor(t))rows.push(track(c.name,t.cameras.filter(x=>x.cameraId===c.id),'camera'));
 return `<div class="track-top">${[0,.25,.5,.75,1].map(x=>`<span>${fmt(dur*x)}</span>`).join('')}</div>${rows.join('')||'<div class="empty">No tracks configured</div>'}`}
 function logsHTML(t){let logs=[...t.sponsors.map(x=>({...x,type:'Sponsor',itemId:x.sponsorId,key:'sponsors',color:'#ff4383'})),...t.events.map(x=>({...x,type:'Event',itemId:x.eventId,key:'events',color:'#8464ed'})),...t.cameras.map(x=>({...x,type:'Camera',itemId:x.cameraId,key:'cameras',color:'#41bce3'}))].sort((a,b)=>b.start-a.start);return `<div class="logtable"><table class="table"><thead><tr><th>Time</th><th>Type</th><th>Attribute</th><th>End</th><th></th></tr></thead><tbody>${logs.map(x=>`<tr><td class="nowrap" style="font-weight:900">${fmt(x.start)}</td><td><span style="color:${x.color};font-weight:800">${x.type}</span></td><td>${esc(labelFor(t,x.key,x.itemId))}</td><td>${x.end==null?'<span style="color:#15ac76;font-weight:900">Recording…</span>':x.kind==='point'?'Moment':fmt(x.end)}</td><td><button class="button ghost tiny" onclick="seekVideo(${x.start})" title="Jump to time">${icons('play')}</button> ${canEdit(t,x.key==='sponsors'?'sponsors':'context')?`<button class="button ghost tiny" onclick="deleteLog('${x.key}','${x.id}')" title="Remove log">${icons('close')}</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:#999;padding:20px">No actions recorded yet</td></tr>'}</tbody></table></div>`}
@@ -401,8 +401,30 @@ function refreshStudio(){
  updateClock();
 }
 window.tagSponsor=id=>{let t=currentTask();if(!t||!canEdit(t,'sponsors'))return;let o=t.sponsors.find(x=>x.sponsorId===id&&x.end==null),at=seconds(t);if(o){if(at<=o.start)return notify('Move forward in the video to end the current exposure.');o.end=at}else{t.sponsors.push({id:uid(),sponsorId:id,start:at,end:null,createdBy:logged,createdAt:tstamp()})}save();refreshStudio()};
-window.tagEvent=id=>{let t=currentTask();if(!t||!canEdit(t,'context'))return;let ev=eventsFor(t).find(x=>x.id===id);if(!ev)return;let at=seconds(t);if(ev.kind==='point'){t.events.push({id:uid(),eventId:id,kind:'point',start:at,end:at,createdBy:logged,createdAt:tstamp()})}else{let o=t.events.find(x=>x.eventId===id&&x.end==null);if(o){if(at<=o.start)return notify('Move forward in the video to end the current event.');o.end=at}else t.events.push({id:uid(),eventId:id,kind:'range',start:at,end:null,createdBy:logged,createdAt:tstamp()})}save();refreshStudio()};
-window.tagCamera=id=>{let t=currentTask();if(!t||!canEdit(t,'context'))return;let at=seconds(t),o=t.cameras.find(x=>x.end==null);if(o){if(at<=o.start)return notify('Move forward in the video before switching the camera angle.');o.end=at;if(o.cameraId===id){save();refreshStudio();return}}t.cameras.push({id:uid(),cameraId:id,start:at,end:null,createdBy:logged,createdAt:tstamp()});save();refreshStudio()};
+window.tagEvent=id=>{
+ const t=currentTask();if(!t||!canEdit(t,'context'))return;
+ if(!eventsFor(t).some(e=>e.id===id))return;
+ const now=seconds(t),active=t.events.find(e=>e.eventId===id&&e.end==null);
+ if(active){
+  if(now<=active.start)return notify('Advance video time before ending this event.');
+  active.end=now;
+ }else{
+  t.events.push({id:uid(),eventId:id,kind:'range',start:now,end:null,createdBy:logged,createdAt:tstamp()});
+ }
+ save();refreshStudio();
+};
+window.tagCamera=id=>{
+ const t=currentTask();if(!t||!canEdit(t,'context'))return;
+ if(!camerasFor(t).some(c=>c.id===id))return;
+ const now=seconds(t),active=t.cameras.find(c=>c.end==null);
+ if(active){
+  if(now<=active.start)return notify('Advance video time before ending or switching the camera.');
+  active.end=now;
+  if(active.cameraId===id){save();refreshStudio();return}
+ }
+ t.cameras.push({id:uid(),cameraId:id,start:now,end:null,createdBy:logged,createdAt:tstamp()});
+ save();refreshStudio();
+};
 window.deleteLog=(key,id)=>{let t=currentTask(),kind=key==='sponsors'?'sponsors':'context';if(!t||!canEdit(t,kind))return;if(!confirm('Remove this annotation?'))return;t[key]=t[key].filter(x=>x.id!==id);save();refreshStudio()};
 window.seekVideo=val=>{let t=currentTask();if(!t)return;tick=clamp(Number(val)||0,0,t.duration||3600);if(videoEl&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch(e){}}updateClock();save();let l=document.getElementById('timelineBody');if(l)l.innerHTML=timelineHTML(t)};
 window.seekFromTrack=(e,el)=>{let rect=el.getBoundingClientRect();seekVideo(Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width))*currentTask().duration)};
