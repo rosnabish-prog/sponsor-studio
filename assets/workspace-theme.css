@@ -806,3 +806,63 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
  background:var(--orange-bright)!important;color:#17110b!important;
  border-color:var(--orange-bright)!important;
 }
+
+
+/* Native-ratio playback: show every pixel of the video frame, never crop.
+   Only the placeholder keeps its standard 16:9 illustrative aspect ratio.
+   The video player uses intrinsic sizing and black letterboxing where needed. */
+.app-focus .vidframe.video-native-frame {
+ display:flex!important;
+ align-items:center!important;
+ justify-content:center!important;
+ width:100%!important;
+ height:auto!important;
+ min-height:0!important;
+ max-height:none!important;
+ aspect-ratio:auto!important;
+ padding:0!important;
+ margin:0!important;
+ overflow:hidden!important;
+ background:#000!important;
+}
+.app-focus .vidframe.video-native-frame video {
+ display:block!important;
+ position:static!important;
+ inset:auto!important;
+ width:100%!important;
+ height:auto!important;
+ max-width:100%!important;
+ max-height:min(66dvh,800px)!important;
+ min-height:0!important;
+ aspect-ratio:auto!important;
+ object-fit:contain!important;
+ object-position:center center!important;
+ background:#000!important;
+ margin:auto!important;
+}
+.app-focus .video-source-note {
+ display:block;
+ width:100%;
+ padding:9px 17px;
+ background:#242324;
+ border-bottom:1px solid #343338;
+ color:#b6a58f;
+ font:600 10px/1.5 'IBM Plex Mono',monospace!important;
+ overflow-wrap:anywhere;
+}
+.app-focus .video-source-note:empty{display:none!important;}
+.app-focus .video-box .vidframe video::-webkit-media-controls-panel{
+ background-color:#1d1d1f;
+}
+@media(max-width:680px){
+ .app-focus .vidframe.video-native-frame{
+   height:auto!important;min-height:0!important;max-height:none!important;
+   aspect-ratio:auto!important;
+ }
+ .app-focus .vidframe.video-native-frame video{
+   height:auto!important;
+   max-height:min(50dvh,530px)!important;
+   object-fit:contain!important;
+ }
+ .app-focus .video-source-note{padding:8px 11px;font-size:9px!important;}
+}
