@@ -9,7 +9,8 @@ export type DialogModel =
   | { type: 'group'; kind: 'sponsor' | 'event' | 'camera'; group?: SponsorGroup | TagGroup }
   | { type: 'sponsor'; group: SponsorGroup; sponsor?: Sponsor }
   | { type: 'item'; kind: 'event' | 'camera'; groupId: string }
-  | { type: 'user'; user?: TeamMember };
+  | { type: 'user'; user?: TeamMember }
+  | { type: 'credentials'; name: string; email: string; temporaryPassword: string | null; purpose: 'created' | 'reset' };
 
 function Icon({ name }: { name: string }) { return <svg className="ic"><use href={`#i-${name}`} /></svg>; }
 function Footer({ children }: { children: ReactNode }) { return <div className="modalfoot">{children}</div>; }
@@ -111,7 +112,7 @@ function UserModal({ user }: Extract<DialogModel, { type: 'user' }>) {
   return <form onSubmit={event => { event.preventDefault(); window.saveUser?.(user?.id || ''); }}><div className="modalbody"><div className="formgrid">
     <Field title="Full name"><input id="uname" defaultValue={user?.name || ''} /></Field>
     <Field title="Work email"><input id="uemail" type="email" defaultValue={user?.email || ''} /></Field>
-    {apiEnabled ? <p className="field full">This analyst must create an account first. Enter their registered email to add them to this workspace.</p> :
+    {apiEnabled ? <p className="field full">A new worker receives a secure, temporary password that is shown once to you. Share it privately. Existing accounts keep their current password.</p> :
       <Field full title={`Demo password ${user ? '(leave empty to keep current)' : ''}`}><input id="upass" type="password" placeholder="At least 8 characters" autoComplete="new-password" /></Field>}
   </div></div><Footer><Cancel /><Save>Save analyst</Save></Footer></form>;
 }
@@ -122,6 +123,7 @@ export function StudioModal({ model }: { model: DialogModel }) {
     confirm: model.type === 'confirm' ? model.title : '', assign: 'Assign task', task: model.type === 'task' && model.task ? 'Edit match task' : 'Create new task',
     group: model.type === 'group' && model.group ? 'Edit attribute list' : 'New attribute list', sponsor: model.type === 'sponsor' && model.sponsor ? 'Edit sponsor' : 'Add a sponsor',
     item: model.type === 'item' && model.kind === 'event' ? 'Add match event' : 'Add camera angle', user: model.type === 'user' && model.user ? 'Edit analyst' : 'Add analyst',
+    credentials: model.type === 'credentials' ? (model.purpose === 'reset' ? 'Temporary password reset' : 'Worker account ready') : '',
   };
   return <div className="overlay" id="modal" onClick={event => { if (event.target === event.currentTarget) window.closeModal?.(); }}>
     <div className={`modal ${model.type === 'task' ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={titles[model.type]}>
@@ -133,6 +135,16 @@ export function StudioModal({ model }: { model: DialogModel }) {
       {model.type === 'sponsor' && <SponsorModal {...model} />}
       {model.type === 'item' && <ItemModal {...model} />}
       {model.type === 'user' && <UserModal {...model} />}
+      {model.type === 'credentials' && <div className="modalbody">
+        <p><strong>{model.name}</strong> · {model.email}</p>
+        {model.temporaryPassword ? <>
+          <p>Copy this one-time temporary password and share it privately with the worker. It will not appear again in Sponsor Studio.</p>
+          <div className="field"><label>ONE-TIME TEMPORARY PASSWORD</label><code id="temporaryPassword" style={{display:'block',wordBreak:'break-all',padding:14,background:'#181818',borderRadius:8}}>{model.temporaryPassword}</code></div>
+          <button type="button" className="button soft" onClick={() => void navigator.clipboard?.writeText(model.temporaryPassword!) }>Copy password</button>
+          <p className="infohint">This password expires in 7 days and must be changed on first sign-in. No email or other message is sent by the platform.</p>
+        </> : <p>This person already has an account. Their existing password is unchanged. No new password was generated.</p>}
+        <Footer><button type="button" className="button primary" onClick={() => window.closeModal?.()}>Done</button></Footer>
+      </div>}
     </div>
   </div>;
 }

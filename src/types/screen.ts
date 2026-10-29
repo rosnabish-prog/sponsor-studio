@@ -7,7 +7,7 @@ export interface ScreenContext {
   taskId?: string;
   forgot?: boolean;
   registering?: boolean;
-  resetToken?: string;
+  changeRequired?: boolean;
   apiEnabled?: boolean;
   workspaces?: {id:string;name:string;slug:string}[];
   workspaceName?: string;

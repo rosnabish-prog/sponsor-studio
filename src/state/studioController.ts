@@ -104,6 +104,7 @@ let fixtureDay='all';
 // but convert attribute definitions to duration tagging for all future annotations.
 for(const group of db.eventGroups||[])for(const item of group.items||[])item.kind='range';
 let remoteUser:ApiUser|null=null,liveWorkspaces:ApiMembership[]=[],workspaceId='',catalogVersion=0;
+let passwordChangeRequired=false;
 const cloneStudio=(value:StudioData):StudioData=>JSON.parse(JSON.stringify(value)) as StudioData;
 let shadow:StudioData=cloneStudio(db),syncDirty=false,syncRunning=false;
 async function syncLive() {
@@ -149,6 +150,8 @@ async function loadWorkspace(id:string) {
 }
 async function loadLiveSession() {
  const sessionInfo=await api.me();remoteUser=sessionInfo.user;logged=remoteUser.id;
+ passwordChangeRequired=!!remoteUser.passwordChangeRequired;
+ if(passwordChangeRequired){workspaceId='';liveWorkspaces=[];render();return;}
  liveWorkspaces=await api.workspaces();
  if(liveWorkspaces.length)await loadWorkspace(liveWorkspaces[0].workspace.id);
  else{workspaceId='';render()}
@@ -157,7 +160,6 @@ let view: 'dashboard'|'tasks'|'studio'|'sponsors'|'attributes'|'users'|'reports'
 let selectedTaskId='',reportTaskId='',taskFilter='all',insightFocusId='',fixtureSyncLabel='Bundled schedule';
 let studioTab:'all'|'sponsors'|'events'|'cameras'='all';
 let tick=0,seekStep=5,localVideos:Record<string,string>={},videoEl:HTMLVideoElement|null=null,forgot=false,registering=false,modalOpen=false;
-let resetToken=apiEnabled?new URLSearchParams(window.location.hash.slice(1)).get('reset')||'':'';
 const me=()=>db.users.find(x=>x.id===logged)||(remoteUser&&logged?{...remoteUser,password:'',role:'admin' as const}:undefined);const currentTask=()=>db.tasks.find(x=>x.id===selectedTaskId);const reportTask=()=>db.tasks.find(x=>x.id===reportTaskId)||db.tasks[0];const visibleTasks=()=>me()?.role==='admin'?db.tasks:db.tasks.filter(t=>t.sponsorAnalystId===logged||t.contextAnalystId===logged);
 const taskStatus=(t:TaskSummary):'ready'|'progress'|'done'=>t.submitted?.sponsors&&t.submitted?.context?'done':t.sponsors.length||t.events.length||t.cameras.length||t.submitted?.sponsors||t.submitted?.context?'progress':'ready';
 const foundUser=(id:string)=>db.users.find(u=>u.id===id);const nameUser=(id:string)=>foundUser(id)?.name||'Unassigned';
@@ -188,30 +190,20 @@ window.acceptInAppConfirm=()=>{
 };
 const formVal=(id:string)=>(document.getElementById(id) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null)?.value||'';
 window.fillDemo=email=>{const input=document.getElementById('loginemail') as HTMLInputElement|null;if(input)input.value=email;const pass=document.getElementById('loginpass') as HTMLInputElement|null;if(pass)pass.value='Demo1234!'};
-window.toggleForgot=b=>{
- if(!b&&resetToken){resetToken='';window.history.replaceState({},'',window.location.pathname);}
- forgot=b;registering=false;render();
-};
+window.toggleForgot=b=>{forgot=b;registering=false;render();};
 window.toggleRegister=b=>{registering=b;forgot=false;render()};
-window.requestPasswordReset=async e=>{
- e.preventDefault();if(!apiEnabled)return;
- try{
-  await api.requestPasswordReset(formVal('loginemail').trim());
-  notify('If the account exists, a password reset link will arrive by email.');
- }catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Email recovery unavailable';}
-};
-window.confirmPasswordReset=async e=>{
- e.preventDefault();if(!apiEnabled||!resetToken)return;
+window.changeOwnPassword=async e=>{
+ e.preventDefault();if(!apiEnabled||!passwordChangeRequired)return;
  const password=formVal('newpwd');
  if(password!==formVal('confirmnewpwd')){
   const err=document.getElementById('authError');if(err)err.textContent='The passwords do not match.';
   return;
  }
  try{
-  await api.resetPassword(resetToken,password);
-  resetToken='';window.history.replaceState({},'',window.location.pathname);
-  forgot=false;render();notify('Password updated. All earlier sessions have been signed out.');
- }catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Could not reset password';}
+  await api.changePassword(formVal('currentpwd'),password);
+  logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';forgot=false;registering=false;
+  render();notify('Password updated. Sign in with your new password.');
+ }catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Could not change password';}
 };
 window.login=async e=>{
  e.preventDefault();const email=formVal('loginemail').trim().toLowerCase(),pwd=formVal('loginpass');
@@ -234,7 +226,7 @@ window.selectWorkspace=id=>{if(liveWorkspaces.some(w=>w.workspace.id===id))void 
 window.createWorkspace=async e=>{e.preventDefault();try{const created=await api.createWorkspace(formVal('newWorkspaceName').trim());const initial=seed();await api.saveCatalog(created.id,{sponsorGroups:initial.sponsorGroups,eventGroups:initial.eventGroups,cameraGroups:initial.cameraGroups},0);liveWorkspaces=await api.workspaces();await loadWorkspace(created.id)}catch(error){notify('Workspace creation failed: '+(error instanceof Error?error.message:'Unknown error'))}};
 window.resetDemo=e=>{e.preventDefault();let u=db.users.find(x=>x.email.toLowerCase()===formVal('loginemail').trim().toLowerCase());if(!u){const err=document.getElementById('authError');if(err)err.textContent='No demo account found for that email.';return}u.password=formVal('newpwd');save();forgot=false;render();notify('Demo-only password changed. This does not send an email.')};
 window.resetDemoData=()=>confirmInApp('Reset demo workspace','Restore all demo accounts and tasks in this browser? Existing demo annotations will be discarded.',()=>{db=seed();save();logged='';session.removeItem(SESSION);forgot=false;view='dashboard';render();notify('Demo accounts restored. Choose an account to sign in.');},{actionLabel:'RESET DEMO'});
-window.logout=()=>{if(apiEnabled)void api.logout().catch(()=>{});logged='';remoteUser=null;workspaceId='';liveWorkspaces=[];if(!apiEnabled)session.removeItem(SESSION);selectedTaskId='';if(videoEl){videoEl.pause()}render()};
+window.logout=()=>{if(apiEnabled)void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];if(!apiEnabled)session.removeItem(SESSION);selectedTaskId='';if(videoEl){videoEl.pause()}render()};
 window.showWorkspaceSwitcher=()=>{if(apiEnabled){workspaceId='';render()}};
 window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}view=v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';render();window.scrollTo(0,0)};
 window.closeTaskMenu=()=>{const menu=document.getElementById('taskActionMenu') as HTMLDetailsElement|null;if(menu)menu.open=false};
@@ -593,12 +585,28 @@ window.attrItemModal=(kind,gid)=>openDialog({type:'item',kind,groupId:gid});
 window.saveAttrItem=(kind,gid)=>{if(me()?.role!=='admin')return;const gs=kind==='event'?db.eventGroups:db.cameraGroups,g=gs.find(x=>x.id===gid),name=formVal('iname').trim();if(!g||!name)return notify('Attribute name required');g.items.push({id:uid(),name,...(kind==='event'?{kind:'range',highValue:!!(document.getElementById('ihigh') as HTMLInputElement|null)?.checked}: {})});save();window.closeModal?.();render()};
 window.removeItem=(kind,gid,id)=>{let gs=kind==='event'?db.eventGroups:db.cameraGroups,g=gs.find(x=>x.id===gid);if(!g)return;const item=g.items.find(x=>x.id===id);if(!item)return;confirmInApp('Remove attribute',`Remove "${item.name}" from this list? Historical annotations may lose the display label.`,()=>{g.items=g.items.filter(x=>x.id!==id);save();render();notify('Attribute removed')},{actionLabel:'REMOVE ATTRIBUTE'})};
 window.userModal=(id='')=>openDialog({type:'user',user:db.users.find(u=>u.id===id)});
+window.resetMemberPassword=id=>{
+ if(!apiEnabled||me()?.role!=='admin'||!db.users.some(u=>u.id===id&&u.role==='analyst'))return;
+ const user=db.users.find(u=>u.id===id)!;
+ confirmInApp('Reset worker password',`Reset ${user.name}'s password? Their existing sessions will be revoked. You must share the new temporary password yourself.`,()=>{
+  void api.resetMemberPassword(workspaceId,id).then(async result=>{
+   await loadWorkspace(workspaceId);
+   openDialog({type:'credentials',name:result.user.name,email:result.user.email,
+    temporaryPassword:result.temporaryPassword,purpose:'reset'});
+  }).catch(error=>notify('Could not reset password: '+error.message));
+ },{actionLabel:'RESET PASSWORD'});
+};
 window.saveUser=id=>{
  if(me()?.role!=='admin')return;
  if(apiEnabled){
-  if(id)return notify('Member profile changes are managed by the account owner.');
-  void api.addMember(workspaceId,formVal('uemail').trim().toLowerCase(),'ANALYST').then(async()=>{
-   await loadWorkspace(workspaceId);window.closeModal?.();render();notify('Registered analyst added to workspace');
+  if(id)return notify('Member details are managed by the account owner.');
+  const name=formVal('uname').trim(),email=formVal('uemail').trim().toLowerCase();
+  if(!name||!email)return notify('Name and email are required.');
+  void api.provisionMember(workspaceId,{name,email,role:'ANALYST'}).then(async result=>{
+   window.closeModal?.();
+   await loadWorkspace(workspaceId);
+   openDialog({type:'credentials',name:result.user.name,email:result.user.email,
+    temporaryPassword:result.temporaryPassword,purpose:'created'});
   }).catch(error=>notify('Could not add member: '+error.message));return;
  }
  const user=db.users.find(x=>x.id===id),name=formVal('uname').trim(),email=formVal('uemail').trim().toLowerCase(),pwd=formVal('upass');
@@ -664,8 +672,12 @@ function exportObject(t:TaskSummary){let spo=sponsorFor(t),evt=eventsFor(t),cam=
 window.exportTask=id=>{let t=db.tasks.find(x=>x.id===id);if(!t||!visibleTasks().some(x=>x.id===id))return;let s=JSON.stringify(exportObject(t),null,2),a=document.createElement('a'),url=URL.createObjectURL(new Blob([s],{type:'application/json'}));a.href=url;a.download=(t.number||'match')+'_sponsor_annotations.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('JSON exported — '+t.number)};
 function render(){
  const user=me();
+ if(apiEnabled&&passwordChangeRequired){
+  mount('login',{changeRequired:true,apiEnabled});
+  return;
+ }
  if(!user){
-  mount('login',{forgot,registering,resetToken,apiEnabled});
+  mount('login',{forgot,registering,apiEnabled});
   return;
  }
  if(apiEnabled&&!workspaceId){mount('workspace',{workspaces:liveWorkspaces.map(x=>x.workspace)});return}
@@ -703,22 +715,12 @@ function render(){
 refreshFixtureFeed();
 const fixtureRefreshId=setInterval(refreshFixtureFeed,5*60*1000);
 const onStorage=(e:StorageEvent)=>{if(e.key===DBKEY){try{db=JSON.parse(e.newValue||'null')||seed()}catch{return}if(!modalOpen)render()}};
-const onHashChange=()=>{
- if(!apiEnabled)return;
- const incoming=new URLSearchParams(window.location.hash.slice(1)).get('reset')||'';
- if(incoming&&incoming!==resetToken){
-  resetToken=incoming;forgot=false;registering=false;logged='';remoteUser=null;workspaceId='';render();
- }
-};
-if(apiEnabled)window.addEventListener('hashchange',onHashChange);
 if(!apiEnabled)window.addEventListener('storage',onStorage);
-if(apiEnabled&&resetToken)render(); // The recovery link takes precedence over any existing signed-in session.
-else if(apiEnabled)void loadLiveSession().catch(()=>{logged='';remoteUser=null;render()});
+if(apiEnabled)void loadLiveSession().catch(()=>{logged='';remoteUser=null;passwordChangeRequired=false;render()});
 else{render();optimizeStoredSponsorLogos();}
 return ()=>{
  clearInterval(fixtureRefreshId);
  if(!apiEnabled)window.removeEventListener('storage',onStorage);
- if(apiEnabled)window.removeEventListener('hashchange',onHashChange);
  document.removeEventListener('keydown',runKeydown);
  document.getElementById('videofile')?.removeEventListener('change',handleVideoFileChange);
  for(const url of Object.values(localVideos))URL.revokeObjectURL(url);

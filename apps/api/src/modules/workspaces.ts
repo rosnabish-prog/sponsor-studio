@@ -7,7 +7,7 @@ import { IsEmail, IsEnum, IsInt, IsObject, IsString, Length, Min } from 'class-v
 import { BadRequestException, ConflictException, Put } from '@nestjs/common';
 import type { Prisma } from '../generated/prisma/client';
 import { WorkspaceRole } from '../generated/prisma/client';
-import { AuthRequest, SessionGuard } from './auth';
+import { AuthRequest, hashPassword, SessionGuard } from './auth';
 import { DatabaseService } from './database';
 import { mustManage } from './permissions';
 
@@ -18,6 +18,10 @@ export class CreateWorkspaceDto {
 export class AddMemberDto {
   @IsEmail() email!: string;
   @IsEnum(WorkspaceRole) role!: WorkspaceRole;
+}
+
+export class ProvisionMemberDto extends AddMemberDto {
+  @IsString() @Length(1, 150) name!: string;
 }
 
 export class SaveCatalogDto {
@@ -115,6 +119,72 @@ export class WorkspaceService {
     return { membership, user };
   }
 
+  /** Provision an analyst without email: reveal the temporary password once to the administrator. */
+  async provisionMember(workspaceId: string, actorId: string, input: ProvisionMemberDto) {
+    const actor = await this.access(workspaceId, actorId);
+    mustManage(actor.role);
+    if (input.role === 'OWNER') throw new ForbiddenException('Ownership cannot be provisioned here');
+    if (input.role === 'ADMIN' && actor.role !== 'OWNER') throw new ForbiddenException('Only owners can provision admins');
+    const email = input.email.trim().toLowerCase();
+    const name = input.name.trim();
+    if (!name) throw new BadRequestException('Name required');
+    return this.db.$transaction(async tx => {
+      let user = await tx.user.findUnique({ where: { email }, select: { id: true, email: true, name: true } });
+      let temporaryPassword: string | null = null;
+      if (!user) {
+        temporaryPassword = randomBytes(24).toString('base64url');
+        const passwordHash = await hashPassword(temporaryPassword);
+        user = await tx.user.create({
+          data: { email, name, passwordHash, passwordChangeRequired: true,
+            temporaryPasswordExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+          select: { id: true, email: true, name: true },
+        });
+      }
+      const existing = await tx.membership.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: user.id } },
+      });
+      if (existing?.role === 'OWNER') throw new ForbiddenException('Cannot change an owner');
+      const membership = await tx.membership.upsert({
+        where: { workspaceId_userId: { workspaceId, userId: user.id } },
+        create: { workspaceId, userId: user.id, role: input.role },
+        update: { role: input.role },
+        select: { id: true, role: true },
+      });
+      await tx.auditLog.create({
+        data: { workspaceId, actorId, action: temporaryPassword ? 'USER_PROVISIONED' : 'MEMBER_ADDED', subjectId: user.id },
+      });
+      return { user, membership, temporaryPassword };
+    });
+  }
+
+  async resetMemberPassword(workspaceId: string, actorId: string, memberId: string) {
+    const actor = await this.access(workspaceId, actorId);
+    mustManage(actor.role);
+    const target = await this.db.membership.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: memberId } },
+    });
+    if (!target) throw new NotFoundException('Team member not found');
+    if (target.role === 'OWNER' || (target.role === 'ADMIN' && actor.role !== 'OWNER')) {
+      throw new ForbiddenException('Cannot reset this account');
+    }
+    const temporaryPassword = randomBytes(24).toString('base64url');
+    const passwordHash = await hashPassword(temporaryPassword);
+    const user = await this.db.$transaction(async tx => {
+      const updated = await tx.user.update({
+        where: { id: memberId },
+        data: { passwordHash, passwordChangeRequired: true,
+          temporaryPasswordExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+        select: { id: true, email: true, name: true },
+      });
+      await tx.session.updateMany({ where: { userId: memberId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.auditLog.create({
+        data: { workspaceId, actorId, action: 'PASSWORD_RESET_BY_ADMIN', subjectId: memberId },
+      });
+      return updated;
+    });
+    return { user, temporaryPassword };
+  }
+
   async members(workspaceId: string, userId: string) {
     await this.access(workspaceId, userId);
     return this.db.membership.findMany({ where: { workspaceId }, select: {
@@ -166,6 +236,24 @@ export class WorkspaceController {
     @Body() input: AddMemberDto,
   ) {
     return this.workspaces.addMember(workspaceId, req.userId, input);
+  }
+
+  @Post(':workspaceId/members/provision')
+  provisionMember(
+    @Req() req: AuthRequest,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Body() input: ProvisionMemberDto,
+  ) {
+    return this.workspaces.provisionMember(workspaceId, req.userId, input);
+  }
+
+  @Post(':workspaceId/members/:memberId/reset-password')
+  resetMemberPassword(
+    @Req() req: AuthRequest,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+  ) {
+    return this.workspaces.resetMemberPassword(workspaceId, req.userId, memberId);
   }
 
   @Get(':workspaceId/members')

@@ -1,4 +1,5 @@
 import type { Sponsor, StudioData, TagGroup } from '../types/models';
+import { apiEnabled } from '../api/client';
 
 function Icon({ name }: { name: string }) {
   return <svg className="ic"><use href={`#i-${name}`} /></svg>;
@@ -125,14 +126,18 @@ export function TeamScreen({ data }: { data: StudioData }) {
                   <td><span className={`tag ${user.role === 'admin' ? 'pink' : ''}`}>{user.role}</span></td>
                   <td>{user.email}</td>
                   <td>{data.tasks.filter(task => task.sponsorAnalystId === user.id || task.contextAnalystId === user.id).length}</td>
-                  <td>{user.role === 'analyst' && <button className="button ghost tiny" onClick={() => window.userModal?.(user.id)}>Edit</button>}</td>
+                  <td>{user.role === 'analyst' && (apiEnabled
+                    ? <button className="button ghost tiny" onClick={() => window.resetMemberPassword?.(user.id)}>Reset password</button>
+                    : <button className="button ghost tiny" onClick={() => window.userModal?.(user.id)}>Edit</button>)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-      <div className="infohint">This demo stores account passwords in local browser storage for demonstration only. Production authentication must use a secured server, password hashing, verified email recovery, sessions and server-enforced permissions.</div>
+      <div className="infohint">{apiEnabled
+        ? 'Accounts are managed by administrators. New temporary passwords are shown only once and must be changed on first sign-in. Sponsor Studio sends no emails.'
+        : 'Demo passwords are stored only in this browser. Live mode uses hashed passwords, seven-day sessions, and server-enforced roles.'}</div>
     </>
   );
 }
@@ -145,5 +150,6 @@ declare global {
     attrItemModal?: (kind: 'event' | 'camera', groupId: string) => void;
     removeItem?: (kind: 'event' | 'camera', groupId: string, id: string) => void;
     userModal?: (id?: string) => void;
+    resetMemberPassword?: (id: string) => void;
   }
 }

@@ -9,10 +9,7 @@ async function main() {
     const sessions = await db.session.deleteMany({ where: {
       OR: [{ expiresAt: { lt: now } }, { revokedAt: { not: null } }],
     } });
-    const tokens = await db.passwordResetToken.deleteMany({ where: {
-      OR: [{ expiresAt: { lt: now } }, { usedAt: { not: null } }],
-    } });
-    process.stdout.write(`Removed ${sessions.count} inactive sessions and ${tokens.count} stale password reset tokens.\n`);
+    process.stdout.write(`Removed ${sessions.count} inactive sessions.\n`);
   } finally {
     await db.$disconnect();
   }

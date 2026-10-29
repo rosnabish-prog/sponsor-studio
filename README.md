@@ -14,7 +14,7 @@ By default the frontend still runs as a local-storage-only demonstration. With `
 
 The new `apps/api` workspace contains a NestJS API with PostgreSQL/Prisma schema and migrations, Argon2id email/password accounts, revocable sessions, workspace membership, persistent tasks, analyst assignments, sponsor/event/camera annotation intervals, submission/reopen actions, shared catalog and audit records. The React frontend can now use this API when the live mode environment flag is set.
 
-See [API setup, endpoint reference, private video prerequisites and remaining P0 gaps](apps/api/README.md) before deploying it. The multipart upload and signed CloudFront playback code needs real AWS infrastructure. Email/password recovery is implemented through Amazon SES when configured; email verification, user invitations and production hardening remain outstanding. GitHub Actions checks PostgreSQL integration, live React workflows and production container builds.
+See [API setup, endpoint reference, private video prerequisites and remaining P0 gaps](apps/api/README.md) before deploying it. The multipart upload and signed CloudFront playback code needs real AWS infrastructure. Accounts are provisioned by admins with temporary passwords shared manually; the application sends no emails. GitHub Actions checks PostgreSQL integration, live React workflows and production container builds.
 
 ## What is included
 
@@ -94,12 +94,12 @@ If the GitHub Pages site or repository is public, its JavaScript, demo accounts,
 
 The **default GitHub Pages demo** is not a production-ready multiuser service. It uses browser-local storage, so demo accounts, assignments, uploaded logos and annotations are not shared between devices.
 
-The **separately enabled API mode** uses NestJS sessions, server-enforced workspace permissions, PostgreSQL persistence, shared catalogs/tasks/annotations, SES password recovery and S3/CloudFront video APIs. This mode is still **not production-ready** until AWS services, email verification/invitations, operational monitoring/backups and deployment checks have been completed. FTP/SFTP sources are metadata only; actual transfer/transcoding is not implemented.
+The **separately enabled API mode** uses NestJS sessions, server-enforced workspace permissions, PostgreSQL persistence, shared catalogs/tasks/annotations, administrator-managed passwords and S3/CloudFront video APIs. This mode is still **not production-ready** until AWS services, secure administrator credential handoff, operational monitoring/backups and deployment checks have been completed. FTP/SFTP sources are metadata only; actual transfer/transcoding is not implemented.
 
 For real analysts, production deployment still requires:
 
-1. Provisioned and secured AWS infrastructure: RDS/PostgreSQL, ECS API, private S3, CloudFront with trusted key groups, SES and IAM.
-2. Verified email ownership, invitation acceptance, and organization onboarding before granting external access.
+1. Provisioned and secured AWS infrastructure: RDS/PostgreSQL, ECS API, private S3, CloudFront with trusted key groups and IAM.
+2. Administrator-provisioned accounts, one-time credential sharing outside the platform, and first-login password changes.
 3. Operational controls: alarms, backups, restore drills, session-cleanup scheduling, production network restrictions and secrets management.
 4. Pagination and performance/load testing for long 4K footage, many concurrent analysts, and large match portfolios.
 5. A real ingestion/transcode pipeline if FTP/SFTP or non-browser-compatible video formats are required.
@@ -118,7 +118,7 @@ GitHub Pages hosts static frontend files only. It cannot by itself run the authe
 - Club crests: verified external URLs are displayed where available with initials fallback on failure; replace with approved, locally hosted team logos for production.
 - Existing local demo credentials remain admin@demo.seebot.ai, analyst@demo.seebot.ai, and events@demo.seebot.ai; password Demo1234!. Changes remain local to each browser, not shared between people.
 
-**Production blockers:** secure login with a backend, role-enforced API authorization, real password reset by email, fixture feed/API agreement, official club logo assets, shared task/annotation database, storage/FTP ingest. GitHub Pages is static hosting only.
+**Production blockers:** deploy and configure API-backed login and authorization, secure administrator-issued passwords, fixture feed/API agreement, official club logo assets, and storage/FTP ingest. GitHub Pages is static hosting only.
 
 - The River Plate and AFC Ajax club marks load from Wikimedia Commons external URLs. Other badges use remote references when available; all have initial-based fallbacks. For production, host authorized approved club badge assets locally.
 ## Automatically refreshed BuildUp match catalog

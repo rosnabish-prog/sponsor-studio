@@ -1,10 +1,10 @@
 import { randomBytes, createHash } from 'node:crypto';
-import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { Algorithm, hash, verify } from '@node-rs/argon2';
 import {
   BadRequestException, Body, CanActivate, ConflictException, Controller, ExecutionContext, Get,
-  Injectable, Post, Req, Res, ServiceUnavailableException, UnauthorizedException, UseGuards,
+  ForbiddenException, Injectable, Post, Req, Res, SetMetadata, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Throttle } from '@nestjs/throttler';
 import { IsEmail, IsString, Length, MaxLength } from 'class-validator';
 import type { Request, Response } from 'express';
@@ -12,7 +12,8 @@ import { DatabaseService } from './database';
 
 const COOKIE = 'ss_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
-const RESET_MS = 30 * 60 * 1000;
+const ALLOW_PASSWORD_CHANGE = 'allowPasswordChange';
+const MayChangePassword = () => SetMetadata(ALLOW_PASSWORD_CHANGE, true);
 const cookieOptions = () => ({
   httpOnly: true as const,
   secure: process.env.NODE_ENV === 'production',
@@ -35,14 +36,14 @@ export class RegisterDto extends CredentialsDto {
   @IsString() @Length(1, 150) name!: string;
 }
 
-export class ResetRequestDto {
-  @IsEmail() @MaxLength(320) email!: string;
-}
-
-export class ResetPasswordDto {
-  @IsString() @Length(32, 128) token!: string;
+export class ChangePasswordDto {
+  @IsString() @Length(12, 128) currentPassword!: string;
   @IsString() @Length(12, 128) password!: string;
 }
+
+export const hashPassword = (password: string) => hash(password, {
+  algorithm: Algorithm.Argon2id, memoryCost: 19_456, timeCost: 2, outputLen: 32, parallelism: 1,
+});
 
 @Injectable()
 export class AuthService {
@@ -53,9 +54,7 @@ export class AuthService {
     if (await this.db.user.findUnique({ where: { email }, select: { id: true } })) {
       throw new ConflictException('Email already registered');
     }
-    const passwordHash = await hash(input.password, {
-      algorithm: Algorithm.Argon2id, memoryCost: 19_456, timeCost: 2, outputLen: 32, parallelism: 1,
-    });
+    const passwordHash = await hashPassword(input.password);
     try {
       return await this.db.user.create({ data: { email, name: input.name.trim(), passwordHash }, select: { id: true, email: true, name: true } });
     } catch (error) {
@@ -69,7 +68,11 @@ export class AuthService {
     if (!user || !(await verify(user.passwordHash, input.password))) {
       throw new UnauthorizedException('Invalid email or password');
     }
-    return { id: user.id, email: user.email, name: user.name };
+    if (user.passwordChangeRequired && user.temporaryPasswordExpiresAt &&
+      user.temporaryPasswordExpiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException('Temporary password expired. Ask your administrator for a new one.');
+    }
+    return { id: user.id, email: user.email, name: user.name, passwordChangeRequired: user.passwordChangeRequired };
   }
 
   async createSession(userId: string, res: Response) {
@@ -93,68 +96,22 @@ export class AuthService {
     await this.db.session.updateMany({ where: { tokenHash: digest(token), revokedAt: null }, data: { revokedAt: new Date() } });
   }
 
-  async requestPasswordReset(emailInput: string) {
-    const sender = process.env.PASSWORD_RESET_SENDER;
-    const region = process.env.AWS_REGION;
-    const origin = process.env.APP_ORIGIN;
-    if (!sender || !region || !origin ||
-      (process.env.NODE_ENV === 'production' && !origin.startsWith('https://'))) {
-      throw new ServiceUnavailableException('Email recovery is not configured');
+  async changePassword(userId: string, currentPassword: string, password: string) {
+    if (currentPassword === password) throw new BadRequestException('Choose a different password');
+    const user = await this.db.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!(await verify(user.passwordHash, currentPassword))) {
+      throw new UnauthorizedException('Current password is incorrect');
     }
-
-    const user = await this.db.user.findUnique({
-      where: { email: emailInput.trim().toLowerCase() }, select: { id: true, email: true },
-    });
-    // Same response for nonexistent and existing addresses; never expose the token to the browser.
-    if (!user) return { ok: true };
-    const recent = await this.db.passwordResetToken.findFirst({ where: {
-      userId: user.id, createdAt: { gt: new Date(Date.now() - 5 * 60 * 1000) },
-    } });
-    if (recent) return { ok: true }; // Also limit email volume per account, not just per requesting IP.
-    const token = randomBytes(32).toString('base64url');
-    const created = await this.db.$transaction(async tx => {
-      await tx.passwordResetToken.deleteMany({ where: { userId: user.id } });
-      return tx.passwordResetToken.create({ data: {
-        userId: user.id, tokenHash: digest(token), expiresAt: new Date(Date.now() + RESET_MS),
-      } });
-    });
-    const url = new URL(origin);
-    // URL fragments never reach CDN/origin access logs or request referrers.
-    url.hash = `reset=${encodeURIComponent(token)}`;
-    try {
-      const ses = new SESv2Client({ region });
-      await ses.send(new SendEmailCommand({
-        FromEmailAddress: sender,
-        Destination: { ToAddresses: [user.email] },
-        Content: { Simple: {
-          Subject: { Data: 'Reset your Sponsor Studio password' },
-          Body: { Text: { Data: `Use this link to reset your password (valid for 30 minutes):\n\n${url.toString()}\n\nIf you did not request this, ignore this email.` } },
-        } },
-      }));
-    } catch {
-      await this.db.passwordResetToken.deleteMany({ where: { id: created.id } });
-      throw new ServiceUnavailableException('Could not deliver password reset email');
-    }
-    return { ok: true };
-  }
-
-  async resetPassword(token: string, password: string) {
-    const record = await this.db.passwordResetToken.findUnique({ where: { tokenHash: digest(token) } });
-    if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
-      throw new BadRequestException('Invalid or expired reset link');
-    }
-    const passwordHash = await hash(password, {
-      algorithm: Algorithm.Argon2id, memoryCost: 19_456, timeCost: 2, outputLen: 32, parallelism: 1,
-    });
+    const passwordHash = await hashPassword(password);
     await this.db.$transaction(async tx => {
-      const claimed = await tx.passwordResetToken.updateMany({
-        where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } },
-        data: { usedAt: new Date() },
+      // Match on the hash observed above so a concurrent admin reset cannot
+      // be overwritten by an outdated password-change form.
+      const updated = await tx.user.updateMany({
+        where: { id: userId, passwordHash: user.passwordHash },
+        data: { passwordHash, passwordChangeRequired: false, temporaryPasswordExpiresAt: null },
       });
-      if (!claimed.count) throw new BadRequestException('Invalid or expired reset link');
-      await tx.user.update({ where: { id: record.userId }, data: { passwordHash } });
-      await tx.session.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date() } });
-      await tx.passwordResetToken.deleteMany({ where: { userId: record.userId, id: { not: record.id } } });
+      if (updated.count !== 1) throw new ConflictException('Password changed; sign in again');
+      await tx.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
     });
     return { ok: true };
   }
@@ -162,7 +119,7 @@ export class AuthService {
 
 @Injectable()
 export class SessionGuard implements CanActivate {
-  constructor(private readonly auth: AuthService) {}
+  constructor(private readonly auth: AuthService, private readonly db: DatabaseService, private readonly reflector: Reflector) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<AuthRequest>();
@@ -171,6 +128,13 @@ export class SessionGuard implements CanActivate {
     if (origin && origin !== allowedOrigin) throw new UnauthorizedException('Untrusted request origin');
     const userId = await this.auth.findSessionUserId(req.cookies?.[COOKIE]);
     if (!userId) throw new UnauthorizedException('Sign in required');
+    const allowed = this.reflector.getAllAndOverride<boolean>(ALLOW_PASSWORD_CHANGE, [
+      context.getHandler(), context.getClass(),
+    ]);
+    if (!allowed) {
+      const user = await this.db.user.findUnique({ where: { id: userId }, select: { passwordChangeRequired: true } });
+      if (!user || user.passwordChangeRequired) throw new ForbiddenException('Change your temporary password before continuing');
+    }
     req.userId = userId;
     return true;
   }
@@ -198,27 +162,27 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(SessionGuard)
+  @MayChangePassword()
   async me(@Req() req: AuthRequest) {
-    return { user: await this.db.user.findUniqueOrThrow({ where: { id: req.userId }, select: { id: true, email: true, name: true } }) };
+    return { user: await this.db.user.findUniqueOrThrow({ where: { id: req.userId }, select: { id: true, email: true, name: true, passwordChangeRequired: true } }) };
   }
 
   @Post('logout')
   @UseGuards(SessionGuard)
+  @MayChangePassword()
   async logout(@Req() req: AuthRequest, @Res({ passthrough: true }) res: Response) {
     await this.auth.revoke(req.cookies?.[COOKIE]);
     res.clearCookie(COOKIE, { path: '/', sameSite: 'strict', secure: process.env.NODE_ENV === 'production', httpOnly: true });
     return { ok: true };
   }
 
-  @Post('password-reset/request')
-  @Throttle({ default: { limit: 3, ttl: 60_000 } })
-  requestReset(@Body() input: ResetRequestDto) {
-    return this.auth.requestPasswordReset(input.email);
-  }
-
-  @Post('password-reset/confirm')
+  @Post('change-password')
+  @UseGuards(SessionGuard)
+  @MayChangePassword()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  confirmReset(@Body() input: ResetPasswordDto) {
-    return this.auth.resetPassword(input.token, input.password);
+  async changePassword(@Req() req: AuthRequest, @Body() input: ChangePasswordDto, @Res({ passthrough: true }) res: Response) {
+    const result = await this.auth.changePassword(req.userId, input.currentPassword, input.password);
+    res.clearCookie(COOKIE, { path: '/', sameSite: 'strict', secure: process.env.NODE_ENV === 'production', httpOnly: true });
+    return result;
   }
 }

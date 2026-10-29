@@ -22,9 +22,10 @@ export async function apiRequest<T>(path: string, method = 'GET', data?: unknown
   return response.json() as Promise<T>;
 }
 
-export interface ApiUser { id: string; name: string; email: string }
+export interface ApiUser { id: string; name: string; email: string; passwordChangeRequired?: boolean }
 export interface ApiMembership { role: 'OWNER'|'ADMIN'|'ANALYST'|'REVIEWER'; workspace: { id:string;name:string;slug:string } }
 export interface ApiTeamMembership { role: ApiMembership['role']; user: ApiUser }
+export interface ApiProvisionResult { user: ApiUser; temporaryPassword: string | null; membership: { id:string;role:ApiMembership['role'] } }
 export interface ApiCatalog { version: number; payload: Pick<StudioData,'sponsorGroups'|'eventGroups'|'cameraGroups'> }
 export interface ApiAnnotation {
   id:string; kind:'SPONSOR'|'EVENT'|'CAMERA';labelId:string;
@@ -43,12 +44,15 @@ export const api = {
   register: (body: { name:string;email:string;password:string }) => apiRequest<{user:ApiUser}>('/auth/register','POST',body),
   login: (body: {email:string;password:string}) => apiRequest<{user:ApiUser}>('/auth/login','POST',body),
   logout: () => apiRequest<{ok:boolean}>('/auth/logout','POST'),
-  requestPasswordReset:(email:string)=>apiRequest<{ok:boolean}>('/auth/password-reset/request','POST',{email}),
-  resetPassword:(token:string,password:string)=>apiRequest<{ok:boolean}>('/auth/password-reset/confirm','POST',{token,password}),
+  changePassword:(currentPassword:string,password:string)=>apiRequest<{ok:boolean}>('/auth/change-password','POST',{currentPassword,password}),
   workspaces: () => apiRequest<ApiMembership[]>('/workspaces'),
   createWorkspace: (name:string) => apiRequest<{id:string;name:string;slug:string}>('/workspaces','POST',{name}),
   members: (w:string) => apiRequest<ApiTeamMembership[]>(`/workspaces/${w}/members`),
   addMember: (w:string,email:string,role:ApiMembership['role']) => apiRequest<ApiTeamMembership>(`/workspaces/${w}/members`,'POST',{email,role}),
+  provisionMember:(w:string,body:{name:string;email:string;role:'ANALYST'|'REVIEWER'|'ADMIN'})=>
+    apiRequest<ApiProvisionResult>(`/workspaces/${w}/members/provision`,'POST',body),
+  resetMemberPassword:(w:string,id:string)=>
+    apiRequest<{user:ApiUser;temporaryPassword:string}>(`/workspaces/${w}/members/${id}/reset-password`,'POST'),
   catalog: (w:string) => apiRequest<ApiCatalog>(`/workspaces/${w}/catalog`),
   saveCatalog: (w:string,payload:ApiCatalog['payload'],version:number) => apiRequest<ApiCatalog>(`/workspaces/${w}/catalog`,'PUT',{payload,version}),
   tasks: (w:string) => apiRequest<ApiTask[]>(`/workspaces/${w}/tasks`),

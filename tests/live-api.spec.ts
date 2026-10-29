@@ -1,16 +1,15 @@
 import { test, expect } from '@playwright/test';
 
-test('live password recovery uses an email-only request and a separate token form',async({page})=>{
+test('live sign-in has no outbound email recovery flow',async({page})=>{
   await page.goto('http://127.0.0.1:4173',{waitUntil:'domcontentloaded'});
-  await page.getByRole('link',{name:'Forgot password?'}).click();
+  await expect(page.getByRole('heading',{name:'SIGN IN.'})).toBeVisible();
   await expect(page.locator('#loginemail')).toBeVisible();
-  await expect(page.locator('#loginpass')).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'EMAIL RESET LINK'})).toBeVisible();
+  await expect(page.locator('#loginpass')).toBeVisible();
+  await expect(page.getByRole('link',{name:'Forgot password?'})).toHaveCount(0);
+  await expect(page.getByText('Ask your administrator to reset it.')).toBeVisible();
   await page.goto('http://127.0.0.1:4173/#reset=test-token-for-ui-only');
-  await expect(page.getByRole('heading',{name:'NEW PASSWORD.'})).toBeVisible();
-  await expect(page.locator('#newpwd')).toBeVisible();
-  await expect(page.locator('#confirmnewpwd')).toBeVisible();
-  await expect(page.locator('#loginemail')).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:'SIGN IN.'})).toBeVisible();
+  await expect(page.locator('#loginemail')).toBeVisible();
 });
 
 test('live React mode signs in, creates a workspace task and persists sponsor tags', async ({ page }) => {
@@ -79,4 +78,35 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
   await expect(page.locator('.ops-nav')).toBeVisible({timeout:15_000});
   await page.evaluate(id=>window.openTask?.(id),taskId);
   await expect(page.locator('.logtable')).toContainText('Adidas x Messi');
+
+  // Workers are provisioned by the admin; the platform sends no credentials.
+  await page.getByRole('button',{name:'Go to Sponsor Studio dashboard'}).click();
+  await page.getByRole('button',{name:'Team'}).click();
+  await page.getByRole('button',{name:'Add analyst'}).click();
+  await page.locator('#uname').fill('Managed E2E Worker');
+  const workerEmail=`managed-${id}@example.org`;
+  await page.locator('#uemail').fill(workerEmail);
+  await page.getByRole('button',{name:'Save analyst'}).click();
+  await expect(page.getByRole('heading',{name:'Worker account ready'})).toBeVisible();
+  const temporaryPassword=await page.locator('#temporaryPassword').innerText();
+  expect(temporaryPassword.length).toBeGreaterThan(20);
+  await page.getByRole('button',{name:'Done'}).click();
+  await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/api/auth/logout') && response.request().method() === 'POST'),
+    page.evaluate(()=>window.logout?.()),
+  ]);
+  await page.locator('#loginemail').fill(workerEmail);
+  await page.locator('#loginpass').fill(temporaryPassword);
+  await page.getByRole('button',{name:'SIGN IN'}).click();
+  await expect(page.getByRole('heading',{name:'SET YOUR PASSWORD.'})).toBeVisible();
+  await expect(page.locator('.ops-nav')).toHaveCount(0);
+  await page.locator('#currentpwd').fill(temporaryPassword);
+  await page.locator('#newpwd').fill('worker-new-password-123');
+  await page.locator('#confirmnewpwd').fill('worker-new-password-123');
+  await page.getByRole('button',{name:'SET PASSWORD'}).click();
+  await expect(page.getByRole('heading',{name:'SIGN IN.'})).toBeVisible();
+  await page.locator('#loginemail').fill(workerEmail);
+  await page.locator('#loginpass').fill('worker-new-password-123');
+  await page.getByRole('button',{name:'SIGN IN'}).click();
+  await expect(page.locator('.ops-nav')).toBeVisible();
 });
