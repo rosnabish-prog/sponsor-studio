@@ -1,6 +1,8 @@
 name: Refresh BuildUp Messi Cup fixtures
 
 on:
+  push:
+    paths: ['scripts/sync_fixtures.py', '.github/workflows/sync-fixtures.yml']
   workflow_dispatch:
   schedule:
     - cron: '*/15 * 25-31 10 *'
