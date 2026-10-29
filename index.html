@@ -1142,11 +1142,65 @@ function insightData(t){
   buckets.push({start,end:window.end,brandSeconds,covered,pct:pct(covered,window.end-window.start),
    eventCount:eventRows.filter(e=>e.start>=start&&e.start<window.end).length});
  }
+ const classifiedRows=t.sponsors.map(a=>({
+  ...a,endSeconds:a.end==null?endpoint:a.end,
+  seconds:Math.max(0,(a.end==null?endpoint:a.end)-a.start)
+ })).filter(x=>x.seconds>0);
+ const positiveIntervals=classifiedRows.length;
+ const classifiedSeconds=classifiedRows.reduce((n,x)=>n+x.seconds,0);
+ const placementTotals=PLACEMENT_TYPES.map(([key,label])=>({
+  key,label,seconds:classifiedRows.filter(x=>x.placement===key).reduce((n,x)=>n+x.seconds,0),
+  intervals:classifiedRows.filter(x=>x.placement===key).length
+ })).filter(x=>x.seconds>0).sort((a,b)=>b.seconds-a.seconds);
+ const placementUnclassified=classifiedRows.filter(x=>!PLACEMENT_TYPES.some(([k])=>k===x.placement)).reduce((n,x)=>n+x.seconds,0);
+ const qualityTotals=VISIBILITY_QUALITIES.map(([key,label])=>({
+  key,label,seconds:classifiedRows.filter(x=>x.quality===key).reduce((n,x)=>n+x.seconds,0),
+  intervals:classifiedRows.filter(x=>x.quality===key).length
+ })).filter(x=>x.seconds>0).sort((a,b)=>b.seconds-a.seconds);
+ const qualityUnclassified=classifiedRows.filter(x=>!VISIBILITY_QUALITIES.some(([k])=>k===x.quality)).reduce((n,x)=>n+x.seconds,0);
+ const frequency=brands.reduce((n,b)=>n+b.own.length,0);
+ const avgExposure=frequency>0?sumSeconds/frequency:0;
+ const placementCoverage=classifiedSeconds>0?pct(classifiedSeconds-placementUnclassified,classifiedSeconds):0;
+ const qualityCoverage=classifiedSeconds>0?pct(classifiedSeconds-qualityUnclassified,classifiedSeconds):0;
+ const periods=t.periods;
+ const mapped=periods&&Number.isFinite(Number(periods.firstEnd))&&Number.isFinite(Number(periods.secondStart))&&Number(periods.firstEnd)>0&&Number(periods.secondStart)>=Number(periods.firstEnd)&&Number(periods.secondStart)*60<videoSeconds;
+ const periodWindows=mapped?[
+  {key:'first',label:'FIRST HALF',start:0,end:Number(periods.firstEnd)*60},
+  {key:'break',label:'HALFTIME / UNMAPPED BREAK',start:Number(periods.firstEnd)*60,end:Number(periods.secondStart)*60},
+  {key:'second',label:'SECOND HALF',start:Number(periods.secondStart)*60,end:videoSeconds}
+ ]:[];
+ const periodBreakdown=periodWindows.map(w=>{
+  const brandRows=brands.map(b=>({
+   name:b.name,id:b.id,seconds:b.own.reduce((n,x)=>n+clipOverlap(x,w),0)
+  })).sort((a,b)=>b.seconds-a.seconds);
+  const anySeconds=anySponsor.reduce((n,x)=>n+clipOverlap(x,w),0);
+  return {...w,anySeconds,combinedBrandSeconds:brandRows.reduce((n,b)=>n+b.seconds,0),
+   brandRows:brandRows.filter(b=>b.seconds>0)};
+ });
+ const highValueEvents=eventRows.filter(e=>{
+  const config=eventsFor(t).find(x=>x.id===e.eventId);
+  if(config&&typeof config.highValue==='boolean')return config.highValue;
+  return /goal|celebrat|penalty|trophy|award/i.test(e.name);
+ });
+ const highValueIntervals=highValueEvents.filter(e=>e.duration>0&&!e.legacyPoint);
+ const highValueMomentSeconds=length(union(highValueIntervals.map(e=>({start:e.start,end:e.end}))));
+ const highValueCoverageSeconds=length(union(anySponsor.flatMap(b=>highValueIntervals.map(e=>({
+  start:Math.max(e.start,b.start),end:Math.min(e.end,b.end)
+ })).filter(x=>x.end>x.start))));
+ const brandHighValue=brands.map(b=>({
+  id:b.id,name:b.name,seconds:length(union(b.own.flatMap(a=>highValueIntervals.map(e=>({
+    start:Math.max(a.start,e.start),end:Math.min(a.end,e.end)
+  })).filter(x=>x.end>x.start)))),
+  momentCount:highValueEvents.filter(e=>e.brands.some(x=>x.id===b.id)).length
+ })).filter(b=>b.seconds>0).sort((a,b)=>b.seconds-a.seconds);
  const sponsorOpen=t.sponsors.filter(x=>x.end==null).length;
  const eventOpen=t.events.filter(x=>x.end==null).length;
  const cameraOpen=t.cameras.filter(x=>x.end==null).length;
  return {brands,active,videoSeconds,endpoint,sumSeconds,coveredSeconds,cameras,cameraCovered,eventRows,
  eventGroups:[...eventGroups.values()].sort((a,b)=>b.count-a.count),pairs,buckets,
+ frequency,avgExposure,positiveIntervals,placementTotals,qualityTotals,placementUnclassified,qualityUnclassified,
+ placementCoverage,qualityCoverage,periodBreakdown,periodMapped:!!mapped,
+ highValueEvents,highValueMomentSeconds,highValueCoverageSeconds,brandHighValue,classifiedSeconds,
  sponsorOpen,eventOpen,cameraOpen,pct,number:n=>Number(n).toFixed(1)};
 }
 function buildReport(t){
