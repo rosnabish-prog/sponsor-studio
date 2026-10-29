@@ -190,6 +190,146 @@ input[type="range"]{accent-color:#e6e6e6!important}.toast{background:#ddd!import
 .fixture-catalog{margin-top:40px;border-top:1px solid #454545;padding-top:26px}.fixture-days{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.fixture-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(370px,1fr));gap:12px}.fixture-card{padding:18px;background:#151515;border:1px solid #454545}.fixture-date,.fixture-bottom{display:flex;justify-content:space-between;gap:10px;font-size:10px;color:#aaa}.fixture-line{display:grid;align-items:center;grid-template-columns:34px 1fr auto 1fr 34px;gap:9px;margin:15px 0;font-family:'Barlow Condensed',Impact,sans-serif;text-transform:uppercase;font-size:18px}.fixture-line b:last-of-type{text-align:right}.fixture-line strong{font-size:23px;color:#fff}.fixture-line .club-crest{width:34px;height:34px}.fixture-bottom{align-items:center;border-top:1px solid #333;padding-top:12px}
 @media(max-width:760px){.focusbrand span{display:none}.focusbrand img{width:140px}.focusactions{gap:4px}.focusactions .button{font-size:10px;padding:6px}.app-focus .vidframe{height:42vh}.fixture-cards{grid-template-columns:1fr}.fixture-line{font-size:15px}.app-focus .taggrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}.app-focus .sponsorbtn .tinylogo{width:58px;height:56px;flex-basis:58px}}
 
+
+/* Messi Cup operator workspace – docked controls, footage always visible */
+.app-focus { background:#050505; min-height:100vh; }
+.app-focus .focuscontent { padding:10px clamp(12px,1.3vw,28px) 14px!important; }
+.app-focus .studio-head { margin:0 0 10px; }
+.app-focus .studio-head h1 { font-size:clamp(21px,2vw,32px)!important; margin-bottom:2px; }
+.app-focus .studio-head .eyebrow,.app-focus .studio-meta,
+.app-focus .studio-subtitle,.app-focus .sub,.app-focus .rail-description,
+.app-focus .chip-group-title small,.app-focus .rail-meta,
+.app-focus .rail-foot,.app-focus .rail-group-heading small,
+.app-focus .rail-brand-name,.app-focus .video-header,
+.app-focus .studio-meta span,.app-focus .tag-toolbar .sub {
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace!important;
+  text-transform:uppercase;letter-spacing:.065em;
+}
+.app-focus .sub,.app-focus .studio-meta,.app-focus .rail-description,.app-focus .rail-brand-name {
+  font-size:clamp(10px,.83vw,16px);
+}
+.app-focus .studio-grid {
+ display:grid!important; grid-template-columns:minmax(0,1fr) clamp(290px,24vw,390px)!important;
+ gap:12px!important;align-items:stretch!important;
+ height:calc(100dvh - 175px);min-height:470px;overflow:hidden;
+}
+.app-focus .studio-media-column {
+ height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+ scrollbar-color:#555 #111;padding:0 6px 18px 0;
+}
+.app-focus .studio-media-column > .video-box {
+ position:sticky;top:0;z-index:10;
+ background:#080808!important;border:1px solid #404040!important;
+ border-radius:0!important;box-shadow:0 9px 24px #000c;
+}
+.app-focus .video-header {color:#c8c8c8!important;background:#101010!important;border-bottom:1px solid #353535; }
+.app-focus .video-controls {flex-wrap:wrap;gap:5px;background:#111!important;border-top:1px solid #323232;}
+.app-focus .vidframe {height:clamp(200px,48dvh,740px)!important;min-height:0!important;aspect-ratio:auto!important;background:#000!important;}
+.app-focus .vidframe video {background:#000!important;object-fit:contain!important;}
+.app-focus .skip-number {font-family:ui-monospace,monospace;font-size:12px;font-weight:850;white-space:nowrap;}
+.app-focus .skip-setting {display:flex;align-items:center;gap:4px;flex:0 0 auto;margin-left:5px;}
+.app-focus .skip-setting span {font:700 10px ui-monospace,monospace;color:#9d9d9d;letter-spacing:1px;}
+.app-focus .skip-setting button {
+ width:auto;min-width:47px;min-height:30px;padding:6px 7px!important;
+ background:#1b1b1b!important;border:1px solid #505050!important;color:#b8b8b8!important;
+ border-radius:0!important;font:700 10px ui-monospace,monospace!important;
+}
+.app-focus .skip-setting button.active {background:#ebebeb!important;color:#060606!important;border-color:#eee!important;}
+.app-focus .studio-maincard {margin:9px 0 0!important;padding:12px!important;border:1px solid #333!important;background:#0c0c0c!important;border-radius:0!important;}
+.app-focus .studio-maincard .tag-toolbar {gap:10px;}
+.app-focus .studio-maincard .tag-toolbar h2 {font-size:19px;margin-bottom:3px;}
+.app-focus .studio-maincard .contextline {margin:9px 0;padding:6px 0;border-top:1px solid #242424;border-bottom:1px solid #242424;}
+.app-focus .studio-chip-group {border-bottom:1px solid #303030;padding:8px 0 10px;}
+.app-focus .chip-group-title {display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px;color:#eee;font-family:'Barlow Condensed',Impact,sans-serif;font-size:16px;letter-spacing:1px;}
+.app-focus .chip-group-title small {font-size:10px;color:#858585;font-weight:600;text-align:right;}
+.app-focus .event-chip-row {display:flex;gap:6px;flex-wrap:wrap;}
+.app-focus .event-chip {
+ display:inline-flex;align-items:center;gap:6px;min-height:31px;padding:5px 10px;
+ font:700 11px ui-monospace,monospace!important;text-transform:uppercase;letter-spacing:.035em;
+ color:#cecece!important;background:#1a1a1a!important;border:1px solid #444!important;border-radius:3px!important;
+ transition:background .12s,border-color .12s;
+}
+.app-focus .event-chip .chip-symbol {font-size:13px;color:#bababa;}
+.app-focus .event-chip:hover:not(:disabled){border-color:#999!important;background:#282828!important;}
+.app-focus .event-chip.active {border-color:#4bba8e!important;color:#e8ffef!important;background:#10251b!important;box-shadow:inset 0 0 0 1px #4bba8e55;}
+.app-focus .camera-chip.active {border-color:#55b4d5!important;background:#0e2430!important;}
+.app-focus .tline-wrap {margin-top:12px;}
+.app-focus .sponsor-rail {
+ width:100%;min-height:0;height:100%;display:flex!important;flex-direction:column;
+ overflow:hidden;background:#0d0d0d;border:1px solid #404040;border-radius:0;
+ box-shadow:inset 0 1px 0 #ffffff12,0 10px 30px #0008;
+}
+.app-focus .rail-header {flex-shrink:0;padding:14px;border-bottom:1px solid #383838;background:#111;}
+.app-focus .rail-title {display:flex;justify-content:space-between;align-items:center;gap:8px;margin:5px 0;}
+.app-focus .rail-title h2 {font-family:'Barlow Condensed',Impact,sans-serif;font-size:27px;letter-spacing:1px;margin:0;}
+.app-focus .rail-accent {color:#f84e91;}
+.app-focus .rail-title strong {font:700 11px ui-monospace,monospace;color:#5ed0a0;white-space:nowrap;}
+.app-focus .rail-description {color:#a0a0a0;line-height:1.5;font-size:10px;margin:8px 0;}
+.app-focus .rail-meta {display:flex;justify-content:space-between;gap:6px;font-size:9px;color:#8d8d8d;}
+.app-focus .rail-scroll {flex:1;min-height:0;overflow-y:auto;scrollbar-color:#555 #111;padding:0 12px 10px;}
+.app-focus .rail-group {padding-top:12px;}
+.app-focus .rail-group-heading {display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #333;padding-bottom:7px;margin:0 2px 10px;color:#eee;font:700 13px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.035em;}
+.app-focus .rail-group-heading small {color:#777;font-size:9px;}
+.app-focus .rail-cards {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+.app-focus .rail-brand {
+ position:relative;display:flex;flex-direction:column;gap:6px;
+ min-width:0;min-height:125px;padding:9px 8px 6px;cursor:pointer;text-align:center;
+ border:1px solid #3e3e3e!important;border-radius:5px!important;background:#161616!important;
+ box-shadow:0 2px 8px #000b,inset 0 1px #ffffff0d;
+ transition:background .15s,border-color .15s,box-shadow .15s;
+}
+.app-focus .rail-brand:hover:not(:disabled){border-color:#939393!important;background:#202020!important;box-shadow:0 4px 15px #000c;}
+.app-focus .rail-brand.isactive {border-color:#45b884!important;background:#13251e!important;box-shadow:0 0 0 1px #2f805a,0 4px 18px #000c;}
+.app-focus .rail-logo {display:flex;flex:1;justify-content:center;align-items:center;min-height:72px;padding:2px 4px;}
+.app-focus .rail-logo .tinylogo {
+ display:flex;align-items:center;justify-content:center;width:100%!important;height:75px!important;
+ overflow:visible;background:transparent!important;color:#eee!important;border-radius:0!important;
+ box-shadow:none!important;
+}
+.app-focus .rail-logo .tinylogo img {
+ max-width:100%;max-height:74px;width:auto!important;height:auto!important;
+ background:transparent!important;object-fit:contain!important;
+ filter:drop-shadow(0 2px 5px #000b) drop-shadow(0 0 8px #ffffff19);
+}
+.app-focus .rail-brand-footer {width:100%;min-height:22px;display:flex;gap:4px;align-items:center;justify-content:space-between;}
+.app-focus .rail-brand-name {font-size:10px!important;text-align:left;line-height:1.2;word-break:break-word;color:#dedede;font-weight:650;}
+.app-focus .rail-state {display:inline-flex;gap:4px;align-items:center;white-space:nowrap;font:800 9px ui-monospace,monospace;color:#999;}
+.app-focus .rail-state i {width:7px;height:7px;display:inline-block;border-radius:100%;background:#e35b64;}
+.app-focus .rail-state.on {color:#58d4a2;}.app-focus .rail-state.on i {background:#40d58c;box-shadow:0 0 5px #41dd9388;}
+.app-focus .rail-foot {display:flex;justify-content:space-between;gap:8px;padding:10px 12px;border-top:1px solid #333;background:#111;color:#a4a4a4;font-size:9px;}
+.app-focus .rail-empty {color:#999;font-size:12px;padding:18px 4px;}
+@media(min-width:1600px){.app-focus .rail-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.app-focus .rail-brand{min-height:145px}}
+@media(max-width:950px){
+ .app-focus .studio-grid{grid-template-columns:minmax(0,1fr) 235px!important;height:calc(100dvh - 182px)}
+ .app-focus .rail-cards{grid-template-columns:1fr}
+ .app-focus .rail-brand{min-height:95px}
+ .app-focus .rail-logo .tinylogo{height:58px!important}
+ .app-focus .rail-logo .tinylogo img{max-height:57px}
+ .app-focus .vidframe{height:clamp(160px,38dvh,420px)!important}
+}
+@media(max-width:650px){
+ .app-focus .focusbar{height:58px;padding:6px 10px}
+ .app-focus .focuscontent{padding:8px!important}
+ .app-focus .studio-head{margin-bottom:5px}
+ .app-focus .studio-head .row{gap:4px}
+ .app-focus .studio-grid{grid-template-columns:1fr!important;display:flex!important;flex-direction:column!important;height:calc(100dvh - 176px);gap:8px!important}
+ .app-focus .studio-media-column{flex:1;min-height:0;padding:0}
+ .app-focus .sponsor-rail{flex:0 0 190px;height:190px}
+ .app-focus .rail-header{padding:6px 9px}
+ .app-focus .rail-header .rail-description{display:none}
+ .app-focus .rail-title h2{font-size:17px}
+ .app-focus .rail-cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .app-focus .rail-logo{min-height:42px}
+ .app-focus .rail-brand{min-height:78px}
+ .app-focus .rail-logo .tinylogo{height:45px!important}
+ .app-focus .rail-logo .tinylogo img{max-height:42px}
+ .app-focus .rail-brand-name{font-size:9px!important}
+ .app-focus .rail-group{padding-top:8px}
+ .app-focus .vidframe{height:clamp(135px,29dvh,260px)!important}
+ .app-focus .skip-setting{margin:0}
+ .app-focus .chip-group-title small{display:none}
+}
+
 </style>
 </head>
 <body>
