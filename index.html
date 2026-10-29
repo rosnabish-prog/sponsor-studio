@@ -1221,36 +1221,81 @@ function attrsView(){const gs=[['event','Key event attributes',db.eventGroups],[
 window.groupModal=(kind,id='')=>{let groups=kind==='sponsor'?db.sponsorGroups:kind==='event'?db.eventGroups:db.cameraGroups;let g=groups.find(x=>x.id===id);openModal(g?'Edit attribute list':'New attribute list',`<div class="field"><label>List name</label><input id="gname" value="${esc(g?.name||'')}" placeholder="${kind==='sponsor'?'Main stadium sponsors':kind==='event'?'Match moments':'Broadcast camera presets'}"></div>${kind==='sponsor'?`<div class="field" style="margin-top:15px"><label>Description</label><textarea id="gdesc" rows="2" placeholder="Optional">${esc(g?.description||'')}</textarea></div>`:''}`,`<button class="button ghost" onclick="closeModal()">Cancel</button><button class="button primary" onclick="saveGroup('${kind}','${id}')">Save list</button>`)};
 window.saveGroup=(kind,id)=>{let gs=kind==='sponsor'?db.sponsorGroups:kind==='event'?db.eventGroups:db.cameraGroups;let v=formVal('gname').trim();if(!v)return notify('List name is required.');let g=gs.find(x=>x.id===id);if(g){g.name=v;if(kind==='sponsor')g.description=formVal('gdesc')}else gs.push({id:uid(),name:v,...(kind==='sponsor'?{description:formVal('gdesc'),sponsors:[]}:{items:[]})});save();closeModal();render();notify('Attribute list saved')};
 window.addSponsorToCurrentTask=()=>{let t=currentTask();if(!t||me()?.role!=='admin')return;let g=db.sponsorGroups.find(x=>t.sponsorGroupIds.includes(x.id));if(!g){notify('Assign a sponsor list to the task first.');return}sponsorModal(g.id)};
-window.sponsorModal=(gid,sid='')=>{let g=db.sponsorGroups.find(x=>x.id===gid),s=g?.sponsors.find(x=>x.id===sid);if(!g)return;openModal(s?'Edit sponsor':'Add a sponsor',`<div class="formgrid"><div class="field full"><label>Sponsor name</label><input id="sname" value="${esc(s?.name||'')}" placeholder="Brand name" required></div><div class="field"><label>UPLOAD SPONSOR LOGO / FULL BRAND IMAGE</label><input type="file" id="simage" accept="image/png,image/jpeg,image/webp,image/svg+xml" onchange="previewSponsorLogo(this)"><div id="logo-preview" class="logo-preview">${s?.logo?`<img src="${esc(s.logo)}" alt="Current sponsor logo">`:'SELECT AN IMAGE — THIS WILL APPEAR ON THE ANALYST TAGGING CARD'}</div><small>Transparent PNG logos stay transparent. Existing white-backed logos must be uploaded again after this fix. Stored as a small browser-local thumbnail; originals are not uploaded.</small></div><div class="field"><label>Fallback brand color</label><input type="color" id="scolor" value="${esc(s?.color||'#7059c4')}" style="padding:5px;height:45px"></div></div>`,`<button class="button ghost" onclick="closeModal()">Cancel</button>${s?`<button class="button warn" onclick="deleteSponsor('${gid}','${sid}')">Delete</button>`:''}<button class="button primary" onclick="saveSponsor('${gid}','${sid}')">Save sponsor</button>`)};
+window.sponsorModal=(gid,sid='')=>{let g=db.sponsorGroups.find(x=>x.id===gid),s=g?.sponsors.find(x=>x.id===sid);if(!g)return;openModal(s?'Edit sponsor':'Add a sponsor',`<div class="formgrid"><div class="field full"><label>Sponsor name</label><input id="sname" value="${esc(s?.name||'')}" placeholder="Brand name" required></div><div class="field"><label>UPLOAD SPONSOR LOGO / FULL BRAND IMAGE</label><input type="file" id="simage" accept="image/png,image/jpeg,image/webp,image/svg+xml" onchange="previewSponsorLogo(this)"><div id="logo-preview" class="logo-preview">${s?.logo?`<img src="${esc(s.logo)}" alt="Current sponsor logo">`:'SELECT AN IMAGE — THIS WILL APPEAR ON THE ANALYST TAGGING CARD'}</div><small>Transparent margins are trimmed automatically so the brand fills the card. Existing white JPEG backgrounds require re-uploading the original transparent PNG. All logos stay browser-local.</small></div><div class="field"><label>Fallback brand color</label><input type="color" id="scolor" value="${esc(s?.color||'#7059c4')}" style="padding:5px;height:45px"></div></div>`,`<button class="button ghost" onclick="closeModal()">Cancel</button>${s?`<button class="button warn" onclick="deleteSponsor('${gid}','${sid}')">Delete</button>`:''}<button class="button primary" onclick="saveSponsor('${gid}','${sid}')">Save sponsor</button>`)};
 window.previewSponsorLogo=input=>{const p=document.getElementById('logo-preview'),f=input?.files?.[0];if(!p||!f)return;if(!f.type.startsWith('image/')){p.textContent='Please select an image';return}const rd=new FileReader();rd.onload=()=>{p.innerHTML='<img alt="New sponsor logo preview">';p.firstChild.src=rd.result};rd.readAsDataURL(f)};
+// Trim transparent image margins before thumbnailing. A fixed 220 × 140
+// thumbnail with transparent padding makes horizontal brand marks appear tiny.
+function logoAlphaBounds(pixels,width,height){
+ let left=width,top=height,right=-1,bottom=-1;
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+  if(pixels[(y*width+x)*4+3]<=12)continue;
+  left=Math.min(left,x);top=Math.min(top,y);
+  right=Math.max(right,x);bottom=Math.max(bottom,y);
+ }
+ if(right<left)return {x:0,y:0,width,height};
+ const pad=Math.max(1,Math.ceil(Math.min(width,height)*.012));
+ left=Math.max(0,left-pad);top=Math.max(0,top-pad);
+ right=Math.min(width-1,right+pad);bottom=Math.min(height-1,bottom+pad);
+ return {x:left,y:top,width:right-left+1,height:bottom-top+1};
+}
+function cropLogoDataUrl(source){
+ return new Promise((resolve,reject)=>{
+  const img=new Image();
+  img.onerror=()=>reject(new Error('Could not decode sponsor image'));
+  img.onload=()=>{
+   try{
+    const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+    if(!iw||!ih)throw new Error('Image has no dimensions');
+    const scanScale=Math.min(1,1400/Math.max(iw,ih));
+    const sw=Math.max(1,Math.round(iw*scanScale)),sh=Math.max(1,Math.round(ih*scanScale));
+    const sourceCanvas=document.createElement('canvas');sourceCanvas.width=sw;sourceCanvas.height=sh;
+    const sourceContext=sourceCanvas.getContext('2d',{willReadFrequently:true});
+    if(!sourceContext)throw new Error('Image processor is not available');
+    sourceContext.clearRect(0,0,sw,sh);
+    sourceContext.drawImage(img,0,0,sw,sh);
+    const rgba=sourceContext.getImageData(0,0,sw,sh).data;
+    const bounds=logoAlphaBounds(rgba,sw,sh);
+    const scale=Math.min(1,560/bounds.width,260/bounds.height);
+    const ow=Math.max(1,Math.round(bounds.width*scale));
+    const oh=Math.max(1,Math.round(bounds.height*scale));
+    const output=document.createElement('canvas');output.width=ow;output.height=oh;
+    const ctx=output.getContext('2d');
+    if(!ctx)throw new Error('Image processor is not available');
+    ctx.clearRect(0,0,ow,oh);
+    ctx.drawImage(sourceCanvas,bounds.x,bounds.y,bounds.width,bounds.height,0,0,ow,oh);
+    resolve(output.toDataURL('image/png'));
+   }catch(err){reject(err)}
+  };
+  img.src=source;
+ });
+}
 function thumbnail(file){
  return new Promise((resolve,reject)=>{
   const reader=new FileReader();
-  reader.onerror=()=>reject(new Error('Unable to read image'));
-  reader.onload=()=>{
-   const img=new Image();
-   img.onload=()=>{
-    try{
-     const w=220,h=140,canvas=document.createElement('canvas');
-     canvas.width=w;canvas.height=h;
-     const ctx=canvas.getContext('2d');
-     if(!ctx)throw new Error('Image processing unavailable');
-     // The default canvas is transparent. Never fill it white or convert to JPEG:
-     // both would destroy the alpha channel of transparent sponsor logos.
-     ctx.clearRect(0,0,w,h);
-     const scale=Math.min(w/img.width,h/img.height);
-     const sw=img.width*scale,sh=img.height*scale;
-     ctx.drawImage(img,(w-sw)/2,(h-sh)/2,sw,sh);
-     resolve(canvas.toDataURL('image/png'));
-    }catch(err){reject(err)}
-   };
-   img.onerror=()=>reject(new Error('Unable to decode image'));
-   img.src=reader.result;
-  };
+  reader.onerror=()=>reject(new Error('Unable to read logo'));
+  reader.onload=()=>cropLogoDataUrl(reader.result).then(resolve,reject);
   reader.readAsDataURL(file);
  });
 }
-window.saveSponsor=async(gid,sid)=>{let g=db.sponsorGroups.find(x=>x.id===gid),name=formVal('sname').trim(),file=document.getElementById('simage').files[0];if(!g||!name)return notify('Sponsor name required');if(file&&file.size>6*1024*1024)return notify('Sponsor image must be under 6 MB');let logoData;try{if(file)logoData=await thumbnail(file)}catch(e){return notify('Could not read this logo image.')}let s=g.sponsors.find(x=>x.id===sid);if(!s){s={id:uid()};g.sponsors.push(s)}s.name=name;s.color=formVal('scolor');if(logoData)s.logo=logoData;save();closeModal();render();notify('Sponsor saved')};
+// Automatically tighten existing browser-local transparent PNG thumbnails.
+async function optimizeStoredSponsorLogos(){
+ let changed=false;
+ for(const group of db.sponsorGroups||[])for(const sponsor of group.sponsors||[]){
+  if(sponsor.logoTrimmed||!/^data:image\/png[;,]/i.test(sponsor.logo||''))continue;
+  try{
+   const compact=await cropLogoDataUrl(sponsor.logo);
+   if(compact){sponsor.logo=compact;sponsor.logoTrimmed=true;changed=true}
+  }catch(err){/* Preserve the original logo when it cannot be decoded. */}
+ }
+ if(changed){
+  save();
+  if(!modalOpen){
+   if(view==='studio')refreshStudio();
+   else render();
+  }
+ }
+}
+window.saveSponsor=async(gid,sid)=>{let g=db.sponsorGroups.find(x=>x.id===gid),name=formVal('sname').trim(),file=document.getElementById('simage').files[0];if(!g||!name)return notify('Sponsor name required');if(file&&file.size>6*1024*1024)return notify('Sponsor image must be under 6 MB');let logoData;try{if(file)logoData=await thumbnail(file)}catch(e){return notify('Could not read this logo image.')}let s=g.sponsors.find(x=>x.id===sid);if(!s){s={id:uid()};g.sponsors.push(s)}s.name=name;s.color=formVal('scolor');if(logoData){s.logo=logoData;s.logoTrimmed=true;}save();closeModal();render();notify('Sponsor saved')};
 window.deleteSponsor=(gid,sid)=>{let g=db.sponsorGroups.find(x=>x.id===gid);if(!g)return;let used=db.tasks.some(t=>t.sponsors.some(v=>v.sponsorId===sid));if(used)return notify('This brand has recorded annotations. Preserve the history; create a new list instead.');const sponsor=g.sponsors.find(x=>x.id===sid);confirmInApp('Delete sponsor',`Delete ${sponsor?.name||'this sponsor'} and its uploaded brand image from the list?`,()=>{g.sponsors=g.sponsors.filter(x=>x.id!==sid);save();render();notify('Sponsor removed')},{actionLabel:'DELETE SPONSOR'})};
 window.attrItemModal=(kind,gid)=>openModal('Add '+(kind==='event'?'match event':'camera angle'),`<div class="formgrid"><div class="field"><label>Attribute name</label><input id="iname" placeholder="${kind==='event'?'Goal, replay, substitution':'Wide · left goal'}"></div>
  ${kind==='event'?'<div class="field full"><label class="checkline"><input type="checkbox" id="ihigh"><span>Highlight as high-value sponsor moment (e.g., goal, trophy celebration)</span></label></div>':''}</div>`,`<button class="button ghost" onclick="closeModal()">Cancel</button><button class="button primary" onclick="saveAttrItem('${kind}','${gid}')">Add attribute</button>`);
@@ -1617,5 +1662,6 @@ refreshFixtureFeed();
 setInterval(refreshFixtureFeed,5*60*1000);
 window.addEventListener('storage',e=>{if(e.key===DBKEY){try{db=JSON.parse(e.newValue)}catch(err){return}if(!modalOpen)render()}});
 render();
+optimizeStoredSponsorLogos();
 })();
 </script></body></html>
