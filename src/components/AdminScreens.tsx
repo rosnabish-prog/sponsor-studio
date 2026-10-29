@@ -112,7 +112,7 @@ export function TeamScreen({ data }: { data: StudioData }) {
           <h1>Analysts &amp; access</h1>
           <p className="sub">Assign either one analyst to both streams or two analysts to split tagging responsibilities.</p>
         </div>
-        <button className="button primary" onClick={() => window.userModal?.()}><Icon name="plus" /> Add analyst</button>
+        <button className="button primary" onClick={() => window.userModal?.()}><Icon name="plus" /> Add team member</button>
       </div>
       <div className="card cardpad">
         <div className="tablewrap">

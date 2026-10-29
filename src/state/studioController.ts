@@ -531,7 +531,9 @@ window.saveUser=id=>{
   if(id)return notify('Member details are managed by the account owner.');
   const name=formVal('uname').trim(),email=formVal('uemail').trim().toLowerCase();
   if(!name||!email)return notify('Name and email are required.');
-  void api.provisionMember(workspaceId,{name,email,role:'ANALYST'}).then(async result=>{
+   const role=formVal('urole');
+   if(role!=='ANALYST'&&role!=='ADMIN')return notify('Select a valid role.');
+   void api.provisionMember(workspaceId,{name,email,role}).then(async result=>{
    window.closeModal?.();
    await loadWorkspace(workspaceId);
    openDialog({type:'credentials',name:result.user.name,email:result.user.email,
