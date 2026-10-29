@@ -148,10 +148,43 @@ function expect(expr,message){assert.ok(expr,message)}
  document.querySelector('.rail-brand').click();
  window.showReport('task_demo1');
  expect(document.querySelector('.insights-dashboard'),'insights dashboard rendered');
- assert.equal(document.querySelectorAll('.insight-stat').length,4,'four match overview KPIs');
+ assert.equal(document.querySelectorAll('.insights-dashboard .insight-stat').length,6,'six headline KPIs across prioritized metrics');
  expect(document.querySelector('.insight-table'),'brand ranking present');
  expect(document.querySelectorAll('.insight-tick').length===12,'60-minute match has twelve 5-minute buckets');
  expect(document.querySelector('.insight-events-list'),'match event association rendered');
+
+ expect(document.querySelector('.intel-moment-summary'),'high-value moment insight visible');
+ expect(document.querySelector('.intel-unmapped'),'unmapped halves disclose no inferred periods');
+ expect(document.querySelector('.exposure-meta-note')===null,'metadata only in studio, not in insight report');
+ // Set classification on an existing sponsor interval without changing the one-click tag behavior.
+ window.openTask('task_demo1');
+ const sourceTask=db().tasks.find(t=>t.id==='task_demo1');
+ const prior=sourceTask.sponsors.find(x=>x.end!=null&&x.end>x.start);
+ expect(prior,'completed sponsor interval for metadata test');
+ const sponsorLog=[...document.querySelectorAll('#logBody tbody tr')].find(tr=>tr.textContent.includes('Sponsor'));
+ expect(sponsorLog&&sponsorLog.querySelectorAll('select').length===2,'placement and quality dropdowns in sponsor log');
+ window.setExposureAttribute(prior.id,'placement','led');
+ window.setExposureAttribute(prior.id,'quality','clear');
+ const classified=db().tasks.find(t=>t.id==='task_demo1').sponsors.find(x=>x.id===prior.id);
+ assert.equal(classified.placement,'led','primary placement saved');
+ assert.equal(classified.quality,'clear','visibility quality saved');
+ window.showReport('task_demo1');
+ assert.ok(document.querySelector('.intel-breakdown-label').textContent.includes('LED / DIGITAL BOARD'),'placement exposure breakdown');
+ assert.ok(document.querySelectorAll('.intel-breakdown-label').length>=2,'quality and placement metrics present');
+ const summary=document.querySelectorAll('.insights-dashboard .insight-stat');
+ assert.ok(summary[1].textContent.includes('EXPOSURE FREQUENCY'),'frequency is essential KPI');
+ assert.ok(summary[2].textContent.includes('AVERAGE EXPOSURE DURATION'),'average exposure KPI');
+ // Editing period boundaries is optional; once mapped, first and second half analysis appears.
+ window.openTask('task_demo1');
+ window.createTaskModal('task_demo1');
+ document.querySelector('#periodFirstEnd').value='30';
+ document.querySelector('#periodSecondStart').value='30';
+ window.saveTask('task_demo1');
+ const mappedTask=db().tasks.find(t=>t.id==='task_demo1');
+ assert.deepEqual(mappedTask.periods,{firstEnd:30,secondStart:30},'match period mapping saved');
+ window.showReport('task_demo1');
+ assert.equal(document.querySelectorAll('.intel-period-card').length,2,'mapped first and second half insights rendered');
+
  expect(document.querySelector('.insight-pair')||document.querySelector('.insight-coverage-note'),'co-visibility or coverage report present');
  document.querySelector('#insightSponsorFilter').value='s_gatorade';
  window.selectInsightSponsor('s_gatorade');
