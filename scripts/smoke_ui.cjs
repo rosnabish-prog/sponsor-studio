@@ -36,8 +36,19 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(document.querySelector('.ops-head-first .powered-by img'),'Seebot Powered by image in dashboard header');
  window.openTask('task_demo1');
  expect(document.querySelector('.studio-grid'),'studio rendered');
+ const mediaRegion=document.querySelector('.studio-media-column');
+ assert.equal(mediaRegion.tabIndex,0,'left pane can receive keyboard focus');
+ assert.equal(mediaRegion.getAttribute('role'),'region','left pane is labeled as a scrollable region');
+ const theme=fs.readFileSync('assets/workspace-theme.css','utf8');
+ assert.ok(theme.includes('html:has(.app-focus),body:has(.app-focus)'),'desktop locks document scrolling in studio');
+ assert.ok(theme.includes('overflow-y:auto!important'),'scrolling remains enabled in both panes');
+ assert.ok(theme.includes('overscroll-behavior-y:contain!important'),'scrolling is isolated within the hovered pane');
+ assert.ok(theme.includes('scrollbar-width:none!important')&&theme.includes('*::-webkit-scrollbar'),'visible scrollbars hidden across browser engines');
+ assert.ok(theme.includes('.overlay .modalbody')&&theme.includes('flex:1 1 auto!important'),'modal body independently scrolls while header stays visible');
+ assert.ok(theme.includes('.app-focus .sponsor-rail .rail-compact-heading')&&theme.includes('position:sticky!important'),'right-side Sponsors title stays visible inside its own pane');
  expect(document.querySelector('.focusbar .identity-lockup .powered-by img'),'paired Seebot lockup in studio header');
  expect(document.querySelector('.sponsor-rail'),'sponsor sidebar rendered');
+ assert.equal(document.querySelector('.sponsor-rail').tabIndex,0,'right sponsor pane supports keyboard scrolling');
  expect(document.querySelector('.focusbar .powered-by img'),'Seebot Powered by image in studio header');
  assert.equal(document.querySelectorAll('.sponsor-rail .rail-state-dot').length,0,'separate sponsor status dots removed');
  expect(document.querySelector('#taskActionMenu'),'task actions dropdown rendered');
@@ -142,6 +153,8 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(testUser&&testUser.role==='analyst','admin created a new analyst');
  window.navigate('tasks');
  window.createTaskModal();
+ expect(document.querySelector('#modal .modalhead'),'modal header remains separate from scrollable form');
+ expect(document.querySelector('#modal .modalbody'),'modal has independently scrollable form body');
  document.querySelector('#taskname').value='Test Sponsor Match';
  document.querySelector('#tasknumber').value='TEST-M99';
  document.querySelector('#tsponsor').value=testUser.id;
@@ -225,9 +238,10 @@ function expect(expr,message){assert.ok(expr,message)}
  document.querySelector('.focusbrand.brand-home').click();
  expect(document.querySelector('.ops-nav'),'logo navigates to dashboard');
  expect(!document.querySelector('.studio-grid'),'dashboard replaces studio');
- assert.ok(html.includes('max-height:none!important')&&html.includes('overflow-y:visible!important'),'sponsor rail no nested scrolling');
+ assert.ok(theme.includes('.app-focus .studio-media-column')&&theme.includes('.app-focus .sponsor-rail'),'left and right panes have scoped scrolling rules');
+ assert.ok(theme.includes('@media(max-width:680px)'),'mobile layout restores natural page scrolling');
 
  assert.deepEqual(errors,[],'no uncaught DOM errors');
- console.log('PASS layer tabs, logo home navigation, no range labels, no nested sponsor scroll, intervals, seeking and camera switching');
+ console.log('PASS isolated studio panes, hidden scrollbars, fixed modal header, responsive fallback, layer tabs, tagging and camera switching');
  dom.window.close();
 })().catch(err=>{console.error(err);dom.window.close();process.exit(1)});
