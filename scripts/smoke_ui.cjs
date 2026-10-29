@@ -42,6 +42,8 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(document.querySelector('.dashboard-banner'),'workspace has warm orange schedule ribbon');
  assert.equal(document.querySelectorAll('link[rel="preload"][as="font"]').length,2,'primary and metadata fonts preload before first render');
  assert.ok(document.querySelector('link[href^="assets/fonts.css?v="]'),'font faces are local and loaded from assets');
+ assert.ok(document.querySelector('link[rel="preload"][href="assets/fonts/ibm-plex-mono-700-latin.woff2"]'),'visible metadata font weight preloaded');
+ assert.ok(document.querySelector('link[href="assets/workspace-theme.css?v=typography-20261029-r2"]'),'theme uses new cache key');
  assert.deepEqual([...document.querySelectorAll('.taskrow .taskbadge')].map(b=>b.textContent.trim()),['M30','M29','M13'],'recent match badges use BuildUp fixture codes, not list positions');
  expect(document.querySelector('link[href^="assets/workspace-theme.css?v="]'),'complete style system loaded');
  assert.ok(fs.existsSync('assets/workspace-theme.css'),'reference-inspired theme file committed');

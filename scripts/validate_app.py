@@ -39,9 +39,11 @@ assert 'app-focus' in html
 assert 'deleteSponsor' in html
 assert 'fixtureCatalog' in html
 assert 'assets/workspace-theme.css' in html, 'Theme CSS must be linked by the application'
-assert 'assets/fonts.css?v=selfhosted-20261029' in html, 'Self-hosted font stylesheet must load early'
+assert 'assets/fonts.css?v=typography-20261029-r2' in html, 'Self-hosted font stylesheet must load early with a fresh cache key'
 assert 'rel="preload" href="assets/fonts/manrope-400-800-latin.woff2"' in html, 'Primary font must be preloaded'
-assert 'rel="preload" href="assets/fonts/ibm-plex-mono-400-latin.woff2"' in html, 'Metadata font must be preloaded'
+assert 'rel="preload" href="assets/fonts/ibm-plex-mono-700-latin.woff2"' in html, 'Used metadata font weight must be preloaded'
+assert 'assets/workspace-theme.css?v=typography-20261029-r2' in html, 'Theme stylesheet cache key must be refreshed'
+assert "html,body{background:#050505!important;color:#f5f5f5!important;font-family:'Manrope'" in html, 'Base font must match final Manrope theme before stylesheet loads'
 assert 'identity-lockup' in html, 'Partner logo lockup missing'
 assert 'dashboard-banner' in html, 'Orange workspace dashboard ribbon missing'
 assert 'match-tile-grid' in html, 'Responsive match cards missing'
