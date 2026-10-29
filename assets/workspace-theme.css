@@ -866,3 +866,109 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
  }
  .app-focus .video-source-note{padding:8px 11px;font-size:9px!important;}
 }
+
+
+/* Login polish: strong program label and comfortable demo-access spacing */
+.login-central{
+ width:min(565px,calc(100% - 32px))!important;
+ max-width:565px!important;
+ box-sizing:border-box!important;
+ padding:clamp(30px,3vw,42px) clamp(22px,3vw,40px)!important;
+}
+.login-kicker{
+ display:block!important;
+ margin:4px 0 16px!important;
+ padding:0!important;
+ text-align:center!important;
+ color:var(--orange)!important;
+ font-family:'Manrope',system-ui,sans-serif!important;
+ font-weight:850!important;
+ font-size:12px!important;
+ line-height:1.55!important;
+ letter-spacing:.095em!important;
+ text-transform:uppercase!important;
+}
+.login-central h1{
+ margin:10px 0 16px!important;
+}
+.login-central .demo-line{
+ display:flex!important;justify-content:space-between!important;align-items:center!important;
+ gap:10px 20px!important;flex-wrap:wrap!important;
+ margin-top:33px!important;
+ padding-top:26px!important;
+ border-top:1px solid #414145!important;
+ color:#b6b6bb!important;
+ font:700 10px/1.6 'IBM Plex Mono',monospace!important;
+ letter-spacing:.025em!important;
+}
+.login-central .demo-line span:last-child{color:#9b9ba2!important;font-weight:500!important;}
+.login-central .demo-roles{
+ display:grid!important;
+ grid-template-columns:repeat(3,minmax(0,1fr))!important;
+ gap:11px!important;
+ width:100%!important;
+ margin-top:19px!important;
+}
+.login-central .demo-roles button{
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ min-width:0!important;width:100%!important;
+ min-height:70px!important;
+ padding:13px 12px!important;
+ border-radius:18px!important;
+ font:800 12px/1.4 'Manrope',system-ui,sans-serif!important;
+ letter-spacing:-.01em!important;
+ text-align:center!important;
+ text-wrap:balance;
+ color:#f6f6f8!important;
+ border:1px solid #47474c!important;
+ background:#29292c!important;
+}
+.login-central .demo-roles button:hover{
+ background:#35312c!important;border-color:var(--orange)!important;
+ transform:translateY(-1px);
+}
+.login-central .demo-password{
+ display:flex!important;justify-content:center!important;align-items:center!important;
+ gap:10px 14px!important;flex-wrap:wrap!important;
+ margin:23px 0 5px!important;
+ font:550 11px/1.5 'Manrope',system-ui,sans-serif!important;
+ color:#b6b6be!important;
+ text-align:center!important;
+}
+.login-central .demo-password .demo-password-hint{
+ display:inline-flex;align-items:baseline;gap:5px;
+}
+.login-central .demo-password code{
+ color:#fff!important;
+ margin:0!important;
+ font:800 11px 'IBM Plex Mono',monospace!important;
+}
+.login-central .demo-password button{
+ min-height:37px!important;
+ padding:8px 14px!important;
+ border-radius:999px!important;
+ color:#dedee3!important;
+ font:750 11px 'Manrope',system-ui,sans-serif!important;
+}
+@media(max-width:560px){
+ .login-central{
+  width:calc(100% - 24px)!important;
+  padding:28px 20px!important;
+  margin:23px auto!important;
+ }
+ .login-kicker{font-size:10px!important;letter-spacing:.06em!important;}
+ .login-central .demo-line{margin-top:28px!important;padding-top:23px!important;}
+ .login-central .demo-roles{gap:8px!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;}
+ .login-central .demo-roles button{
+  min-height:64px!important;padding:10px 7px!important;
+  border-radius:14px!important;font-size:10px!important;
+ }
+ .login-central .demo-password{margin-top:18px!important;}
+}
+@media(max-width:375px){
+ .login-central .demo-roles{
+  grid-template-columns:1fr!important;
+  gap:8px!important;
+ }
+ .login-central .demo-roles button{min-height:44px!important;}
+}
