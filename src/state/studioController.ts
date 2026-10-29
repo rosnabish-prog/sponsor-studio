@@ -6,7 +6,6 @@ import { PLACEMENT_TYPES, VISIBILITY_QUALITIES } from '../domain/classifications
 import { formatTimestamp as fmt, clampNumber as clamp, mergeIntervals as merged, intervalOverlap as overlap } from '../domain/intervals';
 import { api, fromApiTask, type ApiMembership, type ApiUser } from '../api/client';
 import { persistStudio } from '../api/sync';
-import { uploadMatchVideo } from '../api/uploads';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -144,6 +143,8 @@ let view: 'dashboard'|'tasks'|'studio'|'sponsors'|'attributes'|'users'|'reports'
 let selectedTaskId='',reportTaskId='',taskFilter='all',insightFocusId='',fixtureSyncLabel='Bundled schedule';
 let studioTab:'all'|'sponsors'|'events'|'cameras'='all';
 let tick=0,seekStep=5,videoEl:HTMLVideoElement|null=null,modalOpen=false;
+const localVideos:Record<string,{url:string;name:string}>={};
+function clearLocalVideos(){for(const video of Object.values(localVideos))URL.revokeObjectURL(video.url);for(const id of Object.keys(localVideos))delete localVideos[id];}
 const me=()=>db.users.find(x=>x.id===logged)||(remoteUser&&logged?{...remoteUser,password:'',role:'admin' as const}:undefined);const currentTask=()=>db.tasks.find(x=>x.id===selectedTaskId);const reportTask=()=>db.tasks.find(x=>x.id===reportTaskId)||db.tasks[0];const visibleTasks=()=>me()?.role==='admin'?db.tasks:db.tasks.filter(t=>t.sponsorAnalystId===logged||t.contextAnalystId===logged);
 const taskStatus=(t:TaskSummary):'ready'|'progress'|'done'=>t.submitted?.sponsors&&t.submitted?.context?'done':t.sponsors.length||t.events.length||t.cameras.length||t.submitted?.sponsors||t.submitted?.context?'progress':'ready';
 const foundUser=(id:string)=>db.users.find(u=>u.id===id);const nameUser=(id:string)=>foundUser(id)?.name||'Unassigned';
@@ -192,14 +193,14 @@ window.login=async e=>{
 };
 window.selectWorkspace=id=>{if(liveWorkspaces.some(w=>w.workspace.id===id))void loadWorkspace(id).catch(error=>notify('Workspace load failed: '+error.message))};
 window.createWorkspace=async e=>{e.preventDefault();try{const created=await api.createWorkspace(formVal('newWorkspaceName').trim());liveWorkspaces=await api.workspaces();await loadWorkspace(created.id)}catch(error){notify('Workspace creation failed: '+(error instanceof Error?error.message:'Unknown error'))}};
-window.logout=()=>{void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];selectedTaskId='';if(videoEl){videoEl.pause()}render()};
+window.logout=()=>{void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];selectedTaskId='';if(videoEl){videoEl.pause()}clearLocalVideos();render()};
 window.showWorkspaceSwitcher=()=>{workspaceId='';render()};
 window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}view=v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';render();window.scrollTo(0,0)};
 window.closeTaskMenu=()=>{const menu=document.getElementById('taskActionMenu') as HTMLDetailsElement|null;if(menu)menu.open=false};
 window.openTask=id=>{
  selectedTaskId=id;view='studio';tick=0;studioTab='all';render();window.scrollTo(0,0);
  const asset=db.tasks.find(t=>t.id===id)?.videoAssetId;
-  if(asset){void api.playback(workspaceId,id,asset).then(result=>{
+  if(asset&&!localVideos[id]){void api.playback(workspaceId,id,asset).then(result=>{
   const task=db.tasks.find(t=>t.id===id);if(!task)return;
   task.videoUrl=result.url;task.videoType='s3';task.videoName=result.filename;
   if(selectedTaskId===id)render();
@@ -288,21 +289,23 @@ window.skipVideo=(n:number)=>window.seekVideo?.((videoEl&&Number.isFinite(videoE
 window.skipByStep=direction=>window.skipVideo?.((Number(direction)||0)*seekStep);
 window.setSeekStep=value=>{seekStep=value===10?10:5;refreshStudio();};
 window.togglePlay=()=>{if(!videoEl)return notify('Attach a video to play. You can still scrub timestamps to test tagging.');if(videoEl.paused){videoEl.play().catch(()=>notify('Video playback unavailable for this source.'))}else videoEl.pause()};
-window.cycleRate=()=>{const values=[1,1.25,1.5,2];const current=videoEl?.playbackRate||1;const next=values[(values.indexOf(current)+1)%values.length];if(videoEl)videoEl.playbackRate=next;playbackRate=next;refreshStudio();};
+window.cycleRate=()=>{const values=[1,1.25,1.5,2];const next=values[(values.indexOf(playbackRate)+1)%values.length];playbackRate=next;if(videoEl)videoEl.playbackRate=next;refreshStudio();};
 let playbackRate=1,videoDimensions='',videoError='';
 function recordTick(){const t=currentTask();if(t)t.observedTime=Math.max(t.observedTime||0,tick);}
 function attachVideo(){
  const el=document.getElementById('matchVideo') as HTMLVideoElement|null;
  if(!el){videoEl=null;return;}
- if(videoEl===el)return;
- videoEl=el;
+  if(videoEl===el)return;
+  videoEl=el;
+  el.playbackRate=playbackRate;
+  el.addEventListener('ratechange',()=>{if(videoEl!==el)return;playbackRate=el.playbackRate;refreshStudio()});
  el.addEventListener('timeupdate',()=>{if(videoEl!==el)return;tick=el.currentTime;recordTick();refreshStudio();if(Math.floor(tick)%4===0)save()});
  el.addEventListener('play',refreshStudio);
  el.addEventListener('pause',refreshStudio);
  el.addEventListener('loadedmetadata',()=>{
   const t=currentTask();if(!t)return;
   if(Number.isFinite(el.duration)&&el.duration>1){
-   if(Math.abs(el.duration-t.duration)>2){
+   if(!localVideos[t.id]&&Math.abs(el.duration-t.duration)>2){
     t.duration=Math.round(el.duration*100)/100;
     save();refreshStudio();
    }
@@ -329,16 +332,12 @@ window.attachLocalVideoFile=(file:File)=>{
  if(!file.type.startsWith('video/')&&!/\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(file.name||'')){
   notify('Choose a video file, such as MP4 or WebM.');return false;
  }
- let lastPercent=-10;
-  void uploadMatchVideo(workspaceId,t.id,file,percent=>{
-   if(percent-lastPercent>=20){lastPercent=percent;notify(`Uploading ${file.name}: ${percent}%`)}
-  }).then(async({assetId})=>{
-   t.videoAssetId=assetId;
-   const playback=await api.playback(workspaceId,t.id,assetId);
-   t.videoName=file.name;t.videoType='s3';t.videoUrl=playback.url;
-   save();render();notify('Video uploaded securely and attached to this match.');
-  }).catch(error=>notify('Video upload failed: '+(error instanceof Error?error.message:'Unknown error')));
-  notify('Starting secure multipart upload: '+file.name);
+  let url:string;
+  try{url=URL.createObjectURL(file)}catch{return notify('Could not open the selected video.'),false}
+  if(localVideos[t.id])URL.revokeObjectURL(localVideos[t.id].url);
+  localVideos[t.id]={url,name:file.name};
+  videoDimensions='';videoError='';tick=0;
+  render();notify('Video opened locally. Select it again after refreshing.');
  return true;
 };
 const handleVideoFileChange=(e:Event)=>{
@@ -608,12 +607,13 @@ function render(){
  if(user.role!=='admin'&&['users','sponsors','attributes'].includes(view))view='dashboard';
  if(!['dashboard','tasks','studio','sponsors','attributes','users','reports'].includes(view))view='dashboard';
  const t=view==='studio'?currentTask():null;
- const videoSrc=t&&((t.videoType==='https'||t.videoType==='s3')&&t.videoUrl)?t.videoUrl:null;
+ const localVideo=t?localVideos[t.id]:undefined;
+ const videoSrc=localVideo?.url||(t&&((t.videoType==='https'||t.videoType==='s3')&&t.videoUrl)?t.videoUrl:null);
  const heading=t?studioSidebarHeading():null;
  const currentCamera=t?.cameras.find(x=>x.end==null);
  const studioModel=t?{
   id:t.id,number:t.number,name:t.name,date:t.date,duration:t.duration,
-  videoName:t.videoName,videoType:t.videoType,videoSrc,isLocalVideo:false,
+  videoName:localVideo?.name||t.videoName,videoType:t.videoType,videoSrc,isLocalVideo:!!localVideo,
   status:taskStatus(t),sponsorAnalyst:nameUser(t.sponsorAnalystId),contextAnalyst:nameUser(t.contextAnalystId),
   canSponsor:canEdit(t,'sponsors'),canContext:canEdit(t,'context'),
   selectedTab:studioTab,tick,sponsorCount:t.sponsors.filter(x=>x.end==null).length,
@@ -644,5 +644,6 @@ return ()=>{
  clearInterval(fixtureRefreshId);
  document.removeEventListener('keydown',runKeydown);
  document.getElementById('videofile')?.removeEventListener('change',handleVideoFileChange);
+ clearLocalVideos();
 };
 }

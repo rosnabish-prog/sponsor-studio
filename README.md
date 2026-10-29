@@ -28,6 +28,6 @@ The development server proxies `/api` to the API. For deployment, route `/api` t
 
 Sign in with an existing administrator account. The workspace owner can create sponsor and attribute lists, add analysts, create matches and assign annotation streams. New analysts receive a temporary password displayed to the administrator once; they must change it at their first sign-in. Administrators can reset analyst passwords from the Team screen.
 
-Video uploads require the private S3 and CloudFront configuration described in the API documentation. Direct HTTPS video sources can also be configured on a match.
+Open a video from your device in Annotation Studio, or configure a direct HTTPS video source on a match. Local video stays in the current browser and must be selected again after refresh; annotations are saved to the workspace.
 
 Run `npm run build` to typecheck and build the frontend, and `npm run test:api` for the API tests.

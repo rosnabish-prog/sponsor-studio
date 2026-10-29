@@ -16,7 +16,7 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
     <details className="task-actions" id="taskActionMenu">
       <summary aria-label="Task actions"><span>ACTIONS</span><span className="menu-glyph" aria-hidden="true">⋯</span></summary>
       <div className="task-menu-content">
-        <StudioAction onClick={() => window.chooseVideo?.()}><Icon name="video" /> UPLOAD PRIVATE VIDEO</StudioAction>
+        <StudioAction onClick={() => window.chooseVideo?.()}><Icon name="video" /> OPEN LOCAL VIDEO</StudioAction>
         <StudioAction onClick={() => window.exportTask?.(model.id)}><Icon name="download" /> EXPORT JSON</StudioAction>
         {completed
           ? isAdmin && <StudioAction className="task-menu-reopen" onClick={() => window.reopenTask?.()}><Icon name="check" /> REOPEN TASK</StudioAction>
@@ -34,9 +34,9 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
 }
 
 function VideoPanel({ model }: { model: StudioScreenModel }) {
-  const { videoSrc, videoName, videoType } = model;
-  const sourceState = videoType === 's3' ? 'PRIVATE VIDEO · CLOUDFRONT' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : 'NO VIDEO ATTACHED';
-  const sourceNote = model.videoError || (videoSrc ? `${videoName || 'Video'}${model.videoDimensions ? ` · ${model.videoDimensions}` : ''}` : 'Upload a private video or configure a direct HTTPS source.');
+  const { videoSrc, videoName, videoType, isLocalVideo } = model;
+  const sourceState = isLocalVideo ? 'LOCAL VIDEO' : videoType === 's3' ? 'PRIVATE VIDEO · CLOUDFRONT' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : 'NO VIDEO ATTACHED';
+  const sourceNote = model.videoError || (isLocalVideo ? `${videoName || 'Video'} · Available in this browser session only. Select it again after refreshing.` : videoSrc ? `${videoName || 'Video'}${model.videoDimensions ? ` · ${model.videoDimensions}` : ''}` : 'Open a local video or configure a direct HTTPS source.');
   return <div className="video-box">
     <div className="video-header"><span>LIVE TAGGING CONSOLE</span><span id="videoSourceState">{sourceState}</span></div>
     <div id="videoFileStatus" className="video-source-note" role="status" aria-live="polite">{sourceNote}</div>
@@ -45,8 +45,8 @@ function VideoPanel({ model }: { model: StudioScreenModel }) {
         <div className="fakepitch">
           <div className="field" /><div className="video-stamp">MESSI CUP · {model.number}</div>
           <strong>Ready for kickoff.</strong>
-          <p>Upload a video to begin frame-accurate tagging.</p>
-          <button className="button primary tiny" onClick={() => window.chooseVideo?.()}><Icon name="video" /> UPLOAD PRIVATE VIDEO</button>
+          <p>Open a video on this device to begin frame-accurate tagging.</p>
+          <button className="button primary tiny" onClick={() => window.chooseVideo?.()}><Icon name="video" /> OPEN LOCAL VIDEO</button>
         </div>}
     </div>
     <div className="video-controls">

@@ -23,7 +23,7 @@ export default function App() {
         id="videofile"
         type="file"
         accept="video/*,.mp4,.m4v,.mov,.webm,.mkv,.avi"
-        aria-label="Choose a video to upload for the current match"
+        aria-label="Choose a local video for the current match"
         hidden
       />
     </>

@@ -855,9 +855,6 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
  overflow-wrap:anywhere;
 }
 .app-focus .video-source-note:empty{display:none!important;}
-.app-focus .video-box .vidframe video::-webkit-media-controls-panel{
- background-color:#1d1d1f;
-}
 @media(max-width:680px){
  .app-focus .vidframe.video-native-frame{
    height:auto!important;min-height:0!important;max-height:none!important;

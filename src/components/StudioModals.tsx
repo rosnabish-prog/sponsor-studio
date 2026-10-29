@@ -66,7 +66,7 @@ function TaskModal({ task, data, fixtures }: Extract<DialogModel, { type: 'task'
       <Field title="Sponsor visibility analyst"><select id="tsponsor" defaultValue={task?.sponsorAnalystId || ''}><Options users={data.users} /></select><small>Assign the same person in both fields for an all-in-one task.</small></Field>
       <Field title="Events & camera analyst"><select id="tcontext" defaultValue={task?.contextAnalystId || ''}><Options users={data.users} /></select><small>Or assign separately for two synchronized work streams.</small></Field>
       <Field title="Video source"><select id="taskvideosrc" defaultValue={task?.videoType || 'none'}><option value="none">Attach video later</option><option value="https">Direct HTTPS video URL</option><option value="ftp">FTP / SFTP source (metadata)</option><option value="s3">Private AWS S3 video</option></select></Field>
-      <Field title="Source URL (optional)"><input id="taskurl" defaultValue={task?.videoType==='s3'?'':task?.videoUrl||''} placeholder="https://… or sftp://…" /><small>Use Attach Video in Annotation Studio to securely upload to S3.</small></Field>
+      <Field title="Source URL (optional)"><input id="taskurl" defaultValue={task?.videoType==='s3'?'':task?.videoUrl||''} placeholder="https://… or sftp://…" /><small>You can also open a local video in Annotation Studio.</small></Field>
     </div></div>
     <Footer><Cancel /><Save>{task ? 'Save changes' : 'Create task'}</Save></Footer>
   </form>;
