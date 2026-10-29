@@ -330,6 +330,114 @@ input[type="range"]{accent-color:#e6e6e6!important}.toast{background:#ddd!import
  .app-focus .chip-group-title small{display:none}
 }
 
+
+/* Sponsor Studio vNext: non-sticky player, compact sponsor cards, one task actions menu */
+.app-focus .studio-grid{
+ display:grid!important;grid-template-columns:minmax(0,1fr) clamp(190px,19vw,260px)!important;
+ gap:12px!important; height:auto!important; min-height:0!important;
+ overflow:visible!important; align-items:start!important;
+}
+.app-focus .studio-media-column{
+ height:auto!important;min-height:0!important;overflow:visible!important;
+ overscroll-behavior:auto!important;padding:0 0 24px!important;
+}
+.app-focus .studio-media-column > .video-box{
+ position:static!important;top:auto!important;z-index:auto!important;
+ box-shadow:none!important;
+}
+.app-focus .sponsor-rail{
+ display:block!important;height:auto!important;max-height:min(73vh,680px)!important;
+ min-height:0!important;position:static!important;overflow:hidden!important;
+ box-shadow:none!important;padding:0!important;
+}
+.app-focus .sponsor-rail .rail-scroll{
+ display:block!important;height:auto!important;max-height:min(73vh,680px)!important;
+ overflow-y:auto!important;padding:8px!important;
+}
+.app-focus .rail-cards{
+ display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+ gap:7px!important;
+}
+.app-focus .rail-brand{
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ min-height:0!important;height:58px!important;aspect-ratio:auto!important;
+ padding:5px 8px!important;border-radius:3px!important;position:relative!important;
+ background:#181818!important;box-shadow:0 2px 8px #0009!important;
+}
+.app-focus .rail-brand.isactive{
+ background:#15261c!important;border-color:#39bf85!important;
+ box-shadow:0 0 0 1px #329a6c,0 2px 8px #0009!important;
+}
+.app-focus .rail-logo{display:grid!important;place-items:center!important;width:100%!important;height:100%!important;min-height:0!important;padding:0!important;}
+.app-focus .rail-logo .tinylogo{
+ display:grid!important;place-items:center!important;width:100%!important;
+ height:44px!important;min-height:0!important;background:transparent!important;
+ border-radius:0!important;box-shadow:none!important;
+}
+.app-focus .rail-logo .tinylogo img{
+ display:block!important;max-width:100%!important;max-height:44px!important;
+ width:auto!important;height:auto!important;object-fit:contain!important;
+ background:transparent!important;filter:drop-shadow(0 2px 5px #000c)!important;
+}
+.app-focus .rail-state-dot{
+ display:block;position:absolute;top:5px;right:5px;
+ width:7px;height:7px;border-radius:50%;pointer-events:none;
+}
+.app-focus .rail-state-dot.off{background:#d95561;}
+.app-focus .rail-state-dot.on{background:#44d89b;box-shadow:0 0 6px #44d89b80;}
+.app-focus .studio-head .studio-title-layout{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:18px;flex-wrap:nowrap!important;}
+.app-focus .studio-head .studio-title-layout > div:first-child{min-width:0;flex:1;}
+.app-focus .task-actions-dropdown{position:relative;flex:0 0 auto;z-index:50;padding-top:10px;}
+.app-focus .task-actions{position:relative;}
+.app-focus .task-actions > summary{
+ display:flex;align-items:center;justify-content:space-between;gap:14px;
+ cursor:pointer;list-style:none;user-select:none;
+ padding:9px 13px;background:#131313;color:#f2f2f2;
+ border:1px solid #555;min-width:116px;
+ font:800 13px 'Barlow Condensed',Impact,sans-serif;letter-spacing:.08em;
+}
+.app-focus .task-actions > summary::-webkit-details-marker{display:none}
+.app-focus .task-actions[open] > summary{background:#eee;color:#111;border-color:#eee;}
+.app-focus .menu-glyph{font-size:22px;line-height:9px;letter-spacing:1px;}
+.app-focus .task-menu-content{
+ position:absolute;right:0;top:calc(100% + 4px);width:min(285px,calc(100vw - 32px));
+ padding:6px;background:#141414;border:1px solid #555;z-index:200;
+ box-shadow:0 16px 42px #000e;display:grid;gap:2px;
+}
+.app-focus .task-menu-content button{
+ display:flex;align-items:center;gap:9px;min-height:36px;
+ padding:10px 12px;text-align:left;border:0;background:transparent;
+ color:#ddd;font:700 12px ui-monospace,monospace;text-transform:uppercase;
+ letter-spacing:.035em;cursor:pointer;
+}
+.app-focus .task-menu-content button:hover{background:#303030;color:#fff;}
+.app-focus .task-menu-content button .ic{width:16px;height:16px;}
+.app-focus .task-menu-content .task-menu-complete{
+ color:#9ce7c5;background:#15251c;
+}
+.app-focus .task-menu-separator{border-top:1px solid #424242;margin:5px 0;}
+.app-focus .toast,.toast{
+ background:#171717!important;color:#fafafa!important;
+ border:1px solid #555!important;border-radius:5px!important;
+ font:700 12px ui-monospace,monospace!important;
+ box-shadow:0 12px 26px #0009!important;
+}
+@media(max-width:950px){
+ .app-focus .studio-grid{grid-template-columns:minmax(0,1fr) 185px!important;height:auto!important}
+ .app-focus .rail-cards{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+ .app-focus .rail-brand{height:50px!important;padding:3px 5px!important}
+ .app-focus .rail-logo .tinylogo,.app-focus .rail-logo .tinylogo img{max-height:38px!important;height:38px!important}
+}
+@media(max-width:650px){
+ .app-focus .studio-grid{display:flex!important;flex-direction:column!important;height:auto!important;overflow:visible!important}
+ .app-focus .sponsor-rail{height:auto!important;max-height:210px!important;flex:none!important;width:100%!important;}
+ .app-focus .sponsor-rail .rail-scroll{max-height:205px!important}
+ .app-focus .rail-cards{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+ .app-focus .rail-brand{height:55px!important}
+ .app-focus .studio-title-layout{gap:9px!important}
+ .app-focus .task-actions > summary{min-width:81px;padding:8px;font-size:11px}
+ .app-focus .task-actions-dropdown{padding-top:4px}
+}
 </style>
 </head>
 <body>
@@ -490,7 +598,7 @@ function fixtureCatalog(){
  return `<section class="fixture-catalog"><div class="sectionhead"><div><div class="eyebrow">SCHEDULE / LIVE DATA SNAPSHOT</div><h2>MATCH CATALOG</h2><p class="sub">Browse by match date, then create an annotation task for a fixture. Published data can change. Times shown in Eastern Time (ET).</p></div><span class="tag">${esc(fixtureSyncLabel)} · ${OFFICIAL_FIXTURES.length} matches</span></div><div class="fixture-days"><button class="chip ${fixtureDay==='all'?'active':''}" onclick="chooseFixtureDay('all')">ALL DAYS</button>${byDay.map(d=>`<button class="chip ${fixtureDay===d?'active':''}" onclick="chooseFixtureDay('${d}')">${esc(d)}</button>`).join('')}</div><div class="fixture-cards">${visible.map(f=>`<article class="fixture-card"><div class="fixture-date">${esc(f.id)} · ${esc(f.date)} · ${esc(f.time||'Time TBD')} ET <span>${esc(f.stage||f.group||'')}</span></div><div class="fixture-line">${crest(f.home)}<b>${esc(f.home)}</b><strong>${esc(f.score||'VS')}</strong><b>${esc(f.away)}</b>${crest(f.away)}</div><div class="fixture-bottom"><span>${esc(f.venue||'Venue TBD')} · ${esc(f.status||'Scheduled')}</span><button class="button ghost tiny" onclick="openFixtureTask('${esc(f.id)}')">CREATE TASK +</button></div></article>`).join('')||'<p class="muted">No published matches on this date.</p>'}</div></section>`;
 }
 window.setFilter=s=>{taskFilter=s;render()};
-function studio(){let t=currentTask();if(!t)return dashboard();const allS=sponsorFor(t),allE=eventsFor(t),allC=camerasFor(t);let activeS=allS.filter(s=>t.sponsors.some(x=>x.sponsorId===s.id&&x.end==null));let activeE=allE.filter(e=>t.events.some(x=>x.eventId===e.id&&x.end==null));let activeC=t.cameras.find(x=>x.end==null);let useVideo=localVideos[t.id]||(t.videoType==='https'&&t.videoUrl? t.videoUrl:null);let allowS=canEdit(t,'sponsors'),allowC=canEdit(t,'context');return `<div class="studio-head"><div class="row between wrap"><div><div class="eyebrow">ANNOTATION STUDIO / ${esc(t.number)}</div><h1>${esc(t.name)}</h1><div class="studio-meta">${statusHTML(t)} <span>${esc(t.date||'Date not specified')}</span><span>·</span><span>${fmt(t.duration)} expected video length</span><span>·</span><span>Sponsors: ${esc(nameUser(t.sponsorAnalystId))}</span><span>·</span><span>Context: ${esc(nameUser(t.contextAnalystId))}</span></div></div><div class="task-actions-dropdown"><details class="task-actions" id="taskActionMenu"><summary aria-label="Task actions"><span>ACTIONS</span><span class="menu-glyph" aria-hidden="true">⋯</span></summary><div class="task-menu-content">
+function studio(){let t=currentTask();if(!t)return dashboard();const allS=sponsorFor(t),allE=eventsFor(t),allC=camerasFor(t);let activeS=allS.filter(s=>t.sponsors.some(x=>x.sponsorId===s.id&&x.end==null));let activeE=allE.filter(e=>t.events.some(x=>x.eventId===e.id&&x.end==null));let activeC=t.cameras.find(x=>x.end==null);let useVideo=localVideos[t.id]||(t.videoType==='https'&&t.videoUrl? t.videoUrl:null);let allowS=canEdit(t,'sponsors'),allowC=canEdit(t,'context');return `<div class="studio-head"><div class="row between studio-title-layout"><div><div class="eyebrow">ANNOTATION STUDIO / ${esc(t.number)}</div><h1>${esc(t.name)}</h1><div class="studio-meta">${statusHTML(t)} <span>${esc(t.date||'Date not specified')}</span><span>·</span><span>${fmt(t.duration)} expected video length</span><span>·</span><span>Sponsors: ${esc(nameUser(t.sponsorAnalystId))}</span><span>·</span><span>Context: ${esc(nameUser(t.contextAnalystId))}</span></div></div><div class="task-actions-dropdown"><details class="task-actions" id="taskActionMenu"><summary aria-label="Task actions"><span>ACTIONS</span><span class="menu-glyph" aria-hidden="true">⋯</span></summary><div class="task-menu-content">
 <button type="button" onclick="closeTaskMenu();chooseVideo()">${icons('video')} LOAD FOOTAGE</button>
 <button type="button" onclick="closeTaskMenu();exportTask('${t.id}')">${icons('download')} EXPORT JSON</button>
 <button type="button" class="task-menu-complete" onclick="closeTaskMenu();submitMyTask()">${icons('check')} MARK COMPLETE</button>
@@ -498,19 +606,18 @@ ${me().role==='admin'?`<button type="button" onclick="closeTaskMenu();addSponsor
 <div class="task-menu-separator"></div>
 <button type="button" onclick="closeTaskMenu();navigate('tasks')">← ALL TASKS</button>
 </div></details></div></div></div><div class="studio-grid"><div class="studio-media-column"><div class="video-box"><div class="video-header"><span>LIVE TAGGING CONSOLE</span><span>${t.videoType==='ftp'?'FTP LINK — INGEST REQUIRED':useVideo?'VIDEO SOURCE ATTACHED':'NO VIDEO ATTACHED'}</span></div><div class="vidframe">${useVideo?`<video id="matchVideo" preload="metadata" ${''} playsinline src="${esc(useVideo)}"></video>`:`<div class="fakepitch"><div class="field"></div><div class="video-stamp">MESSI CUP · ${esc(t.number)}</div><strong>Ready for kickoff.</strong><p>Attach a video to begin frame-accurate tagging.</p><button class="button primary tiny" onclick="chooseVideo()">${icons('video')} Attach video file</button></div>`}</div><div class="video-controls"><button onclick="togglePlay()" title="Play / Pause" id="playbutton">${icons('play')}</button><button onclick="skipByStep(-1)" aria-label="Seek backward" title="Seek backward"><span class="skip-number" id="skipBack">−5s</span></button><input class="seek" id="seek" aria-label="Video timestamp" type="range" min="0" max="${t.duration}" value="${tick}" step="0.1" oninput="seekVideo(this.value)"><button onclick="skipByStep(1)" aria-label="Seek forward" title="Seek forward"><span class="skip-number" id="skipForward">+5s</span></button><span class="vidtime" id="vidtime">${fmt(tick)} / ${fmt(t.duration)}</span><div class="skip-setting" role="group" aria-label="Seek step"><span>STEP</span><button class="active" id="seekstep-5" onclick="setSeekStep(5)" aria-pressed="true">5 SEC</button><button id="seekstep-10" onclick="setSeekStep(10)" aria-pressed="false">10 SEC</button></div><button class="rate" onclick="cycleRate()" id="rateButton">1×</button></div></div><div class="card cardpad studio-maincard"><div class="tag-toolbar"><div><h2>Fast-tag controls</h2><p class="sub">Events and camera angles are timed intervals. Tap once to start, again to stop; switching cameras closes the previous view.</p></div><div class="segmented"><button class="${studioTab==='all'?'on':''}" onclick="setStudioTab('all')">All</button><button class="${studioTab==='sponsors'?'on':''}" onclick="setStudioTab('sponsors')">Sponsors</button><button class="${studioTab==='events'?'on':''}" onclick="setStudioTab('events')">Events</button><button class="${studioTab==='cameras'?'on':''}" onclick="setStudioTab('cameras')">Camera</button></div></div><div class="contextline">${icons('clock')} Current video timestamp <b id="currentT">${fmt(tick)}</b> <span style="margin-left:auto">${allowS?'Sponsor tagging enabled':'Sponsor tagging view only'} · ${allowC?'Context tagging enabled':'Context view only'}</span></div><div id="controlsBody">${controlsHTML(t)}</div><div class="tline-wrap"><div class="sectionhead"><div><h3>Unified match timeline</h3><p class="sub">One shared time axis · switch visible layers using the controls above</p></div><div class="tline-legend"><span><i class="key" style="background:#ff4383"></i>Sponsors</span><span><i class="key" style="background:#8464ed"></i>Events</span><span><i class="key" style="background:#41bce3"></i>Cameras</span></div></div><div id="timelineBody">${timelineHTML(t)}</div></div></div><div class="card cardpad" style="margin-top:17px"><div class="sectionhead"><h2>Recorded actions</h2><span class="tag" id="logcount">${t.sponsors.length+t.events.length+t.cameras.length} logs</span></div><div id="logBody">${logsHTML(t)}</div></div></div><aside class="sponsor-rail" aria-label="Sponsor tagging sidebar"><div id="sponsorRail" class="rail-scroll">${sponsorRailHTML(t)}</div></aside></div>`}
-function sponsorRailHTML(t) {
- const sponsors=sponsorFor(t),canTag=canEdit(t,'sponsors'),groups=new Map();
- for(const sp of sponsors){const name=sp.groupName||'Other';if(!groups.has(name))groups.set(name,[]);groups.get(name).push(sp)}
+function sponsorRailHTML(t){
+ const sponsors=sponsorFor(t),canTag=canEdit(t,'sponsors');
  if(!sponsors.length)return '<div class="rail-empty">No sponsors assigned to this match.</div>';
- return [...groups.entries()].map(([group,items])=>`<section class="rail-group">
-  <div class="rail-group-heading"><span>${esc(group)}</span><small>${items.length} BRANDS</small></div>
-  <div class="rail-cards">${items.map(sp=>{
-   const active=t.sponsors.some(row=>row.sponsorId===sp.id&&row.end==null);
-   return `<button class="rail-brand ${active?'isactive':''}" type="button" onclick="tagSponsor('${esc(sp.id)}')" ${canTag?'':'disabled'} aria-pressed="${active}" title="${esc(sp.name)} / ${active?'Visible':'Not visible'}">
-    <span class="rail-logo">${logo(sp)}</span>
-    <span class="rail-brand-footer"><span class="rail-brand-name">${esc(sp.name)}</span><span class="rail-state ${active?'on':'off'}"><i></i>${active?'LIVE':'OFF'}</span></span>
-   </button>`;
-  }).join('')}</div></section>`).join('');
+ return `<div class="rail-cards">${sponsors.map(sp=>{
+  const active=t.sponsors.some(row=>row.sponsorId===sp.id&&row.end==null);
+  return `<button class="rail-brand ${active?'isactive':''}" type="button"
+  onclick="tagSponsor('${esc(sp.id)}')" ${canTag?'':'disabled'}
+  aria-label="${esc(sp.name)} — ${active?'Visible':'Not visible'}"
+  aria-pressed="${active}" title="${esc(sp.name)} · ${active?'Visible':'Not visible'}">
+  <span class="rail-logo">${logo(sp)}</span><span class="rail-state-dot ${active?'on':'off'}" aria-hidden="true"></span>
+  </button>`;
+ }).join('')}</div>`;
 }
 function controlsHTML(t){
  const events=eventsFor(t),cameras=camerasFor(t),canTag=canEdit(t,'context');
