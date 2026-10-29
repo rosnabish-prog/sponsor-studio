@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import React from 'react';
+import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { createRoot } from 'react-dom/client';
+import { JSDOM } from 'jsdom';
 import { readStudioRoute, writeStudioRoute } from '../src/state/routes';
 import { computeInsights } from '../src/domain/analytics';
 import { ExposureReport } from '../src/components/ReportWidgets';
@@ -90,15 +92,61 @@ test('timelines contain only annotated tracks, one shared cursor, and a layer fi
 test('exposure chart scales to observed values and offers selectable time windows', () => {
   const sources={sponsors:data.sponsorGroups[0].sponsors,events:data.eventGroups[0].items,cameras:data.cameraGroups[0].items};
   const stats=computeInsights(task,sources);
+  const report=renderToStaticMarkup(<ExposureReport task={task} source={sources} focusId="" />);
+  const trend=report.split('WHERE SPONSORS APPEAR IN THE MATCH')[1].split('BRAND EXPOSURE LEADERBOARD')[0];
+  assert.match(trend,/TIME INTERVAL/);
+  assert.match(trend,/id="exposureInterval"/);
+  assert.match(trend,/BRAND FILTER/);
+  assert.ok(trend.indexOf('id="exposureInterval"') < trend.indexOf('exposure-curve-chart'));
+  assert.match(trend,/1 minute/);
+  assert.match(trend,/30 minutes/);
   const chart=renderToStaticMarkup(<ExposureTrend data={stats} focusId="" />);
-  assert.match(chart,/TIME INTERVAL/);
-  assert.match(chart,/1 minute/);
-  assert.match(chart,/30 minutes/);
-  assert.match(chart,/20% vertical scale/);
+  assert.match(chart,/data-max-percent="20"/);
   assert.match(chart,/visibility peaked at 9\.3% during 00:00–05:00/);
+  const minute=renderToStaticMarkup(<ExposureTrend data={stats} focusId="" windowSeconds={60} />);
+  assert.match(minute,/data-max-percent="60"/);
+  assert.match(minute,/46\.7% during 00:00–01:00/);
   const fullCoverage={...task,sponsors:[{...task.sponsors[0],start:0,end:300}]};
   const full=renderToStaticMarkup(<ExposureTrend data={computeInsights(fullCoverage,sources)} focusId="" />);
-  assert.match(full,/100% vertical scale/);
+  assert.match(full,/data-max-percent="100"/);
+});
+
+test('chart hover gives sponsor name, interval coverage and recorded duration', async () => {
+  const sources={sponsors:data.sponsorGroups[0].sponsors,events:data.eventGroups[0].items,cameras:data.cameraGroups[0].items};
+  const stats=computeInsights(task,sources);
+  const previousWindow=globalThis.window;
+  const previousDocument=globalThis.document;
+  const previousAct=(globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT;
+  const dom=new JSDOM('<div id="mount"></div>',{url:'http://localhost/'});
+  (globalThis as unknown as {window:Window}).window=dom.window as unknown as Window;
+  (globalThis as unknown as {document:Document}).document=dom.window.document;
+  (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
+  const container=dom.window.document.getElementById('mount')!;
+  const root=createRoot(container);
+  try {
+    await act(async()=>root.render(<ExposureTrend data={stats} focusId=""/>));
+    const svg=container.querySelector('svg.exposure-curve-chart') as SVGSVGElement;
+    svg.getBoundingClientRect=()=>({left:0,top:0,right:920,bottom:260,width:920,height:260,x:0,y:0,toJSON(){return {};}});
+    await act(async()=>svg.dispatchEvent(new dom.window.MouseEvent('mousemove',{bubbles:true,clientX:200,clientY:120})));
+    const tooltip=container.querySelector('[data-chart-tooltip="sponsors"]');
+    assert.ok(tooltip,'hover reveals an exposure detail panel');
+    assert.match(tooltip.textContent||'',/00:00 – 05:00/);
+    assert.match(tooltip.textContent||'',/Recorded Brand/);
+    assert.match(tooltip.textContent||'',/9\.3%/);
+    assert.match(tooltip.textContent||'',/00:28/);
+    await act(async()=>root.render(<ExposureReport task={task} source={sources} focusId=""/>));
+    const select=container.querySelector<HTMLSelectElement>('#exposureInterval')!;
+    assert.equal(select.value,'300');
+    select.value='60';
+    await act(async()=>select.dispatchEvent(new dom.window.Event('change',{bubbles:true})));
+    assert.equal(container.querySelector('svg.exposure-curve-chart')?.getAttribute('data-max-percent'),'60');
+  }finally{
+    await act(async()=>root.unmount());
+    (globalThis as unknown as {window:Window}).window=previousWindow;
+    (globalThis as unknown as {document:Document}).document=previousDocument;
+    (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=previousAct;
+    dom.window.close();
+  }
 });
 
 test('events and camera buttons remain available together in complementary panels', () => {
@@ -113,6 +161,7 @@ test('events and camera buttons remain available together in complementary panel
 
 test('studio assignments explain each role and workspace creation is hidden', () => {
   const page=renderToStaticMarkup(<AnnotationStudioScreen model={studio} isAdmin />);
+  assert.ok(page.indexOf('class="studio-head"') > page.indexOf('class="studio-media-column"'));
   assert.match(page,/Sponsor tagging: Assigned to Worker/);
   assert.match(page,/Events &amp; cameras: Assigned to Worker/);
   assert.doesNotMatch(page,/Sponsors: Worker|Context: Worker/);

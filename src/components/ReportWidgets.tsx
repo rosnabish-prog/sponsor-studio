@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import type { ReportsScreenModel } from '../types/screen';
 import type { TaskSummary } from '../types/models';
 import { computeInsights, type InsightData, type InsightSources } from '../domain/analytics';
 import { formatTimestamp as fmt } from '../domain/intervals';
 import { BrandLogo } from './StudioWidgets';
-import { ExposureTrend } from './ExposureTrend';
+import { ExposureTrend, exposureWindows, type TimeWindow } from './ExposureTrend';
 
 const percent = (n: number) => `${(Number.isFinite(n) ? n : 0).toFixed(1)}%`;
 function Section({ title, note, aside, children, className = '' }: { title: string; note: string; aside?: React.ReactNode; children: React.ReactNode; className?: string }) {
@@ -32,6 +33,7 @@ function Breakdown({ rows, total, quality = false }: { rows: { key: string; labe
 }
 
 export function ExposureReport({ task, source, focusId }: { task: TaskSummary; source: InsightSources; focusId: string }) {
+  const [windowSeconds, setWindowSeconds] = useState<TimeWindow>(300);
   const d = computeInsights(task, source);
   const focus = d.active.find(brand => brand.id === focusId);
   const incomplete = !(task.submitted?.sponsors && task.submitted?.context);
@@ -60,9 +62,14 @@ export function ExposureReport({ task, source, focusId }: { task: TaskSummary; s
     </div>
     <div className="insight-stat-grid">{cards.map(card => <article className="insight-stat" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><p>{card.note}</p></article>)}</div>
     <Section title="WHERE SPONSORS APPEAR IN THE MATCH" note={focus ? `${focus.name} was visible for ${fmt(focus.seconds)} (${percent(d.pct(focus.seconds,d.videoSeconds))} of the broadcast).` : d.active.length ? `${fmt(d.coveredSeconds)} of ${fmt(d.videoSeconds)} has recorded sponsor visibility across ${d.active.length} brands.` : 'No sponsor exposure has been recorded in this match.'} className="insight-trend"
-      aside={<label className="insight-select">BRAND FILTER<select id="insightSponsorFilter" value={focusId} onChange={event => window.selectInsightSponsor?.(event.target.value)}>
-        <option value="">ALL SPONSORS</option>{d.active.map(brand => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></label>}>
-      <ExposureTrend data={d} focusId={focusId} />
+      aside={<div className="insight-trend-filters">
+        <label className="insight-select" htmlFor="exposureInterval">TIME INTERVAL<select id="exposureInterval" value={windowSeconds} onChange={event => setWindowSeconds(Number(event.target.value) as TimeWindow)}>
+          {exposureWindows.map(item => <option key={item.seconds} value={item.seconds}>{item.label}</option>)}
+        </select></label>
+        <label className="insight-select" htmlFor="insightSponsorFilter">BRAND FILTER<select id="insightSponsorFilter" value={focusId} onChange={event => window.selectInsightSponsor?.(event.target.value)}>
+          <option value="">ALL SPONSORS</option>{d.active.map(brand => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></label>
+      </div>}>
+      <ExposureTrend data={d} focusId={focusId} windowSeconds={windowSeconds} />
       <div className="insight-trend-footer"><span>FIRST FRAME 00:00</span><span>{focus?.name.toUpperCase() || 'ANY SPONSOR VISIBLE'}</span><span>FINAL FRAME {fmt(d.videoSeconds)}</span></div>
     </Section>
     <Section title="BRAND EXPOSURE LEADERBOARD" note="Only brands with measurable positive-duration exposure. Share of voice is brand seconds divided by combined brand seconds." aside={<span className="insight-count">{d.active.length} BRANDS RECORDED</span>}>

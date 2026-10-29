@@ -67,8 +67,9 @@ function VideoPanel({ model }: { model: StudioScreenModel }) {
 const tabs = [['all', 'All'], ['sponsors', 'Sponsors'], ['events', 'Events'], ['cameras', 'Camera']] as const;
 
 export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boolean }) {
-  return <>
-    <div className="studio-head">
+  return <div className="studio-grid">
+    <div className="studio-media-column" role="region" aria-label="Video, annotation tools, and recorded actions" tabIndex={0}>
+      <div className="studio-head">
       <div className="row between studio-title-layout">
         <div>
           <div className="eyebrow">ANNOTATION STUDIO / {model.number}</div>
@@ -83,9 +84,7 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
         </div>
         <ActionMenu model={model} isAdmin={isAdmin} />
       </div>
-    </div>
-    <div className="studio-grid">
-      <div className="studio-media-column" role="region" aria-label="Video, annotation tools, and recorded actions" tabIndex={0}>
+      </div>
         <VideoPanel model={model} />
         <div className="card cardpad studio-maincard">
           <div className="tag-toolbar">
@@ -110,8 +109,7 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
         <div className="rail-compact-heading"><h2 id="railTagTitle">{model.railTitle}</h2><p id="railTagHint">{model.railHint}</p></div>
         <div id="sponsorRail" className="rail-scroll"><StudioRail model={model} /></div>
       </aside>
-    </div>
-  </>;
+  </div>;
 }
 
 declare global {

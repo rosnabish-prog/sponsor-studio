@@ -1386,6 +1386,18 @@ select:not([multiple]):disabled{
 .exposure-curve-legend small{color:#96969d;font-size:10px;}
 .exposure-curve-chart{width:100%;height:auto;max-height:305px;display:block;overflow:visible;}
 .exposure-curve-chart text{font-family:'IBM Plex Mono',monospace;}
+.exposure-chart-stage{position:relative;min-width:0;}
+.exposure-hover-card{position:absolute;right:14px;top:15px;z-index:8;width:min(310px,calc(100% - 28px));max-height:285px;overflow:hidden;pointer-events:none;background:#29292df2;border:1px solid #696973;border-radius:13px;padding:13px 14px;box-shadow:0 12px 35px #0009;color:#f4f4f5;font:550 11px/1.5 'Manrope',sans-serif;}
+.exposure-hover-card>strong{display:block;color:#fff;font:800 13px 'IBM Plex Mono',monospace;margin-bottom:4px;}
+.exposure-hover-total{display:block;color:#ffd0a1;font-size:11px;margin-bottom:9px;}
+.exposure-hover-brands{display:flex;flex-direction:column;gap:5px;max-height:185px;overflow:hidden;}
+.exposure-hover-brand{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;}
+.exposure-hover-brand-name{display:flex;align-items:center;gap:7px;min-width:0;}
+.exposure-hover-brand-name b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;}
+.exposure-hover-brand-name img,.exposure-hover-brand-name i{width:18px;height:18px;object-fit:contain;display:block;flex:0 0 18px;border-radius:4px;}
+.exposure-hover-brand>span:last-child{font-family:'IBM Plex Mono',monospace;white-space:nowrap;color:#fff;}
+.exposure-hover-brand small{color:#bfc0c8;font-size:10px;}
+.exposure-hover-empty{color:#aaaab2;}
 .exposure-curve-caption,.exposure-curve-empty{font:500 11px/1.6 'Manrope',sans-serif;color:#aaaab2;margin:8px 0 0;}
 .exposure-curve-empty{padding:10px 12px;background:#2a2729;border:1px solid #464347;border-radius:9px;}
 @media(max-width:700px){
@@ -1407,40 +1419,65 @@ select:not([multiple]):disabled{
 .timeline-global-playhead::before{content:'';position:absolute;left:-3px;top:0;width:8px;height:8px;border-radius:50%;background:#f2f2f2;box-shadow:0 0 0 2px #222225;}
 @media(max-width:650px){.timeline-global-playhead-area{left:97px;}}
 
-/* The chart and annotation timeline use the same select affordance. */
-.exposure-curve-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:3px 0 14px;}
-.exposure-curve-tools label{font:750 10px 'Manrope',sans-serif;color:#babac1;letter-spacing:.05em;}
-.exposure-curve-tools select,.timeline-filter select{
+/* Both reporting controls sit together in the chart header, with readable options. */
+.insight-trend-filters{display:flex;align-items:flex-end;justify-content:flex-end;flex-wrap:wrap;gap:12px;}
+.insight-trend-filters .insight-select{font:750 10px 'IBM Plex Mono',monospace;letter-spacing:.03em;gap:6px;min-width:160px;}
+.insight-trend-filters .insight-select select{width:180px!important;max-width:100%;min-width:0!important;}
+.insight-trend-filters .insight-select option{background:#252528!important;color:#fff!important;font:600 13px 'Manrope',sans-serif!important;}
+.insight-trend-filters .insight-select select,.timeline-filter select{
  appearance:none!important;
  background-color:#252528!important;
  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23dedee3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")!important;
  background-repeat:no-repeat!important;background-position:right 14px center!important;
  border:1px solid #48484d!important;border-radius:10px!important;
- color:#eee!important;padding:10px 44px 10px 13px!important;
- font:650 12px 'Manrope',sans-serif!important;min-height:42px;
+ color:#eee!important;padding:9px 44px 9px 13px!important;
+ font:650 12px 'Manrope',sans-serif!important;min-height:39px;
 }
-.exposure-curve-tools select{min-width:148px;}
-.exposure-curve-tools select:focus-visible,.timeline-filter select:focus-visible{outline:2px solid var(--orange);outline-offset:2px;}
+.insight-trend-filters select:focus-visible,.timeline-filter select:focus-visible{outline:2px solid var(--orange);outline-offset:2px;}
 .studio-secondary-controls{padding-top:3px!important;}
 
-/* Studio page scrolls as one document. The task title and Actions leave the
-   viewport normally; the right tagging rail follows until its sticky offset. */
-@media(min-width:681px){
- html:has(.app-focus),body:has(.app-focus){height:auto!important;min-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;}
- .app-focus{display:block!important;height:auto!important;min-height:100dvh!important;max-height:none!important;overflow:visible!important;}
- .app-focus .focusbar{position:sticky!important;top:0!important;z-index:30!important;}
- .app-focus .focuscontent{display:block!important;height:auto!important;min-height:0!important;overflow:visible!important;padding-bottom:65px!important;}
- .app-focus .studio-head{margin-bottom:18px!important;}
- .app-focus .studio-grid{height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important;align-items:start!important;}
- .app-focus .studio-media-column{height:auto!important;max-height:none!important;overflow:visible!important;min-height:0!important;}
- .app-focus .sponsor-rail{height:auto!important;min-height:0!important;overflow-y:auto!important;max-height:calc(100dvh - 92px)!important;}
+/* Match name typography follows the catalog: Barlow Condensed team labels,
+   IBM Plex for the small central versus marker and metadata. */
+.fixture-mini,.match-tile-match .fixture-mini{grid-template-columns:minmax(0,1fr) 42px minmax(0,1fr)!important;gap:8px!important;}
+.fixture-mini .fixture-mini-name,.taskrow .info .fixture-mini-name{
+ font:750 18px/1.15 'Barlow Condensed',Impact,sans-serif!important;
+ text-transform:uppercase!important;letter-spacing:.005em!important;
 }
+.fixture-mini .vstag,.match-tile-match .fixture-mini .vstag{font:750 11px/1 'IBM Plex Mono',monospace!important;min-width:42px;justify-self:center;align-self:center;text-align:center;}
+.fixture-line{grid-template-columns:34px minmax(0,1fr) minmax(42px,auto) minmax(0,1fr) 34px!important;gap:9px!important;align-items:center;}
+.fixture-line b{font:750 18px/1.12 'Barlow Condensed',Impact,sans-serif!important;text-transform:uppercase!important;min-width:0;overflow-wrap:anywhere;}
+.fixture-line strong{font:800 17px/1 'IBM Plex Mono',monospace!important;justify-self:center;align-self:center;text-align:center;white-space:nowrap;}
+.match-club h2{font-family:'Barlow Condensed',Impact,sans-serif!important;text-transform:uppercase!important;}
+
+/* The main header stays fixed. The full left workspace (including match title
+   and Actions) and right tagging rail scroll independently underneath it. */
 @media(min-width:900px){
- .app-focus .studio-grid{display:grid!important;grid-template-columns:minmax(0,1fr) clamp(230px,21vw,310px)!important;gap:15px!important;}
- .app-focus .sponsor-rail{position:sticky!important;top:80px!important;align-self:start!important;}
+ html:has(.app-focus),body:has(.app-focus){height:100%!important;overflow:hidden!important;}
+ .app-focus{height:100dvh!important;min-height:0!important;max-height:100dvh!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;}
+ .app-focus .focusbar{position:relative!important;top:auto!important;flex:0 0 auto!important;z-index:30!important;}
+ .app-focus .focuscontent{display:flex!important;flex-direction:column!important;flex:1 1 0%!important;min-height:0!important;height:auto!important;overflow:hidden!important;padding-top:12px!important;padding-bottom:12px!important;}
+ .app-focus .studio-grid{display:grid!important;grid-template-columns:minmax(0,1fr) clamp(230px,21vw,310px)!important;gap:15px!important;align-items:stretch!important;flex:1 1 0%!important;height:0!important;min-height:0!important;max-height:100%!important;overflow:hidden!important;}
+ .app-focus .studio-media-column{height:100%!important;max-height:100%!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior-y:contain!important;padding:0 6px 22px 0!important;}
+ .app-focus .studio-media-column .studio-head{margin:5px 0 18px!important;}
+ .app-focus .sponsor-rail{position:relative!important;top:auto!important;align-self:stretch!important;height:100%!important;max-height:100%!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior-y:contain!important;}
 }
 @media(min-width:681px) and (max-width:899px){
+ html:has(.app-focus),body:has(.app-focus){height:auto!important;overflow-y:auto!important;}
+ .app-focus{height:auto!important;max-height:none!important;min-height:100dvh!important;overflow:visible!important;display:block!important;}
+ .app-focus .focuscontent{height:auto!important;min-height:0!important;overflow:visible!important;display:block!important;}
  .app-focus .studio-grid{display:flex!important;flex-direction:column!important;gap:13px!important;}
- .app-focus .studio-media-column,.app-focus .sponsor-rail{width:100%!important;}
- .app-focus .sponsor-rail{position:relative!important;top:auto!important;max-height:340px!important;}
+ .app-focus .studio-grid{height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important;}
+ .app-focus .studio-media-column{width:100%!important;height:auto!important;max-height:none!important;overflow:visible!important;}
+ .app-focus .sponsor-rail{width:100%!important;position:relative!important;top:auto!important;height:auto!important;max-height:340px!important;}
+}
+@media(max-width:700px){
+ .fixture-mini,.match-tile-match .fixture-mini{grid-template-columns:minmax(0,1fr) 30px minmax(0,1fr)!important;gap:5px!important;}
+ .fixture-mini .fixture-mini-name{font-size:16px!important;}
+ .fixture-mini .vstag{font-size:10px!important;min-width:30px;}
+ .fixture-line b{font-size:15px!important;}
+ .insight-trend-filters{justify-content:flex-start;width:100%;}
+ .insight-trend-filters .insight-select{flex:1 1 155px;min-width:0;}
+ .insight-trend-filters .insight-select select{width:100%!important;}
+ .exposure-hover-card{top:6px;right:6px;padding:8px 10px;max-height:200px;width:min(245px,85%);}
+ .exposure-hover-brands{max-height:118px;}
 }
