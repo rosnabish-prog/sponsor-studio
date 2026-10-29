@@ -134,3 +134,29 @@ Per match, Insights now includes sponsor visibility coverage, combined exposure,
 ## In-app confirmation dialogs
 
 Deleting an attribute, sponsor, or recorded annotation, resetting demo data, submitting work, and reopening annotation streams use native **in-platform confirmation overlays** rather than browser `confirm()` popups. Cancel leaves the original data unchanged.
+
+## Prioritized Messi Cup sponsor intelligence metrics
+
+This release focuses on eight measures chosen for low-effort but commercially useful manual match review:
+
+| Metric | Definition and data source |
+| --- | --- |
+| **Sponsor visibility duration** | Unique visible seconds per sponsor, merged across intervals to avoid double counting identical placements. |
+| **Exposure frequency** | Number of separate positive-duration exposure intervals for each brand. |
+| **Average exposure duration** | Total unique visible seconds divided by appearances; distinguishes sustained exposures from flashes. |
+| **Share of visibility** | The sponsor's unique visible seconds divided by combined visible seconds of all brands. This is not the same as percentage of video. |
+| **Sponsorship placement type** | One **optional** dropdown on each sponsor annotation in Recorded Actions: LED/digital, static pitchside, jersey/kit, backdrop/interview, stadium signage, broadcast graphic, other. Insights summarizes time by placement. |
+| **Visibility quality** | One **optional** selection per annotation: clear/readable, partially readable, obscured/not readable. Insights shows duration by quality. |
+| **Exposure by match period** | Requires explicit first-half end and second-half start video-minute mapping in Admin → Edit Task. Unmapped video cannot be assigned to a half; halftime is shown separately in derived data. |
+| **High-value moment exposure** | Sponsor intersection with goal, celebration, penalty, trophy or award event intervals (based on event names), or custom event attributes explicitly marked high-value. |
+
+### Methodology and limitations
+
+- Sponsor presence is counted once per distinct brand even if multiple advertisements of that brand appear simultaneously.
+- Placement describes the **primary observed placement** for a given presence interval. This model does **not** count simultaneous same-brand placements independently, and a placement change during an interval should prompt the analyst to split it.
+- Visibility quality is a per-interval manual judgment, not a calculated clarity score. If clarity changes during an interval, split the tag.
+- Old sponsor annotations with no placement or quality selections remain unclassified. No fake category is assigned.
+- The report distinguishes percent of video with a brand from share of combined brand-visible seconds. Simultaneous different brands make the sum of brand seconds greater than footage duration.
+- Half mappings are relative to the actual **video timestamps**, not football game clock: examples 30/30 for a 60-minute video without halftime, or 30/60 for a 90-minute footage containing a 30-minute halftime interval. The mapping assumes the video begins at first-half kickoff and ends with second-half play; trim or annotate other footage separately.
+- High-value event exposure is based on interval intersections and is **not** a claim of viewership, audience impressions, sponsor ROI, or ad valuation.
+- All user accounts, photos, and annotations remain browser-local in this GitHub Pages demo, without shared cloud persistence.
