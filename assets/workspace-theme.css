@@ -1248,3 +1248,65 @@ select:not([multiple]):disabled{
  border-radius:12px;border:1px solid #78532a;
  background:#3c2b20;color:#efc59d;
 }
+
+/* The published match catalog now includes the corresponding annotation status. */
+.fixture-card .fixture-task-state{
+ display:inline-flex;
+ align-items:center;
+ gap:7px;
+ width:max-content;
+ max-width:100%;
+ margin:11px 0 8px;
+ padding:7px 10px;
+ border:1px solid #535358;
+ border-radius:999px;
+ background:#29292c;
+ color:#c2c2c7;
+ font:750 10px/1 'IBM Plex Mono',monospace;
+ letter-spacing:.025em;
+}
+.fixture-card .fixture-task-state::before{
+ content:"";
+ width:6px;height:6px;border-radius:50%;
+ background:currentColor;
+}
+.fixture-card .fixture-task-state.done{
+ background:#1b382a;
+ color:#94e9bb;
+ border-color:#42795a;
+}
+.fixture-card .fixture-task-state.progress{
+ background:#443120;
+ color:#ffc482;
+ border-color:#74532e;
+}
+.fixture-card .fixture-task-state.ready{
+ background:#303035;
+ color:#dedee4;
+ border-color:#4a4a50;
+}
+.fixture-card.fixture-task-done{
+ border-color:#3d6b53!important;
+}
+.fixture-card .fixture-bottom{
+ gap:10px;
+ flex-wrap:wrap;
+}
+.fixture-card .fixture-task-action{
+ flex:0 0 auto;
+ min-height:33px!important;
+}
+.fixture-card .fixture-task-action.fixture-completed{
+ background:#214833!important;
+ color:#9cf0c4!important;
+ border:1px solid #458966!important;
+}
+.fixture-card .fixture-task-action.fixture-completed:hover{
+ background:#315e46!important;
+ border-color:#65c797!important;
+}
+.fixture-card .fixture-stream-note{
+ color:#c5a77e;
+ font:650 10px/1.5 'IBM Plex Mono',monospace;
+ padding:0 0 10px;
+}
