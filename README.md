@@ -170,3 +170,13 @@ The Admin overview has an orange tournament fixture ribbon that opens **Matches*
 The same styling is applied to video controls, sponsor logo sidebar, timeline, event chips, admin/team setup, sponsor and attribute libraries, forms, confirmations, and detailed Insights analytics. All existing annotation rules and local JSON exports remain in place. Brand tags still indicate active intervals through an orange selected border, **without a separate visibility-status dot**. The video remains non-sticky.
 
 This is a visual redesign of the existing browser-local demonstration, **not** deployment of secure multi-device user storage or shared annotation synchronization. Refresh cached styles after deployment if the old square-edged layout persists.
+
+## Local video attachment and uncropped playback
+
+In the public GitHub Pages demonstration, **Open Local Video** opens a file picker for this specific browser session. The chosen video is passed to the browser using `URL.createObjectURL(File)` — **no file bytes are uploaded to a server or shared with another analyst**, and the browser's temporary object URL does not survive a page reload. We retain only the original filename and size as local task metadata so the UI can prompt the analyst to reconnect after reloading; selecting the same file again is supported.
+
+The annotation studio shows explicit **LOCAL VIDEO · NOT UPLOADED** source status, filename, detected resolution and actual duration after browser metadata loads, a reconnect prompt for stale local files, and an actionable video-decoding error when the file is not playable. H.264 MP4 or WebM are the safest formats for broad browser compatibility; some MOV/MKV files use codecs the browser cannot decode. Videos are streamed from the selected file by the browser; large local files are not copied into localStorage.
+
+The video player now has native playback controls and intrinsic/proportional sizing, bounded by available viewport height, with `object-fit: contain` and letterboxing rather than clipping. The placeholder still uses a 16:9 presentation, but a video with any supported aspect ratio is fit in full. The independent studio and sponsor scrolling model remains unchanged.
+
+**A true persistent shared video upload is not implemented.** Production requires authenticated object storage (for example, private AWS S3 with multipart uploads and short-lived signed permissions), shared task records and access controls. Merely choosing a local file or storing its name in the demo does not establish cloud storage.
