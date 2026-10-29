@@ -650,6 +650,15 @@ input[type="range"]{accent-color:#e6e6e6!important}.toast{background:#ddd!import
 .insight-rollup-body{border-top:1px solid #393939;padding:20px}
 .insight-rollup-note{font:500 11px/1.65 ui-monospace,monospace;color:#999;margin-top:18px}
 @media(max-width:600px){.insight-rollup>summary{padding:14px;align-items:flex-start;flex-direction:column}.insight-rollup-body{padding:11px}}
+
+/* Low-friction metadata capture in the recorded sponsor intervals */
+.exposure-attribute-inputs{display:grid;grid-template-columns:repeat(2,minmax(135px,1fr));gap:8px;min-width:300px}
+.exposure-attribute-inputs label{font:650 9px/1.5 ui-monospace,monospace;color:#949494;text-transform:uppercase;letter-spacing:.04em}
+.exposure-attribute-inputs select{display:block;margin-top:4px;width:100%;min-width:0;background:#1b1b1b;color:#ededed;border:1px solid #505050;padding:7px 8px;font:650 10px ui-monospace,monospace}
+.exposure-attribute-inputs select:focus-visible{outline:2px solid #e8e8e8}
+.exposure-meta-note{margin:12px 0 0;color:#a4a4a4;font:500 11px/1.6 ui-monospace,monospace}
+@media(max-width:780px){.exposure-attribute-inputs{min-width:195px;grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -772,6 +781,19 @@ const sponsorFor=t=>db.sponsorGroups.filter(g=>t.sponsorGroupIds.includes(g.id))
 const eventsFor=t=>db.eventGroups.filter(g=>t.eventGroupIds.includes(g.id)).flatMap(g=>g.items);
 const camerasFor=t=>db.cameraGroups.filter(g=>t.cameraGroupIds.includes(g.id)).flatMap(g=>g.items);
 const labelFor=(t,type,id)=>({sponsors:sponsorFor(t),events:eventsFor(t),cameras:camerasFor(t)})[type].find(i=>i.id===id)?.name||id;
+// Each presence interval has one optional primary placement and one optional visibility-quality rating.
+// Unclassified intervals stay unclassified; do not infer placement or readability from sponsor identity.
+const PLACEMENT_TYPES=[
+ ['led','LED / DIGITAL BOARD'],['static','STATIC PITCHSIDE BOARD'],
+ ['jersey','JERSEY / KIT'],['backdrop','BACKDROP / INTERVIEW'],
+ ['stadium','STADIUM SIGNAGE'],['graphic','BROADCAST GRAPHIC'],['other','OTHER PLACEMENT']
+];
+const VISIBILITY_QUALITIES=[
+ ['clear','CLEAR / READABLE'],['partial','PARTIALLY READABLE'],['obscured','OBSCURED / NOT READABLE']
+];
+const attributeOptions=(data,value)=>'<option value="">NOT CLASSIFIED</option>'+data.map(([key,label])=>`<option value="${key}" ${value===key?'selected':''}>${label}</option>`).join('');
+const taggedSpanSeconds=(x,endpoint)=>Math.max(0,(x.end==null?endpoint:x.end)-x.start);
+const clipOverlap=(a,b)=>Math.max(0,Math.min(a.end,b.end)-Math.max(a.start,b.start));
 const seconds=t=>clamp(tick,0,t.duration||3600);
 function intervals(arr,key,id,end){return arr.filter(x=>x[key]===id).map(x=>({start:x.start,end:x.end==null?end:x.end})).filter(x=>x.end>x.start)}
 const merged=xs=>{let z=xs.slice().sort((a,b)=>a.start-b.start),out=[];for(let x of z){if(out.length&&x.start<=out[out.length-1].end)out[out.length-1].end=Math.max(out[out.length-1].end,x.end);else out.push({...x})}return out};
@@ -870,7 +892,35 @@ let rows=[];if(studioTab==='all'||studioTab==='sponsors')for(let s of sponsorFor
 if(studioTab==='all'||studioTab==='events')for(let e of eventsFor(t))rows.push(track(e.name,t.events.filter(x=>x.eventId===e.id),'event'));
 if(studioTab==='all'||studioTab==='cameras')for(let c of camerasFor(t))rows.push(track(c.name,t.cameras.filter(x=>x.cameraId===c.id),'camera'));
 return `<div class="track-top">${[0,.25,.5,.75,1].map(x=>`<span>${fmt(dur*x)}</span>`).join('')}</div>${rows.join('')||'<div class="empty">No tracks configured</div>'}`}
-function logsHTML(t){let logs=[...t.sponsors.map(x=>({...x,type:'Sponsor',itemId:x.sponsorId,key:'sponsors',color:'#ff4383'})),...t.events.map(x=>({...x,type:'Event',itemId:x.eventId,key:'events',color:'#8464ed'})),...t.cameras.map(x=>({...x,type:'Camera',itemId:x.cameraId,key:'cameras',color:'#41bce3'}))].sort((a,b)=>b.start-a.start);return `<div class="logtable"><table class="table"><thead><tr><th>Time</th><th>Type</th><th>Attribute</th><th>End</th><th></th></tr></thead><tbody>${logs.map(x=>`<tr><td class="nowrap" style="font-weight:900">${fmt(x.start)}</td><td><span style="color:${x.color};font-weight:800">${x.type}</span></td><td>${esc(labelFor(t,x.key,x.itemId))}</td><td>${x.end==null?'<span style="color:#15ac76;font-weight:900">Recording…</span>':x.kind==='point'?'Moment':fmt(x.end)}</td><td><button class="button ghost tiny" onclick="seekVideo(${x.start})" title="Jump to time">${icons('play')}</button> ${canEdit(t,x.key==='sponsors'?'sponsors':'context')?`<button class="button ghost tiny" onclick="deleteLog('${x.key}','${x.id}')" title="Remove log">${icons('close')}</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:#999;padding:20px">No actions recorded yet</td></tr>'}</tbody></table></div>`}
+function logsHTML(t){
+ let logs=[...t.sponsors.map(x=>({...x,type:'Sponsor',itemId:x.sponsorId,key:'sponsors',color:'#ff4383'})),
+ ...t.events.map(x=>({...x,type:'Event',itemId:x.eventId,key:'events',color:'#8464ed'})),
+ ...t.cameras.map(x=>({...x,type:'Camera',itemId:x.cameraId,key:'cameras',color:'#41bce3'}))].sort((a,b)=>b.start-a.start);
+ return `<div class="logtable"><table class="table"><thead><tr>
+ <th>START</th><th>TYPE</th><th>ATTRIBUTE</th><th>END</th><th>PLACEMENT TYPE / VISIBILITY QUALITY</th><th>ACTIONS</th>
+ </tr></thead><tbody>${logs.map(x=>`<tr>
+ <td class="nowrap" style="font-weight:900">${fmt(x.start)}</td>
+ <td><span style="color:${x.color};font-weight:800">${x.type}</span></td>
+ <td>${esc(labelFor(t,x.key,x.itemId))}</td>
+ <td>${x.end==null?'<span style="color:#15ac76;font-weight:900">Recording…</span>':x.kind==='point'?'Moment':fmt(x.end)}</td>
+ <td>${x.key==='sponsors'? `<div class="exposure-attribute-inputs">
+ <label>PRIMARY PLACEMENT<select aria-label="Placement type for ${esc(labelFor(t,x.key,x.itemId))}" onchange="setExposureAttribute('${x.id}','placement',this.value)" ${canEdit(t,'sponsors')?'':'disabled'}>${attributeOptions(PLACEMENT_TYPES,x.placement)}</select></label>
+ <label>VISIBILITY QUALITY<select aria-label="Visibility quality for ${esc(labelFor(t,x.key,x.itemId))}" onchange="setExposureAttribute('${x.id}','quality',this.value)" ${canEdit(t,'sponsors')?'':'disabled'}>${attributeOptions(VISIBILITY_QUALITIES,x.quality)}</select></label>
+ </div>`: '<span class="muted small">—</span>'}</td>
+ <td><button class="button ghost tiny" onclick="seekVideo(${x.start})" title="Jump to time">${icons('play')}</button>
+ ${canEdit(t,x.key==='sponsors'?'sponsors':'context')?`<button class="button ghost tiny" onclick="deleteLog('${x.key}','${x.id}')" title="Remove log">${icons('close')}</button>`:''}</td>
+ </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:#999;padding:20px">No actions recorded yet</td></tr>'}</tbody></table>
+ <p class="exposure-meta-note">For each sponsor appearance, select the primary placement and readability. Unknown stays unclassified. If placement or clarity changes materially during an appearance, end the interval and start a new one.</p></div>`;
+}
+window.setExposureAttribute=(id,field,value)=>{
+ const t=currentTask();if(!t||!canEdit(t,'sponsors'))return;
+ const choices=field==='placement'?PLACEMENT_TYPES:field==='quality'?VISIBILITY_QUALITIES:null;
+ if(!choices||!['',...choices.map(x=>x[0])].includes(value))return;
+ const item=t.sponsors.find(x=>x.id===id);
+ if(!item)return;
+ item[field]=value||null;
+ save();notify('Sponsor exposure '+(field==='placement'?'placement':'quality')+' saved');
+};
 window.setStudioTab=k=>{if(!['all','sponsors','events','cameras'].includes(k))return;studioTab=k;refreshStudio()};
 function refreshStudio(){
  const t=currentTask();if(!t||view!=='studio')return;
