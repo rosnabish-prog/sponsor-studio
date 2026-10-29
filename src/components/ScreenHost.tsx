@@ -1,15 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { initializeLegacy } from '../legacy/app';
-import type { LegacyMount } from '../types/legacy';
+import type { LegacyMount, ScreenId, ScreenContext } from '../types/legacy';
+import { Screen } from './Screens';
 
-/**
- * React owns the screen's lifecycle while the original HTML generators remain
- * temporarily intact. This preserves the exact DOM/CSS of the existing studio.
- * Future screens can be replaced one at a time with native JSX components.
- */
-export function LegacyScreen() {
-  const [markup, setMarkup] = useState('');
+/** Owns the native React screen lifecycle; controller actions request redraws. */
+export function ScreenHost() {
+  const [current, setCurrent] = useState<{ id: ScreenId; context: ScreenContext; version: number } | null>(null);
   const started = useRef(false);
 
   useEffect(() => {
@@ -18,9 +15,9 @@ export function LegacyScreen() {
     let disposed = false;
     let cleanup: (() => void) | undefined;
 
-    const mount: LegacyMount = (nextMarkup, afterCommit) => {
+    const mount: LegacyMount = (id, context, afterCommit) => {
       // Old page handlers expect a completed DOM immediately after render().
-      flushSync(() => setMarkup(nextMarkup));
+      flushSync(() => setCurrent(previous => ({ id, context, version: (previous?.version ?? 0) + 1 })));
       afterCommit?.();
     };
 
@@ -36,5 +33,5 @@ export function LegacyScreen() {
     };
   }, []);
 
-  return <div id="legacy-screen" dangerouslySetInnerHTML={{ __html: markup }} />;
+  return <div id="legacy-screen">{current && <Screen key={current.version} id={current.id} context={current.context} />}</div>;
 }

@@ -1,10 +1,10 @@
-import { LegacyScreen } from './components/LegacyScreen';
+import { ScreenHost } from './components/ScreenHost';
 
 /** Persistent overlays and video input are mounted once across every screen. */
 export default function App() {
   return (
     <>
-      <LegacyScreen />
+      <ScreenHost />
       <div id="toast" className="toast hidden" role="status" aria-live="polite" aria-atomic="true" />
       <input
         id="videofile"

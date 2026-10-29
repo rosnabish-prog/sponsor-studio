@@ -4,9 +4,9 @@ A branded, interactive **React + TypeScript frontend demonstration** for sponsor
 
 ## Frontend architecture (React migration)
 
-The application now builds with **React 19, TypeScript, and Vite**. The React root owns the persistent video picker, toast element and screen lifecycle. The original markup generators and annotation handlers are preserved in `src/legacy/app.ts` behind a synchronous React screen adapter, retaining the current visual design and browser-local behavior. The original stylesheet and its subsequent orange overrides are imported, in that order, from `src/styles/`; static image assets remain in `public/assets/`.
+The application now builds with **React 19, TypeScript, and Vite**. All eight top-level screens—login, dashboard, matches, Annotation Studio, sponsor library, attributes, team, and insights—are native JSX components in `src/components/`. Navigation and both header layouts are React-owned, with the existing classes, colors and visual assets preserved. The original stylesheet and its subsequent orange overrides are imported, in that order, from `src/styles/`; static image assets remain in `public/assets/`.
 
-**Migration status:** This is a working, transitional React/TypeScript frontend. The legacy screen templates and annotation handlers are not yet native JSX components or fully type-checked (`src/legacy/app.ts` is excluded from strict checks). New React code is strictly type-checked. Converting each screen and its state to idiomatic typed React components remains follow-up work; this first stage minimizes UI and workflow regressions.
+**Migration status:** Every page screen is JSX and strictly type-checked. The existing annotation state machine, local persistence, modal forms, and some deeply nested studio/insight report fragments remain in `src/legacy/app.ts` (excluded from strict checks), bridged to React via `ScreenHost` and `NativeMarkup`. A subsequent controller/widget migration would eliminate that remaining legacy module. This separation keeps the existing tagging behavior stable while allowing the screens themselves to be maintained as React components.
 
 The frontend is still a local-storage-only demo, not a secure multiuser production application.
 
