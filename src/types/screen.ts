@@ -5,10 +5,7 @@ export type ScreenId = 'login' | 'workspace' | 'dashboard' | 'tasks' | 'studio' 
 export interface ScreenContext {
   user?: { name: string; role: 'admin' | 'analyst' };
   taskId?: string;
-  forgot?: boolean;
-  registering?: boolean;
   changeRequired?: boolean;
-  apiEnabled?: boolean;
   workspaces?: {id:string;name:string;slug:string}[];
   workspaceName?: string;
   data?: StudioData;

@@ -32,10 +32,6 @@ export class CredentialsDto {
   @IsString() @Length(12, 128) password!: string;
 }
 
-export class RegisterDto extends CredentialsDto {
-  @IsString() @Length(1, 150) name!: string;
-}
-
 export class ChangePasswordDto {
   @IsString() @Length(12, 128) currentPassword!: string;
   @IsString() @Length(12, 128) password!: string;
@@ -48,20 +44,6 @@ export const hashPassword = (password: string) => hash(password, {
 @Injectable()
 export class AuthService {
   constructor(private readonly db: DatabaseService) {}
-
-  async register(input: RegisterDto) {
-    const email = input.email.trim().toLowerCase();
-    if (await this.db.user.findUnique({ where: { email }, select: { id: true } })) {
-      throw new ConflictException('Email already registered');
-    }
-    const passwordHash = await hashPassword(input.password);
-    try {
-      return await this.db.user.create({ data: { email, name: input.name.trim(), passwordHash }, select: { id: true, email: true, name: true } });
-    } catch (error) {
-      if ((error as { code?: string }).code === 'P2002') throw new ConflictException('Email already registered');
-      throw error;
-    }
-  }
 
   async login(input: CredentialsDto) {
     const user = await this.db.user.findUnique({ where: { email: input.email.trim().toLowerCase() } });
@@ -143,14 +125,6 @@ export class SessionGuard implements CanActivate {
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService, private readonly db: DatabaseService) {}
-
-  @Post('register')
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  async register(@Body() input: RegisterDto, @Res({ passthrough: true }) res: Response) {
-    const user = await this.auth.register(input);
-    await this.auth.createSession(user.id, res);
-    return { user };
-  }
 
   @Post('login')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })

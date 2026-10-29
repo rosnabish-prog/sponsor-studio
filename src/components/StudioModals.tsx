@@ -1,5 +1,4 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { apiEnabled } from '../api/client';
 import type { Fixture, Sponsor, SponsorGroup, StudioData, TagGroup, TaskSummary, TeamMember } from '../types/models';
 
 export type DialogModel =
@@ -38,7 +37,6 @@ function AssignModal({ task, users }: Extract<DialogModel, { type: 'assign' }>) 
           <div className="field"><label htmlFor="assignContextWorker">Events & camera analyst</label><select id="assignContextWorker" defaultValue={task.contextAnalystId || ''}><Options users={users} /></select><small>Records key match events and broadcast camera angles.</small></div>
         </div>
         {(task.submitted?.sponsors || task.submitted?.context) && <p className="assignment-notice">A completed tagging stream remains locked when reassigned. An admin must reopen it separately to permit changes.</p>}
-        {!apiEnabled && <p className="assignment-storage-note">Demo-only: task assignments are stored in this browser and are not delivered to analysts on other devices.</p>}
       </div>
       <Footer><Cancel /><Save>Save assignment</Save></Footer>
     </form>
@@ -62,14 +60,14 @@ function TaskModal({ task, data, fixtures }: Extract<DialogModel, { type: 'task'
           <div><label>SECOND HALF STARTS (VIDEO MINUTE)</label><input type="number" min="0" step="0.01" id="periodSecondStart" defaultValue={task?.periods?.secondStart ?? ''} placeholder="e.g. 60 with halftime footage" /></div>
         </div><small>Example: 60-minute playing time with 30-minute halftime video → 1H ends at 30, 2H starts at 60. If halftime is omitted in the footage, both boundaries may be 30.</small>
       </div>
-      <Field full title="Sponsor attribute lists (select multiple)"><GroupChoices name="sgroups" groups={data.sponsorGroups} selected={task?.sponsorGroupIds || ['sg_main']} /></Field>
-      <Field full title="Key event attribute lists"><GroupChoices name="egroups" groups={data.eventGroups} selected={task?.eventGroupIds || ['eg_basic']} /></Field>
-      <Field full title="Camera angle attribute lists"><GroupChoices name="cgroups" groups={data.cameraGroups} selected={task?.cameraGroupIds || ['cg_basic']} /></Field>
+      <Field full title="Sponsor attribute lists (select multiple)"><GroupChoices name="sgroups" groups={data.sponsorGroups} selected={task?.sponsorGroupIds || []} /></Field>
+      <Field full title="Key event attribute lists"><GroupChoices name="egroups" groups={data.eventGroups} selected={task?.eventGroupIds || []} /></Field>
+      <Field full title="Camera angle attribute lists"><GroupChoices name="cgroups" groups={data.cameraGroups} selected={task?.cameraGroupIds || []} /></Field>
       <Field title="Sponsor visibility analyst"><select id="tsponsor" defaultValue={task?.sponsorAnalystId || ''}><Options users={data.users} /></select><small>Assign the same person in both fields for an all-in-one task.</small></Field>
       <Field title="Events & camera analyst"><select id="tcontext" defaultValue={task?.contextAnalystId || ''}><Options users={data.users} /></select><small>Or assign separately for two synchronized work streams.</small></Field>
-      <Field title="Video source"><select id="taskvideosrc" defaultValue={task?.videoType || 'none'}><option value="none">Attach video later</option><option value="https">Direct HTTPS video URL</option><option value="ftp">FTP / SFTP source (metadata)</option>{apiEnabled && <option value="s3">Private AWS S3 video</option>}</select></Field>
-      <Field title="Source URL (optional)"><input id="taskurl" defaultValue={task?.videoType==='s3'?'':task?.videoUrl||''} placeholder="https://… or sftp://…" /><small>{apiEnabled?'Use Attach Video in Annotation Studio to securely upload to S3.':'FTP/SFTP requires backend ingestion before video playback.'}</small></Field>
-    </div>{!apiEnabled && <div className="infohint">Required for production: server-side video ingestion, secure role-based authentication, live syncing and durable media storage. This demo keeps task data in this browser only.</div>}</div>
+      <Field title="Video source"><select id="taskvideosrc" defaultValue={task?.videoType || 'none'}><option value="none">Attach video later</option><option value="https">Direct HTTPS video URL</option><option value="ftp">FTP / SFTP source (metadata)</option><option value="s3">Private AWS S3 video</option></select></Field>
+      <Field title="Source URL (optional)"><input id="taskurl" defaultValue={task?.videoType==='s3'?'':task?.videoUrl||''} placeholder="https://… or sftp://…" /><small>Use Attach Video in Annotation Studio to securely upload to S3.</small></Field>
+    </div></div>
     <Footer><Cancel /><Save>{task ? 'Save changes' : 'Create task'}</Save></Footer>
   </form>;
 }
@@ -93,7 +91,7 @@ function SponsorModal({ group, sponsor }: Extract<DialogModel, { type: 'sponsor'
       <Field full title="Sponsor name"><input id="sname" defaultValue={sponsor?.name || ''} placeholder="Brand name" required /></Field>
       <Field title="UPLOAD SPONSOR LOGO / FULL BRAND IMAGE"><input type="file" id="simage" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={handleImage} />
         <div id="logo-preview" className="logo-preview">{preview ? <img src={preview} alt="Sponsor logo preview" /> : 'SELECT AN IMAGE — THIS WILL APPEAR ON THE ANALYST TAGGING CARD'}</div>
-        <small>Transparent margins are trimmed automatically so the brand fills the card. Existing white JPEG backgrounds require re-uploading the original transparent PNG. All logos stay browser-local.</small>
+        <small>Transparent margins are trimmed automatically so the brand fills the card. Existing white JPEG backgrounds require re-uploading the original transparent PNG.</small>
       </Field>
       <Field title="Fallback brand color"><input type="color" id="scolor" defaultValue={sponsor?.color || '#7059c4'} style={{ padding: 5, height: 45 }} /></Field>
     </div></div>
@@ -112,8 +110,7 @@ function UserModal({ user }: Extract<DialogModel, { type: 'user' }>) {
   return <form onSubmit={event => { event.preventDefault(); window.saveUser?.(user?.id || ''); }}><div className="modalbody"><div className="formgrid">
     <Field title="Full name"><input id="uname" defaultValue={user?.name || ''} /></Field>
     <Field title="Work email"><input id="uemail" type="email" defaultValue={user?.email || ''} /></Field>
-    {apiEnabled ? <p className="field full">A new worker receives a secure, temporary password that is shown once to you. Share it privately. Existing accounts keep their current password.</p> :
-      <Field full title={`Demo password ${user ? '(leave empty to keep current)' : ''}`}><input id="upass" type="password" placeholder="At least 8 characters" autoComplete="new-password" /></Field>}
+    <p className="field full">A new worker receives a secure, temporary password that is shown once to you. Share it privately. Existing accounts keep their current password.</p>
   </div></div><Footer><Cancel /><Save>Save analyst</Save></Footer></form>;
 }
 

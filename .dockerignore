@@ -1,11 +1,10 @@
-.git
-.github
 node_modules
 **/node_modules
-**/dist
 dist
+**/dist
+.git
+.idea
 .env
 **/.env
-test-results
 playwright-report
-*.tsbuildinfo
+test-results

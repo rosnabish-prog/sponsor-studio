@@ -62,7 +62,6 @@ export interface TaskSummary {
   name: string;
   number: string;
   date?: string;
-  demo?: boolean;
   duration: number;
   fixtureId?: string;
   homeTeam?: string;

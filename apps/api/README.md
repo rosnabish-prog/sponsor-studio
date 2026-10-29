@@ -1,6 +1,6 @@
 # Sponsor Studio API — P0 foundation
 
-This is a separate NestJS API. The existing React app has **two distinct modes**: the unchanged GitHub Pages demonstration uses browser-local data, while `VITE_BACKEND_ENABLED=true` enables real sessions, workspaces, tasks, annotations and private video playback. Never deploy the demo mode as a production service.
+This NestJS API provides sessions, workspaces, tasks, annotations and private video playback for the React app.
 
 ## Local development
 
@@ -11,7 +11,7 @@ Use Node.js 22 or later and Docker Compose.
 3. Copy `apps/api/.env.example` to `apps/api/.env` and the root `.env.example` to root `.env`. Change the credentials outside local development.
 4. `npm run db:generate` and `npm run db:migrate` from the root.
 5. `npm run dev:api` starts NestJS at `http://localhost:3001/api`.
-6. `npm run dev` starts Vite at `http://127.0.0.1:5173` with `/api` proxied to NestJS. The UI uses the API only when the root `.env` enables it.
+6. `npm run dev` starts Vite at `http://127.0.0.1:5173` with `/api` proxied to NestJS.
 
 No real AWS credentials are needed for login/task development; video endpoints return HTTP 503 until storage and CloudFront are configured. The database must be reachable to serve requests.
 
@@ -24,7 +24,6 @@ Routes below are prefixed with `/api`. Most require a valid session cookie.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Database-aware health check |
-| POST | `/auth/register` | Create an account (name, email, password) |
 | POST | `/auth/login` | Start session (email, password) |
 | GET | `/auth/me` | Current signed-in user |
 | POST | `/auth/logout` | Revoke session |
@@ -77,7 +76,7 @@ Use the actual deployed origin, not the example value. The video bucket and Clou
 
 ## Manual account provisioning and scheduled cleanup
 
-In API-backed mode, open **Team → Add analyst**, enter the name and email, and save. The API generates a strong temporary password for a new user and shows it once in the administrator's browser. The administrator must share it separately. Existing registered users retain their password when added to another workspace. Temporary credentials expire after seven days, and a worker cannot access tasks until they choose a new personal password. Use **Team → Reset password** to replace a lost or expired credential; this revokes existing sessions and again shows the new password once. Temporary passwords are Argon2id-hashed in PostgreSQL; they are not emailed or stored in the client. Workspace owner accounts can still be created through the initial registration screen.
+Open **Team → Add analyst**, enter the name and email, and save. The API generates a strong temporary password for a new user and shows it once in the administrator's browser. The administrator must share it separately. Existing registered users retain their password when added to another workspace. Temporary credentials expire after seven days, and a worker cannot access tasks until they choose a new personal password. Use **Team → Reset password** to replace a lost or expired credential; this revokes existing sessions and again shows the new password once. Temporary passwords are Argon2id-hashed in PostgreSQL; they are not emailed or stored in the client. An existing administrator account is required to provision workers.
 
 Expired/revoked sessions are pruned with `npm run maintenance:sessions --workspace @sponsor-studio/api` after compilation. Schedule `node apps/api/dist/maintenance.js` once a day as a separate ECS task (the `migrations` Docker build target includes the compiled job and dependencies). The cleanup command does not remove customer task or annotation data.
 
@@ -90,4 +89,6 @@ Expired/revoked sessions are pruned with `npm run maintenance:sessions --workspa
 - The end-to-end Playwright UI/API integration passes on the feature branch; production AWS media access, load tests, and deployment smoke tests remain unverified.
 - Next.js and Tailwind migration is **not part of this P0 backend increment**; retaining existing React/Vite/CSS protects the current UI.
 
-The included SQL migration is generated from Prisma schema. `prisma migrate dev` applies it to a local database; production environments should run `prisma migrate deploy` in a controlled deployment process.
+The SQL migrations include schema changes and the bundled web demo catalog. Migration `20261029_000007_demo_workspace_catalog` populates missing or empty workspace catalogs with two sponsor lists (eight sponsors), five match events, and seven camera angles. Existing non-empty catalogs are preserved. A database trigger initializes the same catalog for newly created workspaces. Existing empty catalogs receive a version increment so stale clients reload before saving.
+
+`prisma migrate dev` applies migrations to a local database; production environments should run `prisma migrate deploy` in a controlled deployment process. From the repository root, use `npm run db:deploy` to apply pending migrations.

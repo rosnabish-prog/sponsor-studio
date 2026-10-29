@@ -4,12 +4,11 @@ import type { DialogModel } from '../components/StudioModals';
 import { computeInsights } from '../domain/analytics';
 import { PLACEMENT_TYPES, VISIBILITY_QUALITIES } from '../domain/classifications';
 import { formatTimestamp as fmt, clampNumber as clamp, mergeIntervals as merged, intervalOverlap as overlap } from '../domain/intervals';
-import { api, apiEnabled, fromApiTask, type ApiMembership, type ApiUser } from '../api/client';
+import { api, fromApiTask, type ApiMembership, type ApiUser } from '../api/client';
 import { persistStudio } from '../api/sync';
 import { uploadMatchVideo } from '../api/uploads';
 
 export function initializeStudioController(mount: StudioMount) {
-const DBKEY='messicup_sponsor_studio_v5', SESSION='messicup_studio_user_v5';
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
 const tstamp=()=>new Date().toISOString();
 
@@ -89,20 +88,8 @@ window.openFixtureTask=id=>{
  const sel=document.getElementById('taskfixture') as HTMLSelectElement|null;
  if(sel){sel.value=id;window.selectFixture?.(id)}
 };
-const seed=(): StudioData=>({
- users:[{id:'u_admin',name:'Operations Admin',email:'admin@demo.seebot.ai',password:'Demo1234!',role:'admin'},{id:'u_analyst',name:'Alex Morgan',email:'analyst@demo.seebot.ai',password:'Demo1234!',role:'analyst'},{id:'u_analyst2',name:'Jamie Cruz',email:'events@demo.seebot.ai',password:'Demo1234!',role:'analyst'}],
- sponsorGroups:[{id:'sg_main',name:'Main stadium sponsors',description:'Primary tournament and stadium placements',sponsors:[{id:'s_adidas',name:'Adidas x Messi',logo:'',color:'#10131c'},{id:'s_gatorade',name:'Gatorade',logo:'',color:'#ee6029'},{id:'s_panini',name:'Panini',logo:'',color:'#f4cd2d'},{id:'s_hardrock',name:'Hard Rock',logo:'',color:'#ba8d4b'}]},{id:'sg_side',name:'Sideline & secondary sponsors',description:'Pitchside, perimeter, and secondary brand placements',sponsors:[{id:'s_espn',name:'ESPN',logo:'',color:'#dd2525'},{id:'s_433',name:'433',logo:'',color:'#272637'},{id:'s_messif',name:'Messi Fragrances',logo:'',color:'#867ad7'},{id:'s_525',name:'525 Rosario',logo:'',color:'#3db5b1'}]}],
- eventGroups:[{id:'eg_basic',name:'Match moments',items:[{id:'e_goal',name:'Goal',kind:'range'},{id:'e_celebrate',name:'Goal celebration',kind:'range'},{id:'e_sub',name:'Substitution',kind:'range'},{id:'e_corner',name:'Corner',kind:'range'},{id:'e_replay',name:'Replay',kind:'range'}]}],
- cameraGroups:[{id:'cg_basic',name:'Broadcast camera angles',items:[{id:'c_center',name:'Wide · Center'},{id:'c_left',name:'Wide · Left goal'},{id:'c_right',name:'Wide · Right goal'},{id:'c_close',name:'Close-up / zoomed'},{id:'c_crowd',name:'Crowd / stands'},{id:'c_bench',name:'Bench / sideline'},{id:'c_replay',name:'Replay angle'}]}],
- tasks:[{id:'task_demo1',number:'M13',name:'River Plate vs AFC Ajax',date:'2026-10-26',fixtureId:'M13',duration:3600,videoType:'none',videoUrl:'',videoName:'',sponsorGroupIds:['sg_main','sg_side'],eventGroupIds:['eg_basic'],cameraGroupIds:['cg_basic'],sponsorAnalystId:'u_analyst',contextAnalystId:'u_analyst',sponsors:[],events:[],cameras:[],submitted:{sponsors:false,context:false},demo:true,createdAt:tstamp()},{id:'task_demo2',number:'M29',name:'River Plate vs CR Flamengo',date:'2026-10-28',fixtureId:'M29',duration:3600,videoType:'none',videoUrl:'',videoName:'',sponsorGroupIds:['sg_main'],eventGroupIds:['eg_basic'],cameraGroupIds:['cg_basic'],sponsorAnalystId:'u_analyst',contextAnalystId:'u_analyst2',sponsors:[],events:[],cameras:[],submitted:{sponsors:false,context:false},demo:true,createdAt:tstamp()},{id:'task_demo3',number:'M30',name:'Atlético de Madrid vs FC Barcelona',date:'2026-10-28',fixtureId:'M30',duration:3600,videoType:'none',videoUrl:'',videoName:'',sponsorGroupIds:['sg_main','sg_side'],eventGroupIds:['eg_basic'],cameraGroupIds:['cg_basic'],sponsorAnalystId:'u_analyst2',contextAnalystId:'u_analyst',sponsors:[],events:[],cameras:[],submitted:{sponsors:false,context:false},demo:true,createdAt:tstamp()}]
-});
-const memoryStore:Record<string,string>={};const safeStorage=(type:'localStorage'|'sessionStorage')=>({getItem(k:string){try{return window[type].getItem(k)}catch{return memoryStore[type+':'+k]??null}},setItem(k:string,v:string){try{window[type].setItem(k,String(v))}catch{memoryStore[type+':'+k]=String(v)}},removeItem(k:string){try{window[type].removeItem(k)}catch{delete memoryStore[type+':'+k]}}});const local=safeStorage('localStorage'),session=safeStorage('sessionStorage');
-let db:StudioData;
-try{db=apiEnabled?{users:[],sponsorGroups:[],eventGroups:[],cameraGroups:[],tasks:[]}:JSON.parse(local.getItem(DBKEY)||'null')||seed()}catch{db=seed()};
+let db:StudioData={users:[],sponsorGroups:[],eventGroups:[],cameraGroups:[],tasks:[]};
 let fixtureDay='all';
-// Existing demos may contain point-configured event attributes. Preserve recorded history,
-// but convert attribute definitions to duration tagging for all future annotations.
-for(const group of db.eventGroups||[])for(const item of group.items||[])item.kind='range';
 let remoteUser:ApiUser|null=null,liveWorkspaces:ApiMembership[]=[],workspaceId='',catalogVersion=0;
 let passwordChangeRequired=false;
 const cloneStudio=(value:StudioData):StudioData=>JSON.parse(JSON.stringify(value)) as StudioData;
@@ -131,11 +118,8 @@ async function syncLive() {
   await loadWorkspace(workspaceId).catch(()=>notify('Could not refresh workspace. Check your connection.'));
  }finally{syncRunning=false;if(syncDirty)void syncLive();render()}
 }
-const save=()=>{
- if(apiEnabled){if(workspaceId){syncDirty=true;void syncLive()}return}
- try{local.setItem(DBKEY,JSON.stringify(db))}catch{/* Demo continues in memory without storage. */}
-};
-if(!apiEnabled)save();let logged=apiEnabled?'':session.getItem(SESSION)||'';
+const save=()=>{if(workspaceId){syncDirty=true;void syncLive()}};
+let logged='';
 async function loadWorkspace(id:string) {
  const [catalog,members,tasks]=await Promise.all([api.catalog(id),api.members(id),api.tasks(id)]);
  const definitions=catalog.payload;
@@ -159,7 +143,7 @@ async function loadLiveSession() {
 let view: 'dashboard'|'tasks'|'studio'|'sponsors'|'attributes'|'users'|'reports'='dashboard';
 let selectedTaskId='',reportTaskId='',taskFilter='all',insightFocusId='',fixtureSyncLabel='Bundled schedule';
 let studioTab:'all'|'sponsors'|'events'|'cameras'='all';
-let tick=0,seekStep=5,localVideos:Record<string,string>={},videoEl:HTMLVideoElement|null=null,forgot=false,registering=false,modalOpen=false;
+let tick=0,seekStep=5,videoEl:HTMLVideoElement|null=null,modalOpen=false;
 const me=()=>db.users.find(x=>x.id===logged)||(remoteUser&&logged?{...remoteUser,password:'',role:'admin' as const}:undefined);const currentTask=()=>db.tasks.find(x=>x.id===selectedTaskId);const reportTask=()=>db.tasks.find(x=>x.id===reportTaskId)||db.tasks[0];const visibleTasks=()=>me()?.role==='admin'?db.tasks:db.tasks.filter(t=>t.sponsorAnalystId===logged||t.contextAnalystId===logged);
 const taskStatus=(t:TaskSummary):'ready'|'progress'|'done'=>t.submitted?.sponsors&&t.submitted?.context?'done':t.sponsors.length||t.events.length||t.cameras.length||t.submitted?.sponsors||t.submitted?.context?'progress':'ready';
 const foundUser=(id:string)=>db.users.find(u=>u.id===id);const nameUser=(id:string)=>foundUser(id)?.name||'Unassigned';
@@ -189,11 +173,8 @@ window.acceptInAppConfirm=()=>{
  action();
 };
 const formVal=(id:string)=>(document.getElementById(id) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null)?.value||'';
-window.fillDemo=email=>{const input=document.getElementById('loginemail') as HTMLInputElement|null;if(input)input.value=email;const pass=document.getElementById('loginpass') as HTMLInputElement|null;if(pass)pass.value='Demo1234!'};
-window.toggleForgot=b=>{forgot=b;registering=false;render();};
-window.toggleRegister=b=>{registering=b;forgot=false;render()};
 window.changeOwnPassword=async e=>{
- e.preventDefault();if(!apiEnabled||!passwordChangeRequired)return;
+ e.preventDefault();if(!passwordChangeRequired)return;
  const password=formVal('newpwd');
  if(password!==formVal('confirmnewpwd')){
   const err=document.getElementById('authError');if(err)err.textContent='The passwords do not match.';
@@ -201,39 +182,24 @@ window.changeOwnPassword=async e=>{
  }
  try{
   await api.changePassword(formVal('currentpwd'),password);
-  logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';forgot=false;registering=false;
+  logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';
   render();notify('Password updated. Sign in with your new password.');
  }catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Could not change password';}
 };
 window.login=async e=>{
  e.preventDefault();const email=formVal('loginemail').trim().toLowerCase(),pwd=formVal('loginpass');
- if(apiEnabled){try{const result=await api.login({email,password:pwd});remoteUser=result.user;await loadLiveSession()}catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Sign in failed';}return}
- let u=db.users.find(x=>x.email.toLowerCase()===email&&x.password===pwd);
- if(!u){let err=document.getElementById('authError');if(err)err.textContent='Incorrect demo email or password. Select a sample account or restore demo accounts below.';return}
- logged=u.id;session.setItem(SESSION,logged);view='dashboard';render()
-};
-window.register=async e=>{
- e.preventDefault();if(!apiEnabled)return;
- try{
-  const result=await api.register({name:formVal('regname').trim(),email:formVal('loginemail').trim(),password:formVal('loginpass')});
-  remoteUser=result.user;logged=result.user.id;
-  const orgName=formVal('regorg').trim();
-  if(orgName){const created=await api.createWorkspace(orgName);const initial=seed();await api.saveCatalog(created.id,{sponsorGroups:initial.sponsorGroups,eventGroups:initial.eventGroups,cameraGroups:initial.cameraGroups},0)}
-  registering=false;await loadLiveSession();
- }catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Registration failed';}
+ try{const result=await api.login({email,password:pwd});remoteUser=result.user;await loadLiveSession()}catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Sign in failed';}
 };
 window.selectWorkspace=id=>{if(liveWorkspaces.some(w=>w.workspace.id===id))void loadWorkspace(id).catch(error=>notify('Workspace load failed: '+error.message))};
-window.createWorkspace=async e=>{e.preventDefault();try{const created=await api.createWorkspace(formVal('newWorkspaceName').trim());const initial=seed();await api.saveCatalog(created.id,{sponsorGroups:initial.sponsorGroups,eventGroups:initial.eventGroups,cameraGroups:initial.cameraGroups},0);liveWorkspaces=await api.workspaces();await loadWorkspace(created.id)}catch(error){notify('Workspace creation failed: '+(error instanceof Error?error.message:'Unknown error'))}};
-window.resetDemo=e=>{e.preventDefault();let u=db.users.find(x=>x.email.toLowerCase()===formVal('loginemail').trim().toLowerCase());if(!u){const err=document.getElementById('authError');if(err)err.textContent='No demo account found for that email.';return}u.password=formVal('newpwd');save();forgot=false;render();notify('Demo-only password changed. This does not send an email.')};
-window.resetDemoData=()=>confirmInApp('Reset demo workspace','Restore all demo accounts and tasks in this browser? Existing demo annotations will be discarded.',()=>{db=seed();save();logged='';session.removeItem(SESSION);forgot=false;view='dashboard';render();notify('Demo accounts restored. Choose an account to sign in.');},{actionLabel:'RESET DEMO'});
-window.logout=()=>{if(apiEnabled)void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];if(!apiEnabled)session.removeItem(SESSION);selectedTaskId='';if(videoEl){videoEl.pause()}render()};
-window.showWorkspaceSwitcher=()=>{if(apiEnabled){workspaceId='';render()}};
+window.createWorkspace=async e=>{e.preventDefault();try{const created=await api.createWorkspace(formVal('newWorkspaceName').trim());liveWorkspaces=await api.workspaces();await loadWorkspace(created.id)}catch(error){notify('Workspace creation failed: '+(error instanceof Error?error.message:'Unknown error'))}};
+window.logout=()=>{void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];selectedTaskId='';if(videoEl){videoEl.pause()}render()};
+window.showWorkspaceSwitcher=()=>{workspaceId='';render()};
 window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}view=v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';render();window.scrollTo(0,0)};
 window.closeTaskMenu=()=>{const menu=document.getElementById('taskActionMenu') as HTMLDetailsElement|null;if(menu)menu.open=false};
 window.openTask=id=>{
  selectedTaskId=id;view='studio';tick=0;studioTab='all';render();window.scrollTo(0,0);
  const asset=db.tasks.find(t=>t.id===id)?.videoAssetId;
- if(apiEnabled&&asset){void api.playback(workspaceId,id,asset).then(result=>{
+  if(asset){void api.playback(workspaceId,id,asset).then(result=>{
   const task=db.tasks.find(t=>t.id===id);if(!task)return;
   task.videoUrl=result.url;task.videoType='s3';task.videoName=result.filename;
   if(selectedTaskId===id)render();
@@ -354,7 +320,7 @@ function attachVideo(){
 window.chooseVideo=()=>{
  if(!currentTask())return notify('Open a match before selecting a video.');
  const picker=document.getElementById('videofile') as HTMLInputElement|null;
- if(!picker)return notify('Local video picker is unavailable.');
+  if(!picker)return notify('Video picker is unavailable.');
  picker.value=''; // Allows selecting the same file again to reconnect it.
  picker.click();
 };
@@ -363,8 +329,7 @@ window.attachLocalVideoFile=(file:File)=>{
  if(!file.type.startsWith('video/')&&!/\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(file.name||'')){
   notify('Choose a video file, such as MP4 or WebM.');return false;
  }
- if(apiEnabled){
-  let lastPercent=-10;
+ let lastPercent=-10;
   void uploadMatchVideo(workspaceId,t.id,file,percent=>{
    if(percent-lastPercent>=20){lastPercent=percent;notify(`Uploading ${file.name}: ${percent}%`)}
   }).then(async({assetId})=>{
@@ -374,23 +339,6 @@ window.attachLocalVideoFile=(file:File)=>{
    save();render();notify('Video uploaded securely and attached to this match.');
   }).catch(error=>notify('Video upload failed: '+(error instanceof Error?error.message:'Unknown error')));
   notify('Starting secure multipart upload: '+file.name);
-  return true;
- }
- let url;
- try{url=URL.createObjectURL(file)}catch(err){
-  notify('Could not open this local video. Try selecting it again.');return false;
- }
- const prior=localVideos[t.id];
- localVideos[t.id]=url;
- if(prior)URL.revokeObjectURL(prior);
- t.videoName=file.name;
- t.videoSize=file.size;
- t.videoMime=file.type||'unknown';
- videoDimensions='';videoError='';
- tick=0;
- save();
- render();
- notify('Local video opened. It was not uploaded; select it again after refreshing.');
  return true;
 };
 const handleVideoFileChange=(e:Event)=>{
@@ -473,7 +421,7 @@ window.saveTask=id=>{
   periods:firstVal!==''?{firstEnd,secondStart}:null,sponsorGroupIds:checks('sgroups'),eventGroupIds:checks('egroups'),cameraGroupIds:checks('cgroups'),
   sponsorAnalystId:formVal('tsponsor'),contextAnalystId:formVal('tcontext'),videoType,videoUrl,fixtureId};
  if(task)Object.assign(task,data);
- else db.tasks.push({id:uid(),...data,sponsors:[],events:[],cameras:[],submitted:{sponsors:false,context:false},createdAt:tstamp(),demo:false});
+  else db.tasks.push({id:uid(),...data,sponsors:[],events:[],cameras:[],submitted:{sponsors:false,context:false},createdAt:tstamp()});
  save();window.closeModal?.();view='tasks';render();notify(id?'Task updated':'Task created');
 };
 window.groupModal=(kind,id='')=>{const groups=kind==='sponsor'?db.sponsorGroups:kind==='event'?db.eventGroups:db.cameraGroups;openDialog({type:'group',kind,group:groups.find(g=>g.id===id)});};
@@ -548,24 +496,6 @@ function thumbnail(file:File):Promise<string>{
   reader.readAsDataURL(file);
  });
 }
-// Automatically tighten existing browser-local transparent PNG thumbnails.
-async function optimizeStoredSponsorLogos(){
- let changed=false;
- for(const group of db.sponsorGroups||[])for(const sponsor of group.sponsors||[]){
-  if(sponsor.logoTrimmed||!/^data:image\/png[;,]/i.test(sponsor.logo||''))continue;
-  try{
-   const compact=await cropLogoDataUrl(sponsor.logo!);
-   if(compact){sponsor.logo=compact;sponsor.logoTrimmed=true;changed=true}
-  }catch(err){/* Preserve the original logo when it cannot be decoded. */}
- }
- if(changed){
-  save();
-  if(!modalOpen){
-   if(view==='studio')refreshStudio();
-   else render();
-  }
- }
-}
 window.saveSponsor=async(gid,sid)=>{
  if(me()?.role!=='admin')return;
  const group=db.sponsorGroups.find(row=>row.id===gid),name=formVal('sname').trim();
@@ -586,7 +516,7 @@ window.saveAttrItem=(kind,gid)=>{if(me()?.role!=='admin')return;const gs=kind===
 window.removeItem=(kind,gid,id)=>{let gs=kind==='event'?db.eventGroups:db.cameraGroups,g=gs.find(x=>x.id===gid);if(!g)return;const item=g.items.find(x=>x.id===id);if(!item)return;confirmInApp('Remove attribute',`Remove "${item.name}" from this list? Historical annotations may lose the display label.`,()=>{g.items=g.items.filter(x=>x.id!==id);save();render();notify('Attribute removed')},{actionLabel:'REMOVE ATTRIBUTE'})};
 window.userModal=(id='')=>openDialog({type:'user',user:db.users.find(u=>u.id===id)});
 window.resetMemberPassword=id=>{
- if(!apiEnabled||me()?.role!=='admin'||!db.users.some(u=>u.id===id&&u.role==='analyst'))return;
+  if(me()?.role!=='admin'||!db.users.some(u=>u.id===id&&u.role==='analyst'))return;
  const user=db.users.find(u=>u.id===id)!;
  confirmInApp('Reset worker password',`Reset ${user.name}'s password? Their existing sessions will be revoked. You must share the new temporary password yourself.`,()=>{
   void api.resetMemberPassword(workspaceId,id).then(async result=>{
@@ -598,7 +528,6 @@ window.resetMemberPassword=id=>{
 };
 window.saveUser=id=>{
  if(me()?.role!=='admin')return;
- if(apiEnabled){
   if(id)return notify('Member details are managed by the account owner.');
   const name=formVal('uname').trim(),email=formVal('uemail').trim().toLowerCase();
   if(!name||!email)return notify('Name and email are required.');
@@ -608,13 +537,6 @@ window.saveUser=id=>{
    openDialog({type:'credentials',name:result.user.name,email:result.user.email,
     temporaryPassword:result.temporaryPassword,purpose:'created'});
   }).catch(error=>notify('Could not add member: '+error.message));return;
- }
- const user=db.users.find(x=>x.id===id),name=formVal('uname').trim(),email=formVal('uemail').trim().toLowerCase(),pwd=formVal('upass');
- if(!name||!/^\S+@\S+\.\S+$/.test(email))return notify('Add a name and valid email address.');
- if(db.users.some(x=>x.email===email&&x.id!==id))return notify('An account already uses this email.');
- if((!user||pwd)&&pwd.length<8)return notify('Demo password must have at least eight characters.');
- if(user){user.name=name;user.email=email;if(pwd)user.password=pwd}else db.users.push({id:uid(),name,email,password:pwd,role:'analyst'});
- save();window.closeModal?.();render();notify('Analyst saved')
 };
 /* Analytics computed strictly from annotated intervals; no inferred impressions or valuations. */
 window.selectInsightSponsor=id=>{insightFocusId=id;render();};
@@ -672,24 +594,24 @@ function exportObject(t:TaskSummary){let spo=sponsorFor(t),evt=eventsFor(t),cam=
 window.exportTask=id=>{let t=db.tasks.find(x=>x.id===id);if(!t||!visibleTasks().some(x=>x.id===id))return;let s=JSON.stringify(exportObject(t),null,2),a=document.createElement('a'),url=URL.createObjectURL(new Blob([s],{type:'application/json'}));a.href=url;a.download=(t.number||'match')+'_sponsor_annotations.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('JSON exported — '+t.number)};
 function render(){
  const user=me();
- if(apiEnabled&&passwordChangeRequired){
-  mount('login',{changeRequired:true,apiEnabled});
+ if(passwordChangeRequired){
+  mount('login',{changeRequired:true});
   return;
  }
  if(!user){
-  mount('login',{forgot,registering,apiEnabled});
+  mount('login',{});
   return;
  }
- if(apiEnabled&&!workspaceId){mount('workspace',{workspaces:liveWorkspaces.map(x=>x.workspace)});return}
+ if(!workspaceId){mount('workspace',{workspaces:liveWorkspaces.map(x=>x.workspace)});return}
  if(user.role!=='admin'&&['users','sponsors','attributes'].includes(view))view='dashboard';
  if(!['dashboard','tasks','studio','sponsors','attributes','users','reports'].includes(view))view='dashboard';
  const t=view==='studio'?currentTask():null;
- const videoSrc=t?(localVideos[t.id]||((t.videoType==='https'||t.videoType==='s3')&&t.videoUrl?t.videoUrl:null)):null;
+ const videoSrc=t&&((t.videoType==='https'||t.videoType==='s3')&&t.videoUrl)?t.videoUrl:null;
  const heading=t?studioSidebarHeading():null;
  const currentCamera=t?.cameras.find(x=>x.end==null);
  const studioModel=t?{
   id:t.id,number:t.number,name:t.name,date:t.date,duration:t.duration,
-  videoName:t.videoName,videoType:t.videoType,videoSrc,isLocalVideo:!!localVideos[t.id],
+  videoName:t.videoName,videoType:t.videoType,videoSrc,isLocalVideo:false,
   status:taskStatus(t),sponsorAnalyst:nameUser(t.sponsorAnalystId),contextAnalyst:nameUser(t.contextAnalystId),
   canSponsor:canEdit(t,'sponsors'),canContext:canEdit(t,'context'),
   selectedTab:studioTab,tick,sponsorCount:t.sponsors.filter(x=>x.end==null).length,
@@ -714,15 +636,11 @@ function render(){
 }
 refreshFixtureFeed();
 const fixtureRefreshId=setInterval(refreshFixtureFeed,5*60*1000);
-const onStorage=(e:StorageEvent)=>{if(e.key===DBKEY){try{db=JSON.parse(e.newValue||'null')||seed()}catch{return}if(!modalOpen)render()}};
-if(!apiEnabled)window.addEventListener('storage',onStorage);
-if(apiEnabled)void loadLiveSession().catch(()=>{logged='';remoteUser=null;passwordChangeRequired=false;render()});
-else{render();optimizeStoredSponsorLogos();}
+render();
+void loadLiveSession().catch(()=>{logged='';remoteUser=null;passwordChangeRequired=false;render()});
 return ()=>{
  clearInterval(fixtureRefreshId);
- if(!apiEnabled)window.removeEventListener('storage',onStorage);
  document.removeEventListener('keydown',runKeydown);
  document.getElementById('videofile')?.removeEventListener('change',handleVideoFileChange);
- for(const url of Object.values(localVideos))URL.revokeObjectURL(url);
 };
 }

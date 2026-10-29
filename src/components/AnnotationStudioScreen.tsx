@@ -1,7 +1,6 @@
 import type { StudioScreenModel } from '../types/screen';
 import { formatTimestamp } from '../domain/intervals';
 import { StudioControls, StudioLogs, StudioRail, StudioTimeline } from './StudioWidgets';
-import { apiEnabled } from '../api/client';
 
 function Icon({ name }: { name: string }) {
   return <svg className="ic"><use href={`#i-${name}`} /></svg>;
@@ -17,7 +16,7 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
     <details className="task-actions" id="taskActionMenu">
       <summary aria-label="Task actions"><span>ACTIONS</span><span className="menu-glyph" aria-hidden="true">⋯</span></summary>
       <div className="task-menu-content">
-        <StudioAction onClick={() => window.chooseVideo?.()}><Icon name="video" /> {apiEnabled?'UPLOAD PRIVATE VIDEO':'OPEN LOCAL VIDEO'}</StudioAction>
+        <StudioAction onClick={() => window.chooseVideo?.()}><Icon name="video" /> UPLOAD PRIVATE VIDEO</StudioAction>
         <StudioAction onClick={() => window.exportTask?.(model.id)}><Icon name="download" /> EXPORT JSON</StudioAction>
         {completed
           ? isAdmin && <StudioAction className="task-menu-reopen" onClick={() => window.reopenTask?.()}><Icon name="check" /> REOPEN TASK</StudioAction>
@@ -35,15 +34,9 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
 }
 
 function VideoPanel({ model }: { model: StudioScreenModel }) {
-  const { videoSrc, isLocalVideo, videoName, videoType } = model;
-  const sourceState = videoType === 's3' ? 'PRIVATE VIDEO · CLOUDFRONT' : isLocalVideo ? 'LOCAL VIDEO · NOT UPLOADED' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : videoName ? 'LOCAL FILE DISCONNECTED' : 'NO VIDEO ATTACHED';
-  const sourceNote = isLocalVideo
-    ? model.videoError || (model.videoDimensions
-      ? `LOCAL FILE: ${videoName || 'Video'} · ${model.videoDimensions} · ${formatTimestamp(model.duration)} · Not uploaded or shared. Reselect after refresh.`
-      : `OPENED LOCALLY: ${videoName || 'Video file'} · Not uploaded, saved, or shared with other devices.`)
-    : !videoSrc && videoName
-      ? `Previously selected: ${videoName} · Reopen this local video after refreshing or reopening the browser.`
-      : 'Choose a video on this device or configure a direct HTTPS source. Local video is never uploaded to the server.';
+  const { videoSrc, videoName, videoType } = model;
+  const sourceState = videoType === 's3' ? 'PRIVATE VIDEO · CLOUDFRONT' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : 'NO VIDEO ATTACHED';
+  const sourceNote = model.videoError || (videoSrc ? `${videoName || 'Video'}${model.videoDimensions ? ` · ${model.videoDimensions}` : ''}` : 'Upload a private video or configure a direct HTTPS source.');
   return <div className="video-box">
     <div className="video-header"><span>LIVE TAGGING CONSOLE</span><span id="videoSourceState">{sourceState}</span></div>
     <div id="videoFileStatus" className="video-source-note" role="status" aria-live="polite">{sourceNote}</div>
@@ -51,9 +44,9 @@ function VideoPanel({ model }: { model: StudioScreenModel }) {
       {videoSrc ? <video id="matchVideo" preload="metadata" playsInline controls aria-label="Match video · original proportions" src={videoSrc} /> :
         <div className="fakepitch">
           <div className="field" /><div className="video-stamp">MESSI CUP · {model.number}</div>
-          <strong>{videoName ? 'Reconnect your footage.' : 'Ready for kickoff.'}</strong>
-          <p>{videoName ? 'Your earlier local file is not available in this browser session.' : 'Open a video on this device to begin frame-accurate tagging.'}</p>
-          <button className="button primary tiny" onClick={() => window.chooseVideo?.()}><Icon name="video" /> {videoName ? 'REOPEN LOCAL VIDEO' : 'OPEN LOCAL VIDEO'}</button>
+          <strong>Ready for kickoff.</strong>
+          <p>Upload a video to begin frame-accurate tagging.</p>
+          <button className="button primary tiny" onClick={() => window.chooseVideo?.()}><Icon name="video" /> UPLOAD PRIVATE VIDEO</button>
         </div>}
     </div>
     <div className="video-controls">

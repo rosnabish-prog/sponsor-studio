@@ -1,8 +1,6 @@
 import type { StudioData, TaskSummary } from '../types/models';
 
-/** GitHub Pages remains a demonstrator unless the production API is explicitly enabled. */
 const runtimeEnv = import.meta.env || {};
-export const apiEnabled = runtimeEnv.VITE_BACKEND_ENABLED === 'true';
 const baseUrl = (runtimeEnv.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 export class ApiError extends Error {
@@ -41,7 +39,6 @@ export interface ApiTask {
 
 export const api = {
   me: () => apiRequest<{user:ApiUser}>('/auth/me'),
-  register: (body: { name:string;email:string;password:string }) => apiRequest<{user:ApiUser}>('/auth/register','POST',body),
   login: (body: {email:string;password:string}) => apiRequest<{user:ApiUser}>('/auth/login','POST',body),
   logout: () => apiRequest<{ok:boolean}>('/auth/logout','POST'),
   changePassword:(currentPassword:string,password:string)=>apiRequest<{ok:boolean}>('/auth/change-password','POST',{currentPassword,password}),
@@ -89,7 +86,7 @@ export function fromApiTask(t:ApiTask):TaskSummary {
     sponsors:annotations.filter(a=>a.kind==='SPONSOR').map(a=>({...common(a),sponsorId:a.labelId,placement:a.placement,quality:a.quality})),
     events:annotations.filter(a=>a.kind==='EVENT').map(a=>({...common(a),eventId:a.labelId,kind:'range' as const})),
     cameras:annotations.filter(a=>a.kind==='CAMERA').map(a=>({...common(a),cameraId:a.labelId})),
-    createdAt:t.createdAt,demo:false,
+    createdAt:t.createdAt,
   };
 }
 

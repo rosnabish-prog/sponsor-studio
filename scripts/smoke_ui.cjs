@@ -35,7 +35,8 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.ok(loginTheme.includes('.login-kicker{')&&loginTheme.includes('font-weight:850!important'),'sponsor intelligence heading visibly bold');
  assert.equal(document.querySelector('.login-kicker').textContent,'SPONSOR INTELLIGENCE / MATCH OPERATIONS','correct login label');
  assert.equal(document.querySelectorAll('.demo-roles button').length,3,'all demo choices retained');
- assert.ok(document.querySelector('.demo-password .demo-password-hint'),'password and reset action are separated cleanly');
+ assert.ok(document.querySelector('.demo-password button'),'demo reset action remains available');
+ assert.equal(document.querySelector('.demo-password .demo-password-hint'),null,'demo password is not displayed');
  assert.ok(loginTheme.includes('grid-template-columns:repeat(3,minmax(0,1fr))!important'),'account buttons use an evenly spaced grid');
  assert.ok(loginTheme.includes('min-height:70px!important'),'account buttons have comfortable click targets');
  expect(document.querySelector('.login-top .powered-by img'),'Seebot Powered by image in sign-in header');

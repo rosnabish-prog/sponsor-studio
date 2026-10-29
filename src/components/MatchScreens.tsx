@@ -65,7 +65,7 @@ function TaskTable({ tasks, data, fixtures, badges }: { tasks: TaskSummary[]; da
             <tr className="clickable" key={task.id} onClick={() => window.openTask?.(task.id)}>
               <td>
                 <div className="mainname"><FixtureName task={task} fixtures={fixtures} badges={badges} /></div>
-                <div className="detail">{task.number} · {task.date || 'No date'} {task.demo ? '· Sample task' : ''}</div>
+                <div className="detail">{task.number} · {task.date || 'No date'}</div>
               </td>
               <td>{nameUser(data, task.sponsorAnalystId)}</td>
               <td>{nameUser(data, task.contextAnalystId)}</td>
