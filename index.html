@@ -830,11 +830,27 @@ async function refreshFixtureFeed(){
   }catch(err){console.warn('Using bundled fixture snapshot:',err.message)}
 }
 window.chooseFixtureDay=day=>{fixtureDay=day;render()};
+// Match catalog links fixtures to existing tasks rather than creating duplicates.
+const taskForFixture=id=>{
+ const key=String(id||'').trim().toUpperCase();
+ if(!key)return null;
+ const matching=db.tasks.filter(t=>{
+  const fixture=String(t.fixtureId||'').trim().toUpperCase();
+  const number=String(t.number||'').trim().toUpperCase();
+  return fixture===key||number===key||number==='MC-'+key;
+ });
+ // If older browser data has duplicate tasks, surface completed work first.
+ return matching.find(t=>taskStatus(t)==='done')
+  ||matching.find(t=>taskStatus(t)==='progress')
+  ||matching[0]||null;
+};
 window.openFixtureTask=id=>{
-  if(me()?.role!=='admin')return;
-  createTaskModal();
-  const sel=document.getElementById('taskfixture');
-  if(sel){sel.value=id;selectFixture(id)}
+ if(me()?.role!=='admin')return;
+ const existing=taskForFixture(id);
+ if(existing){openTask(existing.id);return}
+ createTaskModal();
+ const sel=document.getElementById('taskfixture');
+ if(sel){sel.value=id;selectFixture(id)}
 };
 const fixtureFor=t=>fixtureById(t.fixtureId)||OFFICIAL_FIXTURES.find(f=>t.number===f.id||t.number==='MC-'+f.id)||null;
 const crest=name=>`<span class="club-crest"><span class="crest-fallback">${esc((name||'?').split(' ').map(x=>x[0]).join('').slice(0,3).toUpperCase())}</span>${BADGES[name]?`<img src="${esc(BADGES[name])}" alt="${esc(name)} crest" loading="lazy" onload="this.previousElementSibling.style.display='none'" onerror="this.remove()">`:''}</span>`;
@@ -937,8 +953,31 @@ function matchTiles(ts){
 function tasksView(){let ts=visibleTasks().filter(t=>taskFilter==='all'||taskStatus(t)===taskFilter);return `<div class="pagehead"><div><div class="eyebrow">PRODUCTION / ALL MATCHES</div><h1>Match assignments</h1><p class="sub">Only matches assigned to your account are visible to you.</p></div>${me().role==='admin'?`<button class="button primary" onclick="createTaskModal()">${icons('plus')} New task</button>`:''}</div><div class="filterbar">${[['all','All matches'],['ready','Ready'],['progress','In progress'],['done','Completed']].map(p=>`<button class="chip ${taskFilter===p[0]?'active':''}" onclick="setFilter('${p[0]}')">${p[1]}</button>`).join('')}</div>${matchTiles(ts)}${me().role==='admin'?fixtureCatalog():''}`}
 function fixtureCatalog(){
  const byDay=[...new Set(OFFICIAL_FIXTURES.map(f=>f.date))].sort();
- const visible=OFFICIAL_FIXTURES.filter(f=>fixtureDay==='all'||f.date===fixtureDay).sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||'')||(a.order||0)-(b.order||0));
- return `<section class="fixture-catalog"><div class="sectionhead"><div><div class="eyebrow">SCHEDULE / LIVE DATA SNAPSHOT</div><h2>MATCH CATALOG</h2><p class="sub">Browse by match date, then create an annotation task for a fixture. Published data can change. Times shown in Eastern Time (ET).</p></div><span class="tag">${esc(fixtureSyncLabel)} · ${OFFICIAL_FIXTURES.length} matches</span></div><div class="fixture-days"><button class="chip ${fixtureDay==='all'?'active':''}" onclick="chooseFixtureDay('all')">ALL DAYS</button>${byDay.map(d=>`<button class="chip ${fixtureDay===d?'active':''}" onclick="chooseFixtureDay('${d}')">${esc(d)}</button>`).join('')}</div><div class="fixture-cards">${visible.map(f=>`<article class="fixture-card"><div class="fixture-date">${esc(f.id)} · ${esc(f.date)} · ${esc(f.time||'Time TBD')} ET <span>${esc(f.stage||f.group||'')}</span></div><div class="fixture-line">${crest(f.home)}<b>${esc(f.home)}</b><strong>${esc(f.score||'VS')}</strong><b>${esc(f.away)}</b>${crest(f.away)}</div><div class="fixture-bottom"><span>${esc(f.venue||'Venue TBD')} · ${esc(f.status||'Scheduled')}</span><button class="button ghost tiny" onclick="openFixtureTask('${esc(f.id)}')">CREATE TASK +</button></div></article>`).join('')||'<p class="muted">No published matches on this date.</p>'}</div></section>`;
+ const visible=OFFICIAL_FIXTURES.filter(f=>fixtureDay==='all'||f.date===fixtureDay)
+  .sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||'')||(a.order||0)-(b.order||0));
+ const catalogCards=visible.map(f=>{
+  const task=taskForFixture(f.id);
+  const status=task?taskStatus(task):'uncreated';
+  const actionLabel=status==='done'?'✓ COMPLETED':task?'OPEN TASK →':'CREATE TASK +';
+  const statusLabel=status==='done'?'COMPLETED':status==='progress'?'IN PROGRESS':status==='ready'?'READY TO TAG':'NOT CREATED';
+  const actionTitle=status==='done'?'Review completed annotation work':task?'Open existing annotation task':'Create an annotation task';
+  const streams=task&&task.submitted?.sponsors!==task.submitted?.context?
+   `<div class="fixture-stream-note">${task.submitted?.sponsors?'Sponsor tagging complete · Events & camera pending':'Events & camera complete · Sponsor tagging pending'}</div>`:'';
+  return `<article class="fixture-card fixture-task-${status}" data-fixture-id="${esc(f.id)}">
+   <div class="fixture-date">${esc(f.id)} · ${esc(f.date)} · ${esc(f.time||'Time TBD')} ET <span>${esc(f.stage||f.group||'')}</span></div>
+   <div class="fixture-task-state ${status}">${statusLabel}</div>
+   <div class="fixture-line">${crest(f.home)}<b>${esc(f.home)}</b><strong>${esc(f.score||'VS')}</strong><b>${esc(f.away)}</b>${crest(f.away)}</div>
+   ${streams}
+   <div class="fixture-bottom"><span>${esc(f.venue||'Venue TBD')} · ${esc(f.status||'Scheduled')}</span>
+    <button class="button tiny fixture-task-action ${status==='done'?'fixture-completed':'ghost'}" title="${actionTitle}" aria-label="${actionTitle} for ${esc(f.id)}" onclick="openFixtureTask('${esc(f.id)}')">${actionLabel}</button>
+   </div></article>`;
+ }).join('');
+ return `<section class="fixture-catalog"><div class="sectionhead"><div><div class="eyebrow">SCHEDULE / LIVE DATA SNAPSHOT</div>
+ <h2>MATCH CATALOG</h2>
+ <p class="sub">Published fixture schedule with live annotation-task status. Completed matches are ready to review; existing tasks open directly without creating duplicates. Times shown in Eastern Time (ET).</p>
+ </div><span class="tag">${esc(fixtureSyncLabel)} · ${OFFICIAL_FIXTURES.length} matches</span></div>
+ <div class="fixture-days"><button class="chip ${fixtureDay==='all'?'active':''}" onclick="chooseFixtureDay('all')">ALL DAYS</button>${byDay.map(d=>`<button class="chip ${fixtureDay===d?'active':''}" onclick="chooseFixtureDay('${d}')">${esc(d)}</button>`).join('')}</div>
+ <div class="fixture-cards">${catalogCards||'<p class="muted">No published matches on this date.</p>'}</div></section>`;
 }
 window.setFilter=s=>{taskFilter=s;render()};
 function studio(){let t=currentTask();if(!t)return dashboard();const allS=sponsorFor(t),allE=eventsFor(t),allC=camerasFor(t);let activeS=allS.filter(s=>t.sponsors.some(x=>x.sponsorId===s.id&&x.end==null));let activeE=allE.filter(e=>t.events.some(x=>x.eventId===e.id&&x.end==null));let activeC=t.cameras.find(x=>x.end==null);let useVideo=localVideos[t.id]||(t.videoType==='https'&&t.videoUrl? t.videoUrl:null);let isLocalVideo=!!localVideos[t.id];let allowS=canEdit(t,'sponsors'),allowC=canEdit(t,'context');return `<div class="studio-head"><div class="row between studio-title-layout"><div><div class="eyebrow">ANNOTATION STUDIO / ${esc(t.number)}</div><h1>${esc(t.name)}</h1><div class="studio-meta">${statusHTML(t)} <span>${esc(t.date||'Date not specified')}</span><span>·</span><span>${fmt(t.duration)} expected video length</span><span>·</span><span>Sponsors: ${esc(nameUser(t.sponsorAnalystId))}</span><span>·</span><span>Context: ${esc(nameUser(t.contextAnalystId))}</span></div></div><div class="task-actions-dropdown"><details class="task-actions" id="taskActionMenu"><summary aria-label="Task actions"><span>ACTIONS</span><span class="menu-glyph" aria-hidden="true">⋯</span></summary><div class="task-menu-content">
@@ -1254,7 +1293,7 @@ window.saveTask=id=>{const name=formVal('taskname').trim(),number=formVal('taskn
  const firstEnd=Number(firstVal),secondStart=Number(secondVal);
  if(providedFirst&&(!Number.isFinite(firstEnd)||!Number.isFinite(secondStart)||firstEnd<=0||secondStart<firstEnd||secondStart>=dur))return notify('Period mapping must satisfy 0 < first-half end ≤ second-half start < video duration.');
  let data={name,number,date:formVal('taskdate'),duration:Math.round(dur*60*100)/100,
- periods:providedFirst?{firstEnd,secondStart}:null,sponsorGroupIds:checks('sgroups'),eventGroupIds:checks('egroups'),cameraGroupIds:checks('cgroups'),sponsorAnalystId:formVal('tsponsor'),contextAnalystId:formVal('tcontext'),videoType:formVal('taskvideosrc'),videoUrl:formVal('taskurl').trim(),fixtureId:formVal('taskfixture')||task?.fixtureId||''};if(data.videoType==='https'&&data.videoUrl&&!/^https:\/\//i.test(data.videoUrl))return notify('Direct video links must start with https://');if(data.videoType==='ftp'&&data.videoUrl&&!/^(ftp|sftp):\/\//i.test(data.videoUrl))return notify('FTP links must start with ftp:// or sftp://');if(!task){task={id:uid(),sponsors:[],events:[],cameras:[],submitted:{sponsors:false,context:false},createdAt:tstamp(),demo:false};db.tasks.push(task)}Object.assign(task,data);save();closeModal();view='tasks';render();notify(id?'Task updated':'Task created')};
+ periods:providedFirst?{firstEnd,secondStart}:null,sponsorGroupIds:checks('sgroups'),eventGroupIds:checks('egroups'),cameraGroupIds:checks('cgroups'),sponsorAnalystId:formVal('tsponsor'),contextAnalystId:formVal('tcontext'),videoType:formVal('taskvideosrc'),videoUrl:formVal('taskurl').trim(),fixtureId:formVal('taskfixture')||task?.fixtureId||''};if(!task&&data.fixtureId&&taskForFixture(data.fixtureId))return notify('This fixture already has a task. Open its existing entry in the Match Catalog.');if(data.videoType==='https'&&data.videoUrl&&!/^https:\/\//i.test(data.videoUrl))return notify('Direct video links must start with https://');if(data.videoType==='ftp'&&data.videoUrl&&!/^(ftp|sftp):\/\//i.test(data.videoUrl))return notify('FTP links must start with ftp:// or sftp://');if(!task){task={id:uid(),sponsors:[],events:[],cameras:[],submitted:{sponsors:false,context:false},createdAt:tstamp(),demo:false};db.tasks.push(task)}Object.assign(task,data);save();closeModal();view='tasks';render();notify(id?'Task updated':'Task created')};
 function sponsorsView(){let gs=db.sponsorGroups;return `<div class="pagehead"><div><div class="eyebrow">SETUP / BRAND CATALOG</div><h1>Sponsor library</h1><p class="sub">Organize sponsors into reusable groups. Upload a logo or full-brand image for each.</p></div><button class="button primary" onclick="groupModal('sponsor')">${icons('plus')} New sponsor list</button></div><div class="library-layout">${gs.map(g=>`<div class="card groupcard"><div class="grouphead"><div><h3>${esc(g.name)}</h3><p>${esc(g.description||'Reusable sponsor attribute list')} · ${g.sponsors.length} sponsors</p></div><button class="button ghost tiny" onclick="groupModal('sponsor','${g.id}')">Edit</button></div><div class="groupitems">${g.sponsors.map(s=>`<div class="sponsor-mini">${logo(s)}${esc(s.name)} <button class="button ghost tiny" onclick="sponsorModal('${g.id}','${s.id}')" title="Replace or upload logo">UPLOAD / EDIT</button><button class="button warn tiny" onclick="deleteSponsor('${g.id}','${s.id}')" title="Delete sponsor">DELETE</button></div>`).join('')}</div><button class="button soft tiny" style="margin-top:17px" onclick="sponsorModal('${g.id}')">${icons('plus')} Add sponsor</button></div>`).join('')}</div>`}
 function attrsView(){const gs=[['event','Key event attributes',db.eventGroups],['camera','Camera angle attributes',db.cameraGroups]];return `<div class="pagehead"><div><div class="eyebrow">SETUP / TAG ONTOLOGY</div><h1>Tagging attributes</h1><p class="sub">Create reusable event and camera presets that match different client requirements.</p></div></div>${gs.map(([kind,title,groups])=>`<div class="sectionhead" style="margin:30px 0 15px"><h2>${title}</h2><button class="button primary tiny" onclick="groupModal('${kind}')">${icons('plus')} New list</button></div><div class="library-layout">${groups.map(g=>`<div class="card groupcard"><div class="grouphead"><div><h3>${esc(g.name)}</h3><p>${g.items.length} attributes</p></div><button class="button ghost tiny" onclick="groupModal('${kind}','${g.id}')">Edit</button></div><div class="groupitems">${g.items.map(i=>`<span class="sponsor-mini">${esc(i.name)} ${kind==='event'&&i.highValue===true?'<span class="tag">HIGH VALUE</span>':''} <button class="button ghost tiny" style="padding:3px 5px" title="Remove attribute" onclick="removeItem('${kind}','${g.id}','${i.id}')">${icons('close')}</button></span>`).join('')}</div><button class="button soft tiny" style="margin-top:17px" onclick="attrItemModal('${kind}','${g.id}')">${icons('plus')} Add attribute</button></div>`).join('')}</div>`).join('')}`}
 window.groupModal=(kind,id='')=>{let groups=kind==='sponsor'?db.sponsorGroups:kind==='event'?db.eventGroups:db.cameraGroups;let g=groups.find(x=>x.id===id);openModal(g?'Edit attribute list':'New attribute list',`<div class="field"><label>List name</label><input id="gname" value="${esc(g?.name||'')}" placeholder="${kind==='sponsor'?'Main stadium sponsors':kind==='event'?'Match moments':'Broadcast camera presets'}"></div>${kind==='sponsor'?`<div class="field" style="margin-top:15px"><label>Description</label><textarea id="gdesc" rows="2" placeholder="Optional">${esc(g?.description||'')}</textarea></div>`:''}`,`<button class="button ghost" onclick="closeModal()">Cancel</button><button class="button primary" onclick="saveGroup('${kind}','${id}')">Save list</button>`)};
