@@ -157,6 +157,26 @@ function expect(expr,message){assert.ok(expr,message)}
  window.selectInsightSponsor('s_gatorade');
  assert.equal(document.querySelector('#insightSponsorFilter').value,'s_gatorade','brand filter updates');
 
+ // Status transition: task creation alone is READY, the first tag makes it IN PROGRESS.
+ window.openTask(assigned.id);
+ const newlyCreated=db().tasks.find(t=>t.id===assigned.id);
+ assert.equal(newlyCreated.sponsors.length,0,'new assignment has no sponsor events');
+ window.seekVideo(25);
+ document.querySelector('.rail-brand').click();
+ assert.equal(newlyCreated.sponsors.length,1,'first annotation starts new match');
+ window.navigate('tasks');
+ const taskRow=[...document.querySelectorAll('tr')].find(tr=>tr.textContent.includes('TEST-M99'));
+ expect(taskRow,'new match appears in task list');
+ expect(taskRow.querySelector('.status.progress'),'first annotation automatically puts match In Progress');
+ window.openTask(assigned.id);
+ window.seekVideo(33);
+ document.querySelector('.rail-brand').click();
+ window.showReport('task_demo1');
+ expect(document.querySelector('.insight-rollup'),'cross-match benchmark available when two matches have tags');
+ document.querySelector('.insight-rollup').open=true;
+ assert.equal(document.querySelectorAll('.insight-rollup .insight-stat').length,4,'tournament overview has four comparison KPIs');
+ expect(document.querySelector('.insight-rollup .insight-table tbody tr'),'cross-match sponsor benchmark table');
+
  window.openTask('task_demo1');
  document.querySelector('.focusbrand.brand-home').click();
  expect(document.querySelector('.ops-nav'),'logo navigates to dashboard');
