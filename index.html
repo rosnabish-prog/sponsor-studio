@@ -460,6 +460,54 @@ input[type="range"]{accent-color:#e6e6e6!important}.toast{background:#ddd!import
  .app-focus .rail-compact-heading h2{font-size:17px;margin-bottom:2px}
 }
 
+
+/* Wide sponsor-logo experiment: one horizontal brand tile per row */
+.app-focus .studio-grid{
+  grid-template-columns:minmax(0,1fr) clamp(240px,22vw,330px)!important;
+}
+.app-focus .sponsor-rail .rail-cards{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  gap:8px!important;
+}
+.app-focus .sponsor-rail .rail-brand{
+  width:100%!important;
+  height:72px!important;
+  min-height:72px!important;
+  padding:7px 15px!important;
+  border-radius:4px!important;
+}
+.app-focus .sponsor-rail .rail-logo .tinylogo{
+  height:55px!important;
+  max-height:55px!important;
+}
+.app-focus .sponsor-rail .rail-logo .tinylogo img{
+  height:auto!important;
+  max-height:55px!important;
+  max-width:94%!important;
+}
+.app-focus .sponsor-rail .rail-state-dot{
+  width:8px;height:8px;top:8px;right:9px;
+}
+@media(max-width:950px){
+  .app-focus .studio-grid{
+    grid-template-columns:minmax(0,1fr) 230px!important;
+  }
+  .app-focus .sponsor-rail .rail-cards{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+  .app-focus .sponsor-rail .rail-brand{height:62px!important;min-height:62px!important;}
+  .app-focus .sponsor-rail .rail-logo .tinylogo,
+  .app-focus .sponsor-rail .rail-logo .tinylogo img{max-height:46px!important;}
+}
+@media(max-width:650px){
+  .app-focus .studio-grid{display:flex!important;flex-direction:column!important;}
+  .app-focus .sponsor-rail{max-height:285px!important;}
+  .app-focus .sponsor-rail .rail-scroll{max-height:235px!important;}
+  .app-focus .sponsor-rail .rail-cards{grid-template-columns:minmax(0,1fr)!important;}
+  .app-focus .sponsor-rail .rail-brand{height:60px!important;min-height:60px!important;}
+}
+
 </style>
 </head>
 <body>
