@@ -1,0 +1,41 @@
+name: Refresh BuildUp Messi Cup fixtures
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * 25-31 10 *'
+    - cron: '*/15 * 1 11 *'
+    - cron: '0 6 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: public-messi-cup-fixture-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download public fixtures and logos
+        run: python scripts/sync_fixtures.py
+      - name: Commit only changed fixture snapshots
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/fixtures.json
+          if git diff --cached --quiet; then
+            echo "No fixture changes; nothing to commit."
+          else
+            git commit -m "data: refresh published Messi Cup fixtures"
+            git push
+          fi
