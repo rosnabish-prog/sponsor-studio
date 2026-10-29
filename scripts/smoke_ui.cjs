@@ -84,7 +84,36 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(!document.querySelector('#sponsorRail').textContent.includes('No sponsors assigned'),'sponsor list still rendered');
  expect(html.includes('position:static!important;top:auto!important'),'video scrolls with page');
  expect(document.querySelector('.task-actions-dropdown'),'title-level action menu present');
+
+ expect(document.querySelector('.rail-compact-heading h2')?.textContent==='SPONSORS','compact sponsor heading retained');
+ assert.equal(document.querySelectorAll('[data-studio-tab]').length,4,'all four layer controls are rendered');
+ window.setStudioTab('events');
+ assert.equal(document.querySelector('[data-studio-tab="events"]').getAttribute('aria-pressed'),'true','event tab is visually active');
+ assert.equal(document.querySelectorAll('#controlsBody .event-chip:not(.camera-chip)').length>0,true,'event chips visible on Events');
+ assert.equal(document.querySelectorAll('#controlsBody .camera-chip').length,0,'camera chips hidden on Events');
+ assert.equal(document.querySelectorAll('#timelineBody .trackrow').length,5,'Events shows only event timeline rows');
+ window.setStudioTab('cameras');
+ assert.equal(document.querySelector('[data-studio-tab="cameras"]').classList.contains('on'),true,'camera tab becomes active');
+ assert.equal(document.querySelectorAll('#controlsBody .event-chip:not(.camera-chip)').length,0,'event chips hidden on Camera');
+ assert.equal(document.querySelectorAll('#controlsBody .camera-chip').length,7,'camera chips visible on Camera');
+ assert.equal(document.querySelectorAll('#timelineBody .trackrow').length,7,'camera timeline only');
+ window.setStudioTab('sponsors');
+ expect(document.querySelector('.studio-layer-hint'),'Sponsor layer shows sidebar hint');
+ assert.equal(document.querySelectorAll('#timelineBody .trackrow').length,8,'sponsor timeline only');
+ assert.equal(document.querySelectorAll('#controlsBody .event-chip').length,0,'only sponsor controls on Sponsors tab');
+ window.setStudioTab('all');
+ assert.equal(document.querySelector('[data-studio-tab="all"]').getAttribute('aria-pressed'),'true','All tab active');
+ assert.equal(document.querySelectorAll('#controlsBody .event-chip').length,12,'All renders events and cameras');
+ window.navigate('attributes');
+ expect(document.querySelectorAll('.groupitems .sponsor-mini').length>0,'attributes library opens');
+ assert.equal(document.querySelectorAll('.groupitems .sponsor-mini .tag').length,0,'redundant range badges removed');
+ window.openTask('task_demo1');
+ document.querySelector('.focusbrand.brand-home').click();
+ expect(document.querySelector('.ops-nav'),'logo navigates to dashboard');
+ expect(!document.querySelector('.studio-grid'),'dashboard replaces studio');
+ assert.ok(html.includes('max-height:none!important')&&html.includes('overflow-y:visible!important'),'sponsor rail no nested scrolling');
+
  assert.deepEqual(errors,[],'no uncaught DOM errors');
- console.log('PASS title dropdown, compact flat logo rail, non-sticky video, same timestamp removals and toasts, intervals, seek and camera switching');
+ console.log('PASS layer tabs, logo home navigation, no range labels, no nested sponsor scroll, intervals, seeking and camera switching');
  dom.window.close();
 })().catch(err=>{console.error(err);dom.window.close();process.exit(1)});
