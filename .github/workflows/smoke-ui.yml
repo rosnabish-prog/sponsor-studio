@@ -1,4 +1,4 @@
-name: Browser smoke test
+name: Studio interaction regression
 on:
   push:
     paths:
@@ -17,8 +17,6 @@ jobs:
         with:
           node-version: '22'
       - name: Install UI automation dependency
-        run: npm install --no-save puppeteer-core@24
-      - name: Start site
-        run: python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/sponsor-web.log 2>&1 &
-      - name: Test annotation UI in Chrome
+        run: npm install --no-save jsdom@27
+      - name: Test studio interactions and annotation intervals
         run: node scripts/smoke_ui.cjs
