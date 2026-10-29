@@ -595,7 +595,7 @@ input[type="range"]{accent-color:#e6e6e6!important}.toast{background:#ddd!import
 .insight-bars{display:flex;gap:5px;align-items:stretch;height:155px;border-bottom:1px solid #555;margin-top:12px}
 .insight-tick{display:flex;flex-direction:column;align-items:center;justify-content:end;flex:1;min-width:0;gap:7px}
 .insight-tick-track{width:100%;flex:1;background:#1d1d1d;position:relative;display:flex;align-items:end}
-.insight-tick-track span{display:block;width:100%;background:linear-gradient(180deg,#eb438d,#3859a8)}
+.insight-tick-track span{display:block;width:100%;background:#c7c7c7}
 .insight-tick>span{font:600 9px ui-monospace,monospace;color:#888;white-space:nowrap}
 .insight-trend-footer{display:flex;justify-content:space-between;gap:10px;color:#9c9c9c;font:650 9px ui-monospace,monospace;margin-top:10px}
 .insight-table{min-width:680px;width:100%;border-collapse:collapse}
@@ -1073,7 +1073,7 @@ function buildReport(t){
  const incomplete=!(t.submitted?.sponsors&&t.submitted?.context);
  const cards=[
   {label:'BRANDS VISIBLE',value:d.active.length+'/'+d.brands.length,note:'Unique brands with tagged exposure'},
-  {label:'BROADCAST WITH ANY SPONSOR',value:coverage,note:fmt(d.coveredSeconds)+' of '+fmt(d.videoSeconds)+' footage'},
+  {label:'SPONSOR VISIBILITY COVERAGE',value:coverage,note:fmt(d.coveredSeconds)+' of '+fmt(d.videoSeconds)+' footage tagged visible'},
   {label:'COMBINED BRAND EXPOSURE',value:fmt(d.sumSeconds),note:'Different brands are added separately'},
   {label:'TAGGED KEY EVENTS',value:d.eventRows.length,note:d.eventRows.filter(e=>e.brands.length>0).length+' with a sponsor overlap'}
  ];
@@ -1114,7 +1114,7 @@ function buildReport(t){
  <div class="insight-stat-grid">${cards.map(c=>`<article class="insight-stat"><span>${c.label}</span><strong>${c.value}</strong><p>${c.note}</p></article>`).join('')}</div>
  <div class="insight-block insight-trend">
   <div class="insight-section-title"><div><h3>WHERE SPONSORS APPEAR IN THE MATCH</h3>
-  <p>5-minute footage segments. Bar height is the share of each segment with a visible sponsor.</p></div>
+  <p>Five-minute segments. Bar height shows the share of footage covered by a sponsor-visibility annotation.</p></div>
   <label class="insight-select">BRAND FILTER<select id="insightSponsorFilter" onchange="selectInsightSponsor(this.value)">${focusOptions}</select></label></div>
   <div class="insight-bars">${timeBars}</div>
   <div class="insight-trend-footer"><span>FIRST FRAME 00:00</span><span>${focused?esc(focused.name.toUpperCase()):'ANY SPONSOR VISIBLE'}</span><span>FINAL FRAME ${fmt(d.videoSeconds)}</span></div>
@@ -1131,7 +1131,7 @@ function buildReport(t){
   <section class="insight-block"><div class="insight-section-title"><div><h3>SIMULTANEOUS BRAND VISIBILITY</h3>
   <p>Brands that appeared together, counted as one exposure per brand.</p></div></div>
   ${pairs||'<p class="insight-muted">No overlapping sponsor pairs recorded yet.</p>'}
-  <div class="insight-coverage-note"><b>NO SPONSOR VISIBLE</b><strong>${fmt(Math.max(0,d.videoSeconds-d.coveredSeconds))}</strong><span>Portion of the footage not covered by any tagged sponsor.</span></div>
+  <div class="insight-coverage-note"><b>NO SPONSOR TAG RECORDED</b><strong>${fmt(Math.max(0,d.videoSeconds-d.coveredSeconds))}</strong><span>Footage without recorded sponsor visibility. This does not prove no sponsor appeared when annotation is incomplete.</span></div>
   </section></div>
  <section class="insight-block"><div class="insight-section-title"><div><h3>CAMERA-ANGLE PERFORMANCE</h3><p>Tagging-time coverage and sponsor presence in each broadcast camera view.</p></div>
  <span class="insight-count">${percent(pct(d.cameraCovered,d.videoSeconds))} CAMERA TAGGED</span></div>
@@ -1139,7 +1139,7 @@ function buildReport(t){
  <tbody>${cameraRows||'<tr><td colspan="6">No camera angles configured</td></tr>'}</tbody></table></div></section>
  <section class="insight-notes"><div><h3>DATA QUALITY & INTERPRETATION</h3>
  <p>Based only on manually tagged sponsor presence. All durations reference footage timestamps, not clock time or estimated audience exposure. Different brands visible simultaneously each contribute their own exposure seconds, so combined brand exposure may exceed video duration. A sponsor is counted once even when its logo is repeated in the frame.</p>
- <p>These annotations cannot establish logo size, screen coverage, ad prominence, audience impressions, monetary valuation, or whether an advertised brand was noticed by a viewer.</p></div>
+ <p>Unannotated footage is not proof that sponsors were absent. These annotations cannot establish logo size, screen coverage, ad prominence, audience impressions, monetary valuation, or whether an advertised brand was noticed by a viewer.</p></div>
  <div><h4>ANNOTATION CHECKS</h4><p>Latest annotated timestamp: ${fmt(d.endpoint)} of ${fmt(d.videoSeconds)}.</p>
  ${warnings.length?warnings.map(w=>`<div class="insight-warning">${esc(w)}</div>`).join(''):'<div class="insight-ok">No open tags or missing camera coverage detected</div>'}</div></section>
  </div>`;
