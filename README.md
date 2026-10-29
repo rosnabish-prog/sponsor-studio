@@ -64,10 +64,30 @@ GitHub Pages hosts static frontend files only. It cannot by itself run the authe
 - Uses the supplied official `assets/mc26-wordmark.svg` locally; never relies on a third-party logo host for the tournament wordmark.
 - Gradient is exclusively used for match overview scorecards, not login or dashboard.
 - Demo sign-in form is centrally laid out and uses explicit JavaScript submit listeners, without Google sign-in.
-- Sample match tasks use real published Messi Cup 2026 fixtures rather than fabricated pairs, plus a fixture selection control when creating admin tasks. The curated fixture list is **a snapshot, not live synchronization**. References: https://stats.buildup.club/matches and https://messicup.com/en/schedule.
+- Sample match tasks use real published Messi Cup 2026 fixtures rather than fabricated pairs, plus a fixture selection control when creating admin tasks. The original bundled fixtures serve as an offline fallback. The page now loads `data/fixtures.json` generated from the public BuildUp read-only match feed. References: https://stats.buildup.club/matches and https://messicup.com/en/schedule.
 - Club crests: verified external URLs are displayed where available with initials fallback on failure; replace with approved, locally hosted team logos for production.
 - Existing local demo credentials remain admin@demo.seebot.ai, analyst@demo.seebot.ai, and events@demo.seebot.ai; password Demo1234!. Changes remain local to each browser, not shared between people.
 
 **Production blockers:** secure login with a backend, role-enforced API authorization, real password reset by email, fixture feed/API agreement, official club logo assets, shared task/annotation database, storage/FTP ingest. GitHub Pages is static hosting only.
 
 - The River Plate and AFC Ajax club marks load from Wikimedia Commons external URLs. Other badges use remote references when available; all have initial-based fallbacks. For production, host authorized approved club badge assets locally.
+## Automatically refreshed BuildUp match catalog
+
+The public data refresh is handled by `.github/workflows/sync-fixtures.yml`:
+- Every 15 minutes during October 25–31 and November 1, 2026 (UTC scheduled cadence; runs may be delayed by GitHub).
+- Once per day outside the tournament, so changes to published schedules remain discoverable.
+- Manual run is available via **Actions → Refresh BuildUp Messi Cup fixtures → Run workflow**.
+
+`scripts/sync_fixtures.py` retrieves public read-only Match and Team entity records from `stats.buildup.club`, then normalizes fixture code, date, scheduled kickoff (ET), team names, logos, venue, status, score, stage and group into `data/fixtures.json`. It refuses to overwrite the known-good snapshot on bad or incomplete responses, and only commits actual changes. GitHub Pages automatically redeploys on that commit. The web page checks for updated fixture JSON every 5 minutes while open, and falls back to the bundled schedule if the file cannot be loaded.
+
+Under **Matches**, administrators can filter the official match catalog by date and prefill a new annotation task. Importing a fixture does not automatically assign analysts or create a task; the administrator still controls that decision.
+
+The supplier has not published an integration SLA for this endpoint. Monitor the sync workflow during the event and seek permission for long-term usage.
+
+## Sponsor logos and full-screen annotation
+
+In the **Sponsor library**, open a sponsor or click **UPLOAD / EDIT** to upload its brand image. Click **DELETE** to remove an unused sponsor; sponsors with historical annotations cannot be deleted from this demo, to protect prior records. Once an image is saved, the analyst sees it on the sponsor card whenever the task includes that sponsor list.
+
+The annotation workspace fills the browser width, places the video above large sponsor cards and the unified timeline, and leaves only an **Insights** navigation button for analytics. Upload footage, export JSON and mark completion remain accessible in the workspace header.
+
+**Demo constraint:** sponsor logo uploads, task assignments and annotations still reside in browser-local storage; different workers on different browsers do **not** see each other's changes until a real shared backend is implemented. The public GitHub Pages demo must not be used for client-confidential videos or live worker authentication.
