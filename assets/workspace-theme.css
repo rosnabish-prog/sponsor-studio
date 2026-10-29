@@ -463,6 +463,20 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
 .app-focus .fakepitch{background:#24292d!important;}
 .app-focus .fakepitch strong{font-family:'Manrope',sans-serif!important;}
 
+/* Distinct but harmonious layer colors, with a high-contrast video playhead. */
+.app-focus .track {background:#2b2b2e!important;border-radius:8px!important;min-height:24px!important;}
+.app-focus .trackrow {gap:10px!important;}
+.app-focus .trackname {color:#d1d1d5!important;font:650 10px 'IBM Plex Mono',monospace!important;}
+.app-focus .track-top {color:#97979d!important;}
+.app-focus .block {border-radius:5px!important;}
+.app-focus .block.sponsor {background:#ff9b36!important;}
+.app-focus .block.event {background:#d7c7b5!important;}
+.app-focus .block.camera {background:#9cabb0!important;}
+.app-focus .block.open {background:repeating-linear-gradient(45deg,#ef912e,#ef912e 6px,#ffc987 6px,#ffc987 12px)!important;}
+.app-focus .playhead,.app-focus .playhead:before {background:#f7f7f7!important;}
+.app-focus .playhead {box-shadow:0 0 0 1px #1116;}
+.app-focus .logtable {border-radius:13px!important;}
+.app-focus .logtable .table tbody tr:hover{background:#29292c!important;}
 /* Reports and insight surfaces. Keep measured data, refresh their containers. */
 .insights-dashboard{gap:14px!important;}
 .insight-head{align-items:center!important;}
