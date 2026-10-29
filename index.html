@@ -930,7 +930,7 @@ function matchTiles(ts){
  if(!ts.length)return '<div class="empty"><strong>No tasks available</strong><p>Ask your administrator to assign a match or create a new task.</p></div>';
  return `<div class="match-tile-grid">${ts.map(t=>`<button type="button" class="match-tile" onclick="openTask('${t.id}')" aria-label="Open ${esc(t.name)}">
   <div class="match-tile-head"><span class="match-tile-code">${esc(t.number)} · ${esc(t.date||'DATE TBD')}</span>${statusHTML(t)}</div>
-  <div class="match-tile-match"><h3>${fixtureMini(t)}</h3></div>
+  <div class="match-tile-match">${fixtureMini(t)}</div>
   <div class="match-tile-foot"><div class="match-tile-person">SPONSORS: ${esc(nameUser(t.sponsorAnalystId))}<div>EVENTS: ${esc(nameUser(t.contextAnalystId))}</div></div><span class="match-tile-arrow">${icons('arrow')}</span></div>
  </button>`).join('')}</div>`;
 }
