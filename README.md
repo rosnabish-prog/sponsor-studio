@@ -14,7 +14,7 @@ By default the frontend still runs as a local-storage-only demonstration. With `
 
 The new `apps/api` workspace contains a NestJS API with PostgreSQL/Prisma schema and migrations, Argon2id email/password accounts, revocable sessions, workspace membership, persistent tasks, analyst assignments, sponsor/event/camera annotation intervals, submission/reopen actions, shared catalog and audit records. The React frontend can now use this API when the live mode environment flag is set.
 
-See [API setup, endpoint reference, private video prerequisites and remaining P0 gaps](apps/api/README.md) before deploying it. The multipart upload and signed CloudFront playback code needs real AWS infrastructure, and email verification/invitations and production hardening remain outstanding.
+See [API setup, endpoint reference, private video prerequisites and remaining P0 gaps](apps/api/README.md) before deploying it. The multipart upload and signed CloudFront playback code needs real AWS infrastructure. Email/password recovery is implemented through Amazon SES when configured; email verification, user invitations and production hardening remain outstanding. GitHub Actions checks PostgreSQL integration, live React workflows and production container builds.
 
 ## What is included
 
@@ -85,16 +85,18 @@ If the GitHub Pages site or repository is public, its JavaScript, demo accounts,
 
 ## Important production limitations
 
-This is **not** a production-ready multiuser service. It uses browser-local storage, not a shared server database. Sign-in, sign-out, password reset, and role checks are **demo-only UI flows**, not secure backend-enforced authentication. Different browsers do not share assignments or annotations. FTP/SFTP sources are metadata only; the browser cannot ingest them directly. Logo uploads are stored in browser storage and can exceed browser storage limits. Local video attachments are not uploaded or shared.
+The **default GitHub Pages demo** is not a production-ready multiuser service. It uses browser-local storage, so demo accounts, assignments, uploaded logos and annotations are not shared between devices.
 
-For real analysts, production deployment requires:
+The **separately enabled API mode** uses NestJS sessions, server-enforced workspace permissions, PostgreSQL persistence, shared catalogs/tasks/annotations, SES password recovery and S3/CloudFront video APIs. This mode is still **not production-ready** until AWS services, email verification/invitations, operational monitoring/backups and deployment checks have been completed. FTP/SFTP sources are metadata only; actual transfer/transcoding is not implemented.
 
-1. A real authentication provider (e.g. Supabase Auth, AWS Cognito), verified email reset/invite flows, and backend-enforced role-based authorization.
-2. Durable PostgreSQL storage for tasks, sponsor groups, assignments, timestamp intervals, editing history, and completion state.
-3. Secure, resumable API writes and realtime updates, with analyst ownership per track and revision conflict protection.
-4. Video storage and private signed URLs; an FTP/SFTP ingest worker to transfer to playable HTTPS media (and transcode if needed).
-5. Versioned JSON exports, audit logs, supervisor review and correction workflows.
-6. Auth/session, export, and concurrency tests before exposing to a client.
+For real analysts, production deployment still requires:
+
+1. Provisioned and secured AWS infrastructure: RDS/PostgreSQL, ECS API, private S3, CloudFront with trusted key groups, SES and IAM.
+2. Verified email ownership, invitation acceptance, and organization onboarding before granting external access.
+3. Operational controls: alarms, backups, restore drills, session-cleanup scheduling, production network restrictions and secrets management.
+4. Pagination and performance/load testing for long 4K footage, many concurrent analysts, and large match portfolios.
+5. A real ingestion/transcode pipeline if FTP/SFTP or non-browser-compatible video formats are required.
+6. Production end-to-end tests against actual AWS buckets, the CDN and the deployed origin.
 
 GitHub Pages hosts static frontend files only. It cannot by itself run the authentication and annotation backend. For production, connect this frontend to backend services or deploy the full stack to AWS.
 
