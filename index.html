@@ -508,6 +508,57 @@ input[type="range"]{accent-color:#e6e6e6!important}.toast{background:#ddd!import
   .app-focus .sponsor-rail .rail-brand{height:60px!important;min-height:60px!important;}
 }
 
+
+/* Sponsor rail follows the main page; no nested scrollbar or clipped sponsors */
+.app-focus .sponsor-rail {
+ height:auto!important;
+ max-height:none!important;
+ min-height:0!important;
+ overflow:visible!important;
+ position:static!important;
+}
+.app-focus .sponsor-rail .rail-scroll{
+ height:auto!important;
+ max-height:none!important;
+ overflow:visible!important;
+ overflow-y:visible!important;
+ scrollbar-width:none!important;
+}
+.app-focus .sponsor-rail .rail-cards{
+ height:auto!important;
+ max-height:none!important;
+ overflow:visible!important;
+}
+.app-focus .brand-home {
+ display:flex;align-items:center;gap:12px;
+ padding:0!important;border:0!important;background:transparent!important;
+ color:inherit;cursor:pointer;font:inherit;text-align:left;
+}
+.app-focus .brand-home:hover img,.app .ops-brand.brand-home:hover img{
+ opacity:.85;
+}
+.app-focus .brand-home:focus-visible,.app .brand-home:focus-visible{
+ outline:2px solid #fafafa;outline-offset:5px;
+}
+.app .ops-brand.brand-home{
+ display:flex;align-items:center;gap:10px;border:0;background:transparent;
+ padding:0;cursor:pointer;color:inherit;text-align:left;
+}
+.app-focus .studio-layer-hint{
+ padding:13px 15px;background:#161616;border:1px solid #363636;
+ color:#aaa;font:500 11px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+ text-transform:uppercase;
+}
+@media(max-width:650px){
+ .app-focus .sponsor-rail{
+  height:auto!important;max-height:none!important;flex:none!important;
+  overflow:visible!important;
+ }
+ .app-focus .sponsor-rail .rail-scroll{
+  height:auto!important;max-height:none!important;overflow:visible!important;
+  overflow-y:visible!important;
+ }
+}
 </style>
 </head>
 <body>
