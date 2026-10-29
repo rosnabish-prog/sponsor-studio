@@ -54,3 +54,13 @@ for obj in [x for x in p.scripts if x["src"]][:3]:
         print("DATAKEY",key,"COUNT",len(mm))
         for match in mm[-7:]:
             print("DATA_SNIP",key,js[max(0,match.start()-220):match.end()+320][:550].replace(chr(10),' '))
+
+from urllib.parse import urlencode
+for entity,params in [('Match',{'q':json.dumps({'date':{'$gte':'2026-01-01'}}),'sort':'order','limit':'50'}),('Team',{'sort':'name','limit':'50'})]:
+    test_url='https://stats.buildup.club/api/apps/6ad8b0035891124905a4079c/entities/'+entity+'?'+urlencode(params)
+    try:
+        with urllib.request.urlopen(urllib.request.Request(test_url,headers={'Accept':'application/json','User-Agent':'Mozilla/5.0'}),timeout=25) as response:
+            body=response.read().decode('utf-8','replace')
+            print('ENTITY',entity,'STATUS',response.status,'LENGTH',len(body),'SAMPLE',body[:2200])
+    except Exception as e:
+        print('ENTITY',entity,'ERROR',repr(e))
