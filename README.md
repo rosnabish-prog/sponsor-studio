@@ -112,3 +112,25 @@ Note: this is still a browser-local functional demo. It does not synchronize use
 - Sponsor cards are small horizontal rectangles with the logo as the only visible label, plus a red or green indicator. The sidebar does not display Main/Sideline group headings or instructional blocks.
 - If an already active **sponsor, key event, or camera** is tapped again at the same video timestamp (within **0.2 seconds**), its open annotation is removed and the operator receives a toast near the bottom of the screen. Clicking a *different* camera at the current camera's starting timestamp replaces the camera rather than creating a zero-length angle.
 - A genuinely later click ends the open interval. Seeks to timestamps earlier than a tag's start cannot close that tag. Existing closed records are not automatically erased.
+
+## Admin users, assignments, and status flow
+
+**Admin → Team → Add Analyst** creates a demonstration analyst in that browser's local database. The demo requires a name, valid email address, and a password of at least eight characters. **Admin → Matches → New Task** lets an administrator select a fixture or create a custom match, choose sponsor/event/camera presets, and assign a sponsor analyst plus an event/camera analyst. Both assignments may point to the same user. The task can later be edited in its Actions menu.
+
+Task status is automatically derived, not manually changed:
+
+- **Ready**: no sponsor, event or camera annotations, and neither stream submitted (assignment alone does not start it).
+- **In Progress**: at least one recorded tag or at least one submitted stream, while both streams are not yet submitted.
+- **Completed**: both sponsor and context annotation streams have been submitted.
+
+The demo has no real shared user directory or backend. Users, assignments, uploaded logos and annotations cannot be shared between separate devices through GitHub Pages. Production needs backend authentication, role enforcement and shared storage.
+
+## Insights calculations (October 2026)
+
+Per match, Insights now includes sponsor visibility coverage, combined exposure, a five-minute presence timeline, brand ranking by time and share of combined brand-seconds, appearance counts, longest exposure, overlapping events, camera-angle association, and simultaneously visible sponsor pairs. A collapsible tournament-level comparison appears when at least two matches have recorded sponsor work. JSON exports also contain the advanced derived analytics.
+
+**Interpretation:** these are annotation-based presence metrics, not audience impressions, ad value, logo prominence, or guaranteed absence of sponsorship in unannotated portions. Incomplete matches are marked preliminary; no-sponsor-tagged sections must not be treated as proof of no visible advertisements. Gradients remain restricted to match hero cards.
+
+## In-app confirmation dialogs
+
+Deleting an attribute, sponsor, or recorded annotation, resetting demo data, submitting work, and reopening annotation streams use native **in-platform confirmation overlays** rather than browser `confirm()` popups. Cancel leaves the original data unchanged.
