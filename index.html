@@ -699,8 +699,12 @@ function controlsHTML(t){
   const active=t.cameras.some(a=>a.cameraId===cam.id&&a.end==null);
   return `<button class="event-chip camera-chip ${active?'active':''}" type="button" onclick="tagCamera('${esc(cam.id)}')" ${canTag?'':'disabled'} aria-pressed="${active}"><span class="chip-symbol">◎</span>${esc(cam.name)}</button>`;
  }).join('');
- return `<section class="studio-chip-group"><div class="chip-group-title"><span>KEY MATCH EVENTS</span><small>TAP TO START · TAP AGAIN TO END</small></div><div class="event-chip-row">${chips||'<span class="small muted">No match events assigned</span>'}</div></section>
- <section class="studio-chip-group"><div class="chip-group-title"><span>CAMERA ANGLES</span><small>TAP AGAIN TO END · SWITCH TO CLOSE PREVIOUS</small></div><div class="event-chip-row">${angles||'<span class="small muted">No camera angles assigned</span>'}</div></section>`;
+ const eventSection=`<section class="studio-chip-group"><div class="chip-group-title"><span>KEY MATCH EVENTS</span><small>TAP TO START · TAP AGAIN TO END</small></div><div class="event-chip-row">${chips||'<span class="small muted">No match events assigned</span>'}</div></section>`;
+ const cameraSection=`<section class="studio-chip-group"><div class="chip-group-title"><span>CAMERA ANGLES</span><small>TAP AGAIN TO END · SWITCH TO CLOSE PREVIOUS</small></div><div class="event-chip-row">${angles||'<span class="small muted">No camera angles assigned</span>'}</div></section>`;
+ if(studioTab==='events')return eventSection;
+ if(studioTab==='cameras')return cameraSection;
+ if(studioTab==='sponsors')return '<div class="studio-layer-hint">Select sponsor logos from the right-hand SPONSORS panel. The timeline below shows sponsor visibility only.</div>';
+ return eventSection+cameraSection;
 }
 function timelineHTML(t){let dur=t.duration||3600,now=tick;const track=(name,items,type,point=false)=>`<div class="trackrow"><span class="trackname" title="${esc(name)}">${esc(name)}</span><div class="track" onclick="seekFromTrack(event,this)">${items.map(x=>{let left=100*clamp(x.start,0,dur)/dur,right=100*clamp(x.end==null?Math.max(x.start,t.observedTime||0,tick):x.end,0,dur)/dur;return `<span title="${esc(name)}: ${fmt(x.start)}${point?'':' – '+fmt(x.end==null?now:x.end)}" class="block ${type} ${x.end==null?'open':''} ${point?'dotpoint':''}" style="left:${left}%;width:${point?'.15':Math.max(.15,right-left)}%"></span>`}).join('')}<span class="playhead" style="left:${100*now/dur}%"></span></div></div>`;
 let rows=[];if(studioTab==='all'||studioTab==='sponsors')for(let s of sponsorFor(t))rows.push(track(s.name,t.sponsors.filter(x=>x.sponsorId===s.id),'sponsor'));
@@ -708,12 +712,14 @@ if(studioTab==='all'||studioTab==='events')for(let e of eventsFor(t))rows.push(t
 if(studioTab==='all'||studioTab==='cameras')for(let c of camerasFor(t))rows.push(track(c.name,t.cameras.filter(x=>x.cameraId===c.id),'camera'));
 return `<div class="track-top">${[0,.25,.5,.75,1].map(x=>`<span>${fmt(dur*x)}</span>`).join('')}</div>${rows.join('')||'<div class="empty">No tracks configured</div>'}`}
 function logsHTML(t){let logs=[...t.sponsors.map(x=>({...x,type:'Sponsor',itemId:x.sponsorId,key:'sponsors',color:'#ff4383'})),...t.events.map(x=>({...x,type:'Event',itemId:x.eventId,key:'events',color:'#8464ed'})),...t.cameras.map(x=>({...x,type:'Camera',itemId:x.cameraId,key:'cameras',color:'#41bce3'}))].sort((a,b)=>b.start-a.start);return `<div class="logtable"><table class="table"><thead><tr><th>Time</th><th>Type</th><th>Attribute</th><th>End</th><th></th></tr></thead><tbody>${logs.map(x=>`<tr><td class="nowrap" style="font-weight:900">${fmt(x.start)}</td><td><span style="color:${x.color};font-weight:800">${x.type}</span></td><td>${esc(labelFor(t,x.key,x.itemId))}</td><td>${x.end==null?'<span style="color:#15ac76;font-weight:900">Recording…</span>':x.kind==='point'?'Moment':fmt(x.end)}</td><td><button class="button ghost tiny" onclick="seekVideo(${x.start})" title="Jump to time">${icons('play')}</button> ${canEdit(t,x.key==='sponsors'?'sponsors':'context')?`<button class="button ghost tiny" onclick="deleteLog('${x.key}','${x.id}')" title="Remove log">${icons('close')}</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:#999;padding:20px">No actions recorded yet</td></tr>'}</tbody></table></div>`}
-window.setStudioTab=k=>{studioTab=k;refreshStudio()};
+window.setStudioTab=k=>{if(!['all','sponsors','events','cameras'].includes(k))return;studioTab=k;refreshStudio()};
 function refreshStudio(){
  const t=currentTask();if(!t||view!=='studio')return;
  const rail=document.getElementById('sponsorRail');if(rail)rail.innerHTML=sponsorRailHTML(t);
  const chips=document.getElementById('controlsBody');if(chips)chips.innerHTML=controlsHTML(t);
  const timeline=document.getElementById('timelineBody');if(timeline)timeline.innerHTML=timelineHTML(t);
+ const tabButtons=document.querySelectorAll('[data-studio-tab]');
+ tabButtons.forEach(btn=>{const active=btn.dataset.studioTab===studioTab;btn.classList.toggle('on',active);btn.setAttribute('aria-pressed',String(active))});
  const logs=document.getElementById('logBody');if(logs)logs.innerHTML=logsHTML(t);
  const count=document.getElementById('logcount');if(count)count.textContent=`${t.sponsors.length+t.events.length+t.cameras.length} logs`;
  const live=document.getElementById('activeCount');if(live)live.textContent=`${t.sponsors.filter(a=>a.end==null).length} LIVE`;
