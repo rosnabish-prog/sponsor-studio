@@ -266,7 +266,7 @@ async function refreshFixtureFeed(){
     if(!response.ok)throw Error('Feed unavailable: '+response.status);
     const payload=await response.json();
     if(!Array.isArray(payload.matches)||payload.matches.length<10)throw Error('Incomplete feed');
-    const safe=payload.matches.filter(f=>f&&typeof f.id==='string'&&/^\\d{4}-\\d{2}-\\d{2}$/.test(f.date)&&typeof f.home==='string'&&typeof f.away==='string');
+    const safe=payload.matches.filter(f=>f&&typeof f.id==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(f.date)&&typeof f.home==='string'&&typeof f.away==='string');
     if(safe.length<10)throw Error('Invalid feed');
     OFFICIAL_FIXTURES=safe;
     for(const team of payload.clubs||[]){
