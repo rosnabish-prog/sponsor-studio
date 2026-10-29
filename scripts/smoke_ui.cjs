@@ -44,6 +44,9 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.ok(theme.includes('overflow-y:auto!important'),'scrolling remains enabled in both panes');
  assert.ok(theme.includes('overscroll-behavior-y:contain!important'),'scrolling is isolated within the hovered pane');
  assert.ok(theme.includes('scrollbar-width:none!important')&&theme.includes('*::-webkit-scrollbar'),'visible scrollbars hidden across browser engines');
+ assert.ok(theme.includes('.chip.active,.chip.active:hover')&&theme.includes('background:var(--orange)!important;color:#17110b!important'),'active filter pills use brand orange, not white');
+ assert.ok(theme.includes('.app-focus .segmented button.on {background:var(--orange)!important'),'active studio tabs use orange');
+ assert.ok(theme.includes('.ops-nav .nav.active,.ops-nav .nav:hover {\n background:var(--orange)!important'),'selected navigation uses orange');
  assert.ok(theme.includes('.overlay .modalbody')&&theme.includes('flex:1 1 auto!important'),'modal body independently scrolls while header stays visible');
  assert.ok(theme.includes('.app-focus .sponsor-rail .rail-compact-heading')&&theme.includes('position:sticky!important'),'right-side Sponsors title stays visible inside its own pane');
  expect(document.querySelector('.focusbar .identity-lockup .powered-by img'),'paired Seebot lockup in studio header');
