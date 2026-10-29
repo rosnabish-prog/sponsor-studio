@@ -1282,11 +1282,11 @@ function buildReport(t){
  const placeBars=d.placementTotals.map(p=>`<div class="intel-breakdown-row">
  <div class="intel-breakdown-label"><span>${esc(p.label)}</span><strong>${fmt(p.seconds)} · ${p.intervals} APPEARANCES</strong></div>
  <div class="intel-breakdown-meter"><i style="width:${Math.min(100,pct(p.seconds,classifiedDuration))}%"></i></div>
- <p>${percent(pct(p.seconds,classifiedDuration))} of interval-seconds classified by placement</p></div>`).join('');
+ <p>${percent(pct(p.seconds,classifiedDuration))} of all recorded sponsor interval-seconds</p></div>`).join('');
  const qualityBars=d.qualityTotals.map(q=>`<div class="intel-breakdown-row">
  <div class="intel-breakdown-label"><span>${esc(q.label)}</span><strong>${fmt(q.seconds)}</strong></div>
  <div class="intel-breakdown-meter quality-${q.key}"><i style="width:${Math.min(100,pct(q.seconds,classifiedDuration))}%"></i></div>
- <p>${percent(pct(q.seconds,classifiedDuration))} of interval-seconds classified by quality</p></div>`).join('');
+ <p>${percent(pct(q.seconds,classifiedDuration))} of all recorded sponsor interval-seconds</p></div>`).join('');
  const periodCards=d.periodBreakdown.filter(p=>p.key!=='break').map(p=>`<article class="intel-period-card">
   <div class="intel-period-header"><b>${esc(p.label)}</b><span>${fmt(p.start)} – ${fmt(p.end)}</span></div>
   <strong>${fmt(p.combinedBrandSeconds)}<small> COMBINED SPONSOR EXPOSURE</small></strong>
