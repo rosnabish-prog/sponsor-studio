@@ -41,7 +41,7 @@ function VideoPanel({ model }: { model: StudioScreenModel }) {
     <div className="video-header"><span>LIVE TAGGING CONSOLE</span><span id="videoSourceState">{sourceState}</span></div>
     <div id="videoFileStatus" className="video-source-note" role="status" aria-live="polite">{sourceNote}</div>
     <div className={`vidframe ${videoSrc ? 'video-native-frame' : ''}`}>
-      {videoSrc ? <video id="matchVideo" preload="metadata" playsInline controls aria-label="Match video · original proportions" src={videoSrc} /> :
+      {videoSrc ? <video id="matchVideo" preload="metadata" playsInline aria-label="Match video · original proportions" src={videoSrc} /> :
         <div className="fakepitch">
           <div className="field" /><div className="video-stamp">MESSI CUP · {model.number}</div>
           <strong>Ready for kickoff.</strong>
