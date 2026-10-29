@@ -71,8 +71,8 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(document.querySelector('.rail-brand').hasAttribute('aria-label'),'logo-first sponsor remains accessible');
  const sponsorStyle=fs.readFileSync('assets/workspace-theme.css','utf8');
  assert.ok(sponsorStyle.includes('.app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo .tinylogo img'),'larger sponsor image styling exists');
- assert.ok(sponsorStyle.includes('height:62px!important')&&sponsorStyle.includes('height:84px!important'),'desktop logo image 62px inside 84px sponsor card');
- assert.ok(sponsorStyle.includes('max-width:90%!important'),'logo artwork has breathing room');
+ assert.ok(sponsorStyle.includes('height:44px!important')&&sponsorStyle.includes('height:72px!important'),'compact 44px sponsor images in 72px cards');
+ assert.ok(sponsorStyle.includes('max-width:68%!important'),'sponsor images occupy less of each card width');
  assert.ok(sponsorStyle.includes('grid-template-columns:minmax(0,1fr)!important'),'mobile sponsor logos get full row width');
  assert.ok(sponsorStyle.includes('object-fit:contain!important'),'logo scaling preserves aspect ratio');
  assert.ok(sponsorStyle.includes('.rail-brand .rail-live-pill'),'OFF and LIVE status pill styling is retained');
