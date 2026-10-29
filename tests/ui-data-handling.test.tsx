@@ -10,6 +10,7 @@ import { ExposureReport } from '../src/components/ReportWidgets';
 import { ExposureTrend } from '../src/components/ExposureTrend';
 import { MatchesScreen } from '../src/components/MatchScreens';
 import { AnnotationStudioScreen } from '../src/components/AnnotationStudioScreen';
+import { attachVideoAlignmentPause } from '../src/components/videoAlignmentScroll';
 import { AppShell } from '../src/components/AppShell';
 import { StudioControls, StudioRail, StudioTimeline } from '../src/components/StudioWidgets';
 import { WorkspaceScreen } from '../src/components/WorkspaceScreen';
@@ -170,6 +171,39 @@ test('studio assignments explain each role and workspace creation is hidden', ()
   const shell=renderToStaticMarkup(<AppShell screen="dashboard" context={{user:{name:'Worker',role:'admin'},workspaceName:'Messi Cup',workspaces:[{id:'w1',name:'Messi Cup',slug:'mc'}]}}><span>Home</span></AppShell>);
   assert.match(shell,/ops-workspace-name/);
   assert.doesNotMatch(shell,/Manage workspaces|Switch workspace/);
+});
+
+test('studio wheel stops when video meets sponsor rail, pauses briefly, then continues', () => {
+  const dom = new JSDOM('<div id="left"><div id="video"></div></div><div id="right"></div>');
+  const column = dom.window.document.getElementById('left')!;
+  const video = dom.window.document.getElementById('video')!;
+  const rail = dom.window.document.getElementById('right')!;
+  Object.defineProperty(column, 'scrollHeight', { value: 1800 });
+  Object.defineProperty(column, 'clientHeight', { value: 700 });
+  column.getBoundingClientRect = () => ({ top: 80 } as DOMRect);
+  video.getBoundingClientRect = () => ({ top: 135 - column.scrollTop } as DOMRect);
+  const detach = attachVideoAlignmentPause(column, video, () => true);
+  const wheel = (element: Element, deltaY: number) => {
+    const event = new dom.window.WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY });
+    element.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  try {
+    assert.equal(wheel(column, 100), true, 'first scroll catches at alignment');
+    assert.equal(column.scrollTop, 55);
+    assert.equal(wheel(column, 70), true, 'next scroll is held briefly');
+    assert.equal(column.scrollTop, 55);
+    assert.equal(wheel(rail, 100), false, 'sponsor panel scroll is independent');
+    assert.equal(wheel(column, 100), true, 'extra wheel distance releases the catch');
+    assert.equal(column.scrollTop, 85);
+    assert.equal(wheel(column, 100), false, 'later movement scrolls freely');
+    assert.equal(wheel(column, -100), false, 'reverse scrolling is never blocked');
+    column.scrollTop = 0;
+    assert.equal(wheel(column, 90), true, 'alignment can be reached again after returning up');
+  } finally {
+    detach();
+    dom.window.close();
+  }
 });
 
 test('fixture cards are fully keyboard-accessible and team names use equal halves', () => {

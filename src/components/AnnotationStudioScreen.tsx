@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react';
 import type { StudioScreenModel } from '../types/screen';
 import { formatTimestamp } from '../domain/intervals';
 import { StudioControls, StudioLogs, StudioRail, StudioTimeline } from './StudioWidgets';
+import { attachVideoAlignmentPause } from './videoAlignmentScroll';
 
 function Icon({ name }: { name: string }) {
   return <svg className="ic"><use href={`#i-${name}`} /></svg>;
@@ -67,8 +69,15 @@ function VideoPanel({ model }: { model: StudioScreenModel }) {
 const tabs = [['all', 'All'], ['sponsors', 'Sponsors'], ['events', 'Events'], ['cameras', 'Camera']] as const;
 
 export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boolean }) {
+  const mediaColumnRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const column = mediaColumnRef.current;
+    const video = column?.querySelector<HTMLElement>('.video-box');
+    if (column && video) return attachVideoAlignmentPause(column, video);
+  }, []);
+
   return <div className="studio-grid">
-    <div className="studio-media-column" role="region" aria-label="Video, annotation tools, and recorded actions" tabIndex={0}>
+    <div className="studio-media-column" ref={mediaColumnRef} role="region" aria-label="Video, annotation tools, and recorded actions" tabIndex={0}>
       <div className="studio-head">
       <div className="row between studio-title-layout">
         <div>
