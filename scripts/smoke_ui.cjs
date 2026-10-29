@@ -42,6 +42,12 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(document.querySelector('.dashboard-banner'),'workspace has warm orange schedule ribbon');
  expect(document.querySelector('link[href^="assets/workspace-theme.css?v="]'),'complete style system loaded');
  assert.ok(fs.existsSync('assets/workspace-theme.css'),'reference-inspired theme file committed');
+ const selectTheme=fs.readFileSync('assets/workspace-theme.css','utf8');
+ assert.ok(selectTheme.includes('select:not([multiple])')&&selectTheme.includes('appearance:none!important'),'all single-choice selects use consistent custom arrows');
+ assert.ok(selectTheme.includes('background-position:right 18px center!important'),'desktop dropdown chevrons are inset 18px from right edge');
+ assert.ok(selectTheme.includes('padding-right:46px!important'),'dropdown option labels have room before chevron');
+ assert.ok(selectTheme.includes('background-position:right 15px center!important'),'mobile chevron insets remain consistent');
+ expect(document.querySelector('#taskfixture')===null,'fixture dropdown is only rendered inside a task editor');
  expect(document.querySelector('.identity-lockup .powered-by img'),'Seebot logo sits beside Messi Cup logo');
  expect(document.querySelector('.ops-head-first .powered-by img'),'Seebot Powered by image in dashboard header');
  window.openTask('task_demo1');
