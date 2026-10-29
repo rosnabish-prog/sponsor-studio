@@ -52,6 +52,8 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(document.querySelector('.ops-head-first .powered-by img'),'Seebot Powered by image in dashboard header');
  window.openTask('task_demo1');
  expect(document.querySelector('.studio-grid'),'studio rendered');
+ assert.ok(document.querySelector('#taskActionMenu .task-menu-complete'),'open task offers Mark Complete');
+ assert.equal(document.querySelectorAll('#taskActionMenu .task-menu-reopen').length,0,'unfinished task does not offer Reopen Task');
  const mediaRegion=document.querySelector('.studio-media-column');
  assert.equal(mediaRegion.tabIndex,0,'left pane can receive keyboard focus');
  assert.equal(mediaRegion.getAttribute('role'),'region','left pane is labeled as a scrollable region');
@@ -408,6 +410,18 @@ function expect(expr,message){assert.ok(expr,message)}
  window.openFixtureTask('M19');
  assert.ok(document.querySelector('.studio-head').textContent.includes('M19'),'Completed action opens existing review');
  assert.equal(db().tasks.length,linkedCount,'completed match is never recreated');
+ const completedMenu=document.querySelector('#taskActionMenu');
+ assert.equal(completedMenu.querySelectorAll('.task-menu-complete').length,0,'completed task no longer offers Mark Complete');
+ assert.equal(completedMenu.querySelectorAll('.task-menu-reopen').length,1,'completed task offers one Reopen Task action');
+ assert.ok(!completedMenu.textContent.includes('REOPEN ANNOTATION STREAMS'),'no duplicate reopen option is shown');
+ completedMenu.querySelector('.task-menu-reopen').click();
+ expect(document.querySelector('#modal'),'reopening requires in-app confirmation');
+ window.acceptInAppConfirm();
+ const reopenedMatch=db().tasks.find(t=>t.id===catalogTask.id);
+ assert.equal(reopenedMatch.submitted.sponsors,false,'reopening unlocks sponsor annotation');
+ assert.equal(reopenedMatch.submitted.context,false,'reopening unlocks events and camera annotation');
+ assert.equal(document.querySelectorAll('#taskActionMenu .task-menu-reopen').length,0,'reopen option disappears after reopening');
+ assert.equal(document.querySelectorAll('#taskActionMenu .task-menu-complete').length,1,'Mark Complete returns for reopened task');
 
  window.openTask('task_demo1');
  document.querySelector('.focusbrand.brand-home').click();
