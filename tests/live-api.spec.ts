@@ -22,20 +22,8 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
     return list[0].workspace.id as string;
   });
   const workspaceId=await getWorkspace();
-  // New workspaces do not inherit demo data. Add the list through the same
-  // authenticated endpoint that workspace administrators use.
-  await page.evaluate(async w=>{
-    const response=await fetch(`/api/workspaces/${w}/catalog`,{
-      method:'PUT', credentials:'include', headers:{'content-type':'application/json'},
-      body:JSON.stringify({version:0,payload:{
-        sponsorGroups:[{id:'sg_main',name:'Sponsor E2E',description:'',sponsors:[{id:'s_e2e',name:'Adidas x Messi',logo:'',color:'#ff7a3d'}]}],
-        eventGroups:[],cameraGroups:[],
-      }}),
-    });
-    if(!response.ok)throw new Error(`Seed catalog: ${response.status} ${await response.text()}`);
-  },workspaceId);
-  await page.reload();
-  await expect(page.locator('.ops-nav')).toBeVisible({timeout:15_000});
+  // Registration creates the initial versioned workspace catalog. Exercise
+  // the same saved list that a freshly registered workspace loads.
 
   await page.getByRole('button',{name:'Matches'}).first().click();
   await page.getByRole('button',{name:'New task'}).click();

@@ -7,6 +7,11 @@ COPY apps/api apps/api
 # Prisma generation needs a URL shape, but does not connect to the database.
 RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/placeholder npm run build:api
 
+# Database schema changes require the Prisma CLI and migration files, which are
+# build-time tools and deliberately omitted from the smaller API runtime image.
+FROM build AS migrations
+CMD ["npm", "run", "db:deploy"]
+
 FROM node:22-bookworm-slim
 ENV NODE_ENV=production API_PORT=3001
 WORKDIR /app
