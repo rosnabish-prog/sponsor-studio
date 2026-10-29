@@ -1,0 +1,54 @@
+name: Sponsor Studio P0 API
+
+on:
+  push:
+    paths:
+      - 'apps/api/**'
+      - 'package*.json'
+      - '.github/workflows/api.yml'
+  pull_request:
+    paths:
+      - 'apps/api/**'
+      - 'package*.json'
+      - '.github/workflows/api.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: sponsor
+          POSTGRES_PASSWORD: sponsor_ci
+          POSTGRES_DB: sponsor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sponsor -d sponsor_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sponsor:sponsor_ci@localhost:5432/sponsor_test?schema=public
+      TEST_DATABASE_URL: postgresql://sponsor:sponsor_ci@localhost:5432/sponsor_test?schema=public
+      APP_ORIGIN: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Generate Prisma Client and compile NestJS
+        run: npm run build:api
+      - name: Apply schema migration to test database
+        run: npm run db:deploy
+      - name: API unit tests
+        run: npm run test:api
+      - name: Existing frontend build
+        run: npm run build

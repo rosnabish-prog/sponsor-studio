@@ -10,6 +10,12 @@ The application now builds with **React 19, TypeScript, and Vite**. All eight to
 
 The frontend is still a local-storage-only demo, not a secure multiuser production application.
 
+## P0 backend foundation (feature branch)
+
+The new `apps/api` workspace contains a NestJS API with PostgreSQL/Prisma schema and initial migration, Argon2id email/password accounts, revocable sessions, workspace membership, persistent tasks, analyst assignments, sponsor/event/camera annotation intervals, submission/reopen actions and audit records. It is intentionally deployed **separately** from the existing GitHub Pages demo. The React frontend does not yet use this API.
+
+See [API setup, endpoint reference and remaining P0 gaps](apps/api/README.md) before trying to deploy it. In particular, S3/CloudFront uploads and playback, email verification, UI/API integration and complete real-database end-to-end coverage remain outstanding.
+
 ## What is included
 
 - Admin and analyst demo sign-in, with role-specific navigation and assignment restrictions in the interface.

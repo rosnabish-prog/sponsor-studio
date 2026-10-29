@@ -1,0 +1,151 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  ANALYST
+  REVIEWER
+}
+
+enum AnnotationKind {
+  SPONSOR
+  EVENT
+  CAMERA
+}
+
+enum VideoStatus {
+  UPLOADING
+  READY
+  FAILED
+}
+
+model User {
+  id            String       @id @default(uuid()) @db.Uuid
+  email         String       @unique @db.VarChar(320)
+  name          String       @db.VarChar(150)
+  passwordHash  String
+  createdAt     DateTime     @default(now())
+  sessions      Session[]
+  memberships   Membership[]
+  sponsorTasks  Task[]       @relation("SponsorAnalyst")
+  contextTasks  Task[]       @relation("ContextAnalyst")
+  annotations   Annotation[]
+  videos        VideoAsset[]
+}
+
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique @db.Char(64)
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Workspace {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String       @db.VarChar(150)
+  slug        String       @unique @db.VarChar(100)
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+  tasks       Task[]
+  videos      VideoAsset[]
+  audits      AuditLog[]
+}
+
+model Membership {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @db.Uuid
+  userId      String        @db.Uuid
+  role        WorkspaceRole @default(ANALYST)
+  joinedAt    DateTime      @default(now())
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Task {
+  id               String       @id @default(uuid()) @db.Uuid
+  workspaceId      String       @db.Uuid
+  number           String       @db.VarChar(100)
+  name             String       @db.VarChar(250)
+  fixtureId        String?      @db.VarChar(100)
+  matchDate        DateTime?
+  durationSeconds  Int          @default(0)
+  sponsorAnalystId String?      @db.Uuid
+  contextAnalystId String?      @db.Uuid
+  sponsorsSubmittedAt DateTime?
+  contextSubmittedAt  DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  workspace        Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sponsorAnalyst   User?        @relation("SponsorAnalyst", fields: [sponsorAnalystId], references: [id], onDelete: SetNull)
+  contextAnalyst   User?        @relation("ContextAnalyst", fields: [contextAnalystId], references: [id], onDelete: SetNull)
+  annotations      Annotation[]
+  videos           VideoAsset[]
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, createdAt])
+}
+
+model Annotation {
+  id        String         @id @default(uuid()) @db.Uuid
+  taskId    String         @db.Uuid
+  kind      AnnotationKind
+  labelId   String         @db.VarChar(100)
+  start     Float
+  end       Float?
+  placement String?        @db.VarChar(100)
+  quality   String?        @db.VarChar(100)
+  createdBy String         @db.Uuid
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author    User           @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([taskId, kind, start])
+}
+
+model VideoAsset {
+  id          String      @id @default(uuid()) @db.Uuid
+  workspaceId String      @db.Uuid
+  taskId      String      @db.Uuid
+  objectKey   String      @unique
+  filename    String      @db.VarChar(255)
+  mimeType    String      @db.VarChar(100)
+  sizeBytes   BigInt?
+  status      VideoStatus @default(UPLOADING)
+  uploadedBy  String      @db.Uuid
+  createdAt   DateTime    @default(now())
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  task        Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, taskId])
+}
+
+model AuditLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  actorId     String    @db.Uuid
+  action      String    @db.VarChar(100)
+  subjectId   String    @db.VarChar(100)
+  details     Json?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+}

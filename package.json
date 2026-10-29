@@ -3,13 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": ["apps/api"],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test:visual": "playwright test tests/visual-regression.spec.ts",
-    "test": "npm run typecheck && python3 scripts/validate_app.py && node scripts/smoke_ui.cjs"
+    "test": "npm run typecheck && python3 scripts/validate_app.py && node scripts/smoke_ui.cjs && npm run test:api",
+    "dev:api": "npm run dev --workspace @sponsor-studio/api",
+    "build:api": "npm run build --workspace @sponsor-studio/api",
+    "test:api": "npm run test --workspace @sponsor-studio/api",
+    "db:generate": "npm run db:generate --workspace @sponsor-studio/api",
+    "db:migrate": "npm run db:migrate --workspace @sponsor-studio/api",
+    "db:deploy": "npm run db:deploy --workspace @sponsor-studio/api"
   },
   "dependencies": {
     "react": "^19.2.0",
