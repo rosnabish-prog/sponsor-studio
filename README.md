@@ -91,3 +91,15 @@ In the **Sponsor library**, open a sponsor or click **UPLOAD / EDIT** to upload 
 The annotation workspace fills the browser width, places the video above large sponsor cards and the unified timeline, and leaves only an **Insights** navigation button for analytics. Upload footage, export JSON and mark completion remain accessible in the workspace header.
 
 **Demo constraint:** sponsor logo uploads, task assignments and annotations still reside in browser-local storage; different workers on different browsers do **not** see each other's changes until a real shared backend is implemented. The public GitHub Pages demo must not be used for client-confidential videos or live worker authentication.
+
+## Analyst workspace – intervals and shortcuts
+
+The tagging workspace has a pinned video player, a scrollable logo-first sponsor rail on the right, and compact event/camera chips beneath the player. Uploaded sponsor logos are shown on dark cards without white background fills. The media column and sponsor rail scroll separately so footage remains visible during annotation.
+
+- Sponsor visibility: tap a brand to start, tap again when it is no longer present anywhere in the frame. Multiple identical placements count as one active sponsor.
+- Key events: **all newly tagged events are start/end intervals**, including goals, substitutions, replays and celebrations. First tap starts, second tap ends. New event attributes are always intervals. Older historical point annotations are preserved, not assigned invented durations.
+- Camera angles: first tap starts an angle; tap the same angle to end it; selecting a different angle closes the previous one and starts the new one at the current timestamp. A camera angle may be left open and closed at submission time.
+- Player seeking: choose a **5-second or 10-second** step. The backward/forward buttons and arrow keys follow the selected step. Space toggles play/pause when not typing.
+- JSON and reports include event/camera start, end, duration and sponsor overlaps.
+
+Note: this is still a browser-local functional demo. It does not synchronize user edits, videos or uploaded brand images between independent browsers.
