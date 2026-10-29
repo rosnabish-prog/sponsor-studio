@@ -1209,12 +1209,15 @@ function buildReport(t){
  const coverage=percent(pct(d.coveredSeconds,d.videoSeconds));
  const incomplete=!(t.submitted?.sponsors&&t.submitted?.context);
  const cards=[
-  {label:'BRANDS VISIBLE',value:d.active.length+'/'+d.brands.length,note:'Unique brands with tagged exposure'},
-  {label:'SPONSOR VISIBILITY COVERAGE',value:coverage,note:fmt(d.coveredSeconds)+' of '+fmt(d.videoSeconds)+' footage tagged visible'},
-  {label:'COMBINED BRAND EXPOSURE',value:fmt(d.sumSeconds),note:'Different brands are added separately'},
-  {label:'TAGGED KEY EVENTS',value:d.eventRows.length,note:d.eventRows.filter(e=>e.brands.length>0).length+' with a sponsor overlap'}
+  {label:'TOTAL SPONSOR VISIBILITY',value:fmt(d.sumSeconds),note:'Combined unique-brand seconds; multiple brands add separately'},
+  {label:'EXPOSURE FREQUENCY',value:d.frequency,note:'Distinct positive-duration sponsor appearances'},
+  {label:'AVERAGE EXPOSURE DURATION',value:d.frequency?fmt(d.avgExposure):'—',note:'Total visible brand seconds ÷ recorded appearances'},
+  {label:'SPONSOR VISIBLE FOOTAGE',value:coverage,note:fmt(d.coveredSeconds)+' of '+fmt(d.videoSeconds)+' footage with at least one sponsor'},
+  {label:'BRANDS DETECTED',value:d.active.length+'/'+d.brands.length,note:'Distinct visible brands in the configured list'},
+  {label:'HIGH-VALUE EVENT EXPOSURE',value:d.highValueEvents.length?fmt(d.highValueCoverageSeconds):'—',note:d.highValueEvents.length+' high-value event intervals classified'}
  ];
  const activeBrands=d.brands.filter(b=>b.seconds>0),peak=Math.max(1,...activeBrands.map(b=>b.seconds));
+ const labelledPct=v=>percent(v);
  const focusOptions=`<option value="">ALL SPONSORS</option>${d.brands.map(b=>`<option value="${esc(b.id)}" ${insightFocusId===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}`;
  const timeBars=d.buckets.map(bucket=>{
   const own=focused?focused.own:[],raw=focused?own.reduce((sum,x)=>sum+Math.max(0,Math.min(x.end,bucket.end)-Math.max(x.start,bucket.start)),0):bucket.covered;
@@ -1232,16 +1235,42 @@ function buildReport(t){
  <td><strong>${fmt(b.seconds)}</strong><div class="insight-mini-meter"><i style="width:${Math.min(100,100*b.seconds/peak)}%"></i></div></td>
  <td>${percent(pct(b.seconds,d.videoSeconds))}</td>
  <td>${percent(pct(b.seconds,d.sumSeconds))}</td>
- <td>${b.entries}</td><td>${fmt(b.longest)}</td><td>${b.eventHits}</td></tr>`).join('');
+ <td>${b.own.length}</td>
+ <td>${b.own.length?fmt(b.seconds/b.own.length):'—'}</td>
+ <td>${fmt(b.longest)}</td><td>${b.eventHits}</td></tr>`).join('');
  const cameraRows=d.cameras.map(c=>`<tr><td><b>${esc(c.name)}</b></td>
  <td>${fmt(c.seconds)}</td><td>${percent(pct(c.seconds,d.videoSeconds))}</td>
  <td>${fmt(c.sponsorSeconds)}</td><td>${c.sponsorCount}</td><td>${c.leader?.seconds>0?esc(c.leader.name):'—'}</td></tr>`).join('');
  const pairs=d.pairs.slice(0,8).map(p=>`<div class="insight-pair"><span>${esc(p.a)} <em>+</em> ${esc(p.b)}</span><b>${fmt(p.seconds)}</b></div>`).join('');
+ const classifiedDuration=d.classifiedSeconds;
+ const unknownPlacement=d.placementUnclassified;
+ const unknownQuality=d.qualityUnclassified;
+ const placeBars=d.placementTotals.map(p=>`<div class="intel-breakdown-row">
+ <div class="intel-breakdown-label"><span>${esc(p.label)}</span><strong>${fmt(p.seconds)} · ${p.intervals} APPEARANCES</strong></div>
+ <div class="intel-breakdown-meter"><i style="width:${Math.min(100,pct(p.seconds,classifiedDuration))}%"></i></div>
+ <p>${percent(pct(p.seconds,classifiedDuration))} of interval-seconds classified by placement</p></div>`).join('');
+ const qualityBars=d.qualityTotals.map(q=>`<div class="intel-breakdown-row">
+ <div class="intel-breakdown-label"><span>${esc(q.label)}</span><strong>${fmt(q.seconds)}</strong></div>
+ <div class="intel-breakdown-meter quality-${q.key}"><i style="width:${Math.min(100,pct(q.seconds,classifiedDuration))}%"></i></div>
+ <p>${percent(pct(q.seconds,classifiedDuration))} of interval-seconds classified by quality</p></div>`).join('');
+ const periodCards=d.periodBreakdown.filter(p=>p.key!=='break').map(p=>`<article class="intel-period-card">
+  <div class="intel-period-header"><b>${esc(p.label)}</b><span>${fmt(p.start)} – ${fmt(p.end)}</span></div>
+  <strong>${fmt(p.combinedBrandSeconds)}<small> COMBINED SPONSOR EXPOSURE</small></strong>
+  <p>${fmt(p.anySeconds)} of ${fmt(p.end-p.start)} video with at least one sponsor tag</p>
+  <div class="intel-breakdown-meter"><i style="width:${pct(p.anySeconds,p.end-p.start)}%"></i></div>
+  <div class="intel-period-leaders">${p.brandRows.slice(0,5).map(b=>`<div><span>${esc(b.name)}</span><b>${fmt(b.seconds)}</b></div>`).join('')||'<span class="insight-muted">No sponsor tags recorded in this period.</span>'}</div>
+ </article>`).join('');
+ const highValueBars=d.brandHighValue.slice(0,8).map(b=>`<div class="intel-breakdown-row">
+ <div class="intel-breakdown-label"><span>${esc(b.name)}</span><strong>${fmt(b.seconds)} · ${b.momentCount} MOMENTS</strong></div>
+ <div class="intel-breakdown-meter"><i style="width:${Math.min(100,pct(b.seconds,d.highValueMomentSeconds))}%"></i></div></div>`).join('');
  const warnings=[
   d.sponsorOpen>0?`${d.sponsorOpen} sponsor visibility tag(s) still open`:null,
   d.eventOpen>0?`${d.eventOpen} key-event interval(s) still open`:null,
   d.cameraOpen>0?`${d.cameraOpen} camera interval(s) still open`:null,
   d.cameraCovered===0?'No camera-angle coverage recorded':null,
+  !d.periodMapped?'Match half boundaries not mapped':null,
+  d.placementUnclassified>0?'Some sponsor exposures have no placement type':null,
+  d.qualityUnclassified>0?'Some sponsor exposures have no visibility quality':null,
   d.active.length===0?'No sponsor intervals have measurable duration':null
  ].filter(Boolean);
  return `<div class="insights-dashboard">
@@ -1258,8 +1287,30 @@ function buildReport(t){
  </div>
  <div class="insight-block"><div class="insight-section-title"><div><h3>BRAND EXPOSURE LEADERBOARD</h3>
  <p>Screen presence—not impressions. Share of voice is brand seconds divided by combined brand seconds.</p></div><span class="insight-count">${d.brands.length} TRACKED BRANDS</span></div>
- <div class="tablewrap"><table class="table insight-table"><thead><tr><th>BRAND</th><th>VISIBLE TIME</th><th>% OF MATCH</th><th>VISIBILITY SHARE</th><th>INTERVALS</th><th>LONGEST</th><th>EVENTS</th></tr></thead>
- <tbody>${rankRows||'<tr><td colspan="7">No configured sponsors</td></tr>'}</tbody></table></div></div>
+ <div class="tablewrap"><table class="table insight-table"><thead><tr><th>BRAND</th><th>VISIBLE TIME</th><th>% OF MATCH</th><th>VISIBILITY SHARE</th><th>APPEARANCES</th><th>AVG DURATION</th><th>LONGEST</th><th>EVENTS</th></tr></thead>
+ <tbody>${rankRows||'<tr><td colspan="8">No configured sponsors</td></tr>'}</tbody></table></div></div>
+ <div class="insight-columns">
+  <section class="insight-block"><div class="insight-section-title"><div><h3>SPONSORSHIP PLACEMENT TYPE</h3><p>Which physical or broadcast placements contributed more visibility seconds?</p></div><span class="insight-count">CLASSIFIED ${percent(d.placementCoverage)}</span></div>
+  ${placeBars||'<p class="insight-muted">Choose each interval’s primary placement in Recorded Actions to unlock this breakdown.</p>'}
+  <div class="intel-unknown">UNCLASSIFIED PLACEMENT: ${fmt(unknownPlacement)} · No placement inferred from the brand logo.</div>
+  </section>
+  <section class="insight-block"><div class="insight-section-title"><div><h3>VISIBILITY QUALITY</h3><p>Readable, partially readable or obscured sponsor appearances.</p></div><span class="insight-count">CLASSIFIED ${percent(d.qualityCoverage)}</span></div>
+  ${qualityBars||'<p class="insight-muted">Select Clear / Partial / Obscured for each sponsor interval to unlock this breakdown.</p>'}
+  <div class="intel-unknown">UNCLASSIFIED QUALITY: ${fmt(unknownQuality)} · Values apply to each appearance, not individual frames.</div>
+  </section></div>
+ <section class="insight-block"><div class="insight-section-title"><div><h3>EXPOSURE BY MATCH PERIOD</h3><p>First-half versus second-half broadcast visibility, using video time rather than assuming the match clock.</p></div>
+ <span class="insight-count">${d.periodMapped?'MATCH PERIODS MAPPED':'PERIOD MAPPING REQUIRED'}</span></div>
+ ${d.periodMapped?`<div class="intel-period-grid">${periodCards}</div>`:
+ `<div class="intel-unmapped"><b>MATCH PERIODS ARE NOT MAPPED</b><p>An admin can open the match Actions menu → Edit Task and enter First-half end and Second-half start video minutes. We do not infer the halftime boundary from footage duration.</p></div>`}
+ </section>
+ <section class="insight-block"><div class="insight-section-title"><div><h3>HIGH-VALUE MOMENT EXPOSURE</h3><p>Which sponsors were visible during tagged goals, celebrations, penalties and other selected major moments?</p></div>
+ <span class="insight-count">${d.highValueEvents.length} HIGHLIGHTED MOMENTS</span></div>
+ <div class="intel-moment-summary"><div><span>UNIQUE MOMENT TIME</span><strong>${fmt(d.highValueMomentSeconds)}</strong></div>
+ <div><span>MOMENT TIME WITH ANY SPONSOR</span><strong>${fmt(d.highValueCoverageSeconds)}</strong></div>
+ <div><span>MOMENT COVERAGE</span><strong>${d.highValueMomentSeconds?percent(pct(d.highValueCoverageSeconds,d.highValueMomentSeconds)):'—'}</strong></div></div>
+ <div class="intel-moment-list">${highValueBars||'<p class="insight-muted">No sponsor overlap during the currently identified high-value event intervals.</p>'}</div>
+ <p class="intel-unknown">Highlights use goal, celebration, penalty, trophy or award event names unless a custom event is explicitly marked high value. This is exposure context, not a sponsorship valuation.</p>
+ </section>
  <div class="insight-columns">
   <section class="insight-block"><div class="insight-section-title"><div><h3>KEY EVENT SPONSOR ASSOCIATIONS</h3><p>Exactly which brands overlapped each recorded match action.</p></div><span class="insight-count">${d.eventRows.length} EVENTS</span></div>
   <div class="insight-event-summaries">${eventSummaries||'<p class="insight-muted">No key events have been tagged.</p>'}</div>
