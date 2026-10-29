@@ -2,7 +2,7 @@ name: Check Sponsor Studio
 
 on:
   push:
-    paths: ['index.html', 'data/fixtures.json', 'scripts/validate_app.py', '.github/workflows/check.yml']
+    paths: ['index.html', 'src/**', 'public/**', 'package*.json', 'scripts/validate_app.py', '.github/workflows/check.yml']
   workflow_dispatch:
 
 permissions:
@@ -18,4 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
       - run: python scripts/validate_app.py

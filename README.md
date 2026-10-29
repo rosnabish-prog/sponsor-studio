@@ -1,6 +1,14 @@
 # Messi Cup 2026 — Sponsor Intelligence Studio
 
-A branded, interactive **frontend demonstration** for sponsor-exposure annotation in football broadcasts.
+A branded, interactive **React + TypeScript frontend demonstration** for sponsor-exposure annotation in football broadcasts.
+
+## Frontend architecture (React migration)
+
+The application now builds with **React 19, TypeScript, and Vite**. The React root owns the persistent video picker, toast element and screen lifecycle. The original markup generators and annotation handlers are preserved in `src/legacy/app.ts` behind a synchronous React screen adapter, retaining the current visual design and browser-local behavior. The original stylesheet and its subsequent orange overrides are imported, in that order, from `src/styles/`; static image assets remain in `public/assets/`.
+
+**Migration status:** This is a working, transitional React/TypeScript frontend. The legacy screen templates and annotation handlers are not yet native JSX components or fully type-checked (`src/legacy/app.ts` is excluded from strict checks). New React code is strictly type-checked. Converting each screen and its state to idiomatic typed React components remains follow-up work; this first stage minimizes UI and workflow regressions.
+
+The frontend is still a local-storage-only demo, not a secure multiuser production application.
 
 ## What is included
 
@@ -14,13 +22,22 @@ A branded, interactive **frontend demonstration** for sponsor-exposure annotatio
 
 ## Run locally
 
-Either open `index.html` in a browser, or (recommended) run a local static server:
+Install dependencies and start the Vite development server (Node.js 22+):
 
 ```bash
-python3 -m http.server 8080
+npm ci
+npm run dev
 ```
 
-Visit `http://localhost:8080`.
+Visit the local URL shown by Vite (normally `http://127.0.0.1:5173`). Opening `index.html` directly as a file no longer works because the browser now loads a bundled React application.
+
+To verify changes before committing:
+
+```bash
+npm test
+npm run build
+npm run preview
+```
 
 ### Interactive demo credentials
 
@@ -34,11 +51,10 @@ Use the demo-account buttons on the login screen to autofill. `Restore demo acco
 
 ## Publish the **demo** with GitHub Pages
 
-1. Create a separate repository for this project, e.g. `messi-cup-sponsor-studio`.
-2. Add this repository's files and push to `main`.
-3. Go to **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-4. The included `.github/workflows/deploy-pages.yml` publishes `index.html` on every push to `main`.
-5. View the live URL in **Settings → Pages** or the deployment summary of the Actions workflow.
+1. Open **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+2. Push the tested code to `main` when ready for a public demo release.
+3. The included `.github/workflows/deploy-pages.yml` runs `npm ci` and `npm run build` with the repository's GitHub Pages base path and publishes only the resulting `dist/` files.
+4. View the live URL in **Settings → Pages** or the deployment summary of the Actions workflow.
 
 If the GitHub Pages site or repository is public, its JavaScript, demo accounts, and demo data are public too. **Do not load client footage or confidential sponsor data into this prototype.**
 
@@ -61,7 +77,7 @@ GitHub Pages hosts static frontend files only. It cannot by itself run the authe
 ## Visual and demo updates (October 29, 2026)
 
 - Fully dark styling follows the Messi Cup Stats Hub design language: black canvas, heavy condensed headings, mono metadata, thin rules.
-- Uses the supplied official `assets/mc26-wordmark.svg` locally; never relies on a third-party logo host for the tournament wordmark.
+- Uses the supplied official `public/assets/mc26-wordmark.svg` locally; never relies on a third-party logo host for the tournament wordmark.
 - Gradient is exclusively used for match overview scorecards, not login or dashboard.
 - Demo sign-in form is centrally laid out and uses explicit JavaScript submit listeners, without Google sign-in.
 - Sample match tasks use real published Messi Cup 2026 fixtures rather than fabricated pairs, plus a fixture selection control when creating admin tasks. The original bundled fixtures serve as an offline fallback. The page now loads `data/fixtures.json` generated from the public BuildUp read-only match feed. References: https://stats.buildup.club/matches and https://messicup.com/en/schedule.
@@ -78,7 +94,7 @@ The public data refresh is handled by `.github/workflows/sync-fixtures.yml`:
 - Once per day outside the tournament, so changes to published schedules remain discoverable.
 - Manual run is available via **Actions → Refresh BuildUp Messi Cup fixtures → Run workflow**.
 
-`scripts/sync_fixtures.py` retrieves public read-only Match and Team entity records from `stats.buildup.club`, then normalizes fixture code, date, scheduled kickoff (ET), team names, logos, venue, status, score, stage and group into `data/fixtures.json`. It refuses to overwrite the known-good snapshot on bad or incomplete responses, and only commits actual changes. GitHub Pages automatically redeploys on that commit. The web page checks for updated fixture JSON every 5 minutes while open, and falls back to the bundled schedule if the file cannot be loaded.
+`scripts/sync_fixtures.py` retrieves public read-only Match and Team entity records from `stats.buildup.club`, then normalizes fixture code, date, scheduled kickoff (ET), team names, logos, venue, status, score, stage and group into `public/data/fixtures.json`. It refuses to overwrite the known-good snapshot on bad or incomplete responses, and only commits actual changes. GitHub Pages automatically redeploys on that commit. The web page checks for updated fixture JSON every 5 minutes while open, and falls back to the bundled schedule if the file cannot be loaded.
 
 Under **Matches**, administrators can filter the official match catalog by date and prefill a new annotation task. Importing a fixture does not automatically assign analysts or create a task; the administrator still controls that decision.
 
@@ -163,7 +179,7 @@ This release focuses on eight measures chosen for low-effort but commercially us
 
 ## October 29 reference-inspired orange workspace redesign
 
-The full frontend now shares a single responsive **dark-charcoal and warm-orange** design system in `assets/workspace-theme.css`: 20px-style rounded cards, pill navigation and filters, soft elevated buttons, branded orange call-to-action surfaces, and subtle interaction feedback. The supplied **Seebot logo** now appears as a compact `POWERED BY` lockup immediately beside the Messi Cup logo on the login, admin, and annotation headers (rather than the far right).
+The full frontend now shares a single responsive **dark-charcoal and warm-orange** design system in `src/styles/workspace-theme.css`: 20px-style rounded cards, pill navigation and filters, soft elevated buttons, branded orange call-to-action surfaces, and subtle interaction feedback. The supplied **Seebot logo** now appears as a compact `POWERED BY` lockup immediately beside the Messi Cup logo on the login, admin, and annotation headers (rather than the far right).
 
 The Admin overview has an orange tournament fixture ribbon that opens **Matches**; that page contains the existing searchable/filtered assigned tasks as responsive match cards, followed by the official fixture catalog for task creation. The dashboard retains a production-queue table for operational scanning, avoiding duplicate full catalogs.
 
