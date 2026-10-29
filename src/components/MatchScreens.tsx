@@ -41,7 +41,11 @@ function FixtureName({ task, fixtures, badges }: { task: TaskSummary; fixtures: 
   const home = task.homeTeam || fixture?.home || parts[0];
   const away = task.awayTeam || fixture?.away || parts[1];
   if (!home || !away) return <span>{task.name}</span>;
-  return <div className="fixture-mini"><Crest name={home} badges={badges} /><span>{home}</span><span className="vstag">VS</span><Crest name={away} badges={badges} /><span>{away}</span></div>;
+  return <div className="fixture-mini">
+    <span className="fixture-mini-team home"><Crest name={home} badges={badges} /><span className="fixture-mini-name">{home}</span></span>
+    <span className="vstag">VS</span>
+    <span className="fixture-mini-team away"><span className="fixture-mini-name">{away}</span><Crest name={away} badges={badges} /></span>
+  </div>;
 }
 
 function nameUser(data: StudioData, id: string): string {
@@ -131,14 +135,17 @@ function FixtureCatalog({ context }: { context: ScreenContext }) {
           const action = status === 'done' ? '✓ COMPLETED' : task ? 'OPEN TASK →' : 'CREATE TASK +';
           const state = status === 'done' ? 'COMPLETED' : status === 'progress' ? 'IN PROGRESS' : status === 'ready' ? 'READY TO TAG' : 'NOT CREATED';
           const splitStreams = task && task.submitted?.sponsors !== task.submitted?.context;
-          return <article className={`fixture-card fixture-task-${status}`} data-fixture-id={fixture.id} key={fixture.id}>
+          return <article className={`fixture-card fixture-task-${status}`} role="button" tabIndex={0} data-fixture-id={fixture.id} key={fixture.id}
+            aria-label={`${title}: ${fixture.home} vs ${fixture.away}`}
+            onClick={() => window.openFixtureTask?.(fixture.id)}
+            onKeyDown={event => { if(event.key === 'Enter' || event.key === ' '){ event.preventDefault();window.openFixtureTask?.(fixture.id); } }}>
             <div className="fixture-date">{fixture.id} · {fixture.date} · {fixture.time || 'Time TBD'} ET <span>{fixture.stage || fixture.group || ''}</span></div>
             <div className={`fixture-task-state ${status}`}>{state}</div>
             <div className="fixture-line"><Crest name={fixture.home} badges={badges} /><b>{fixture.home}</b><strong>{fixture.score || 'VS'}</strong><b>{fixture.away}</b><Crest name={fixture.away} badges={badges} /></div>
             {splitStreams && <div className="fixture-stream-note">{task.submitted?.sponsors ? 'Sponsor tagging complete · Events & camera pending' : 'Events & camera complete · Sponsor tagging pending'}</div>}
             <div className="fixture-bottom">
               <span>{fixture.venue || 'Venue TBD'} · {fixture.status || 'Scheduled'}</span>
-              <button className={`button tiny fixture-task-action ${status === 'done' ? 'fixture-completed' : 'ghost'}`} title={title} aria-label={`${title} for ${fixture.id}`} onClick={() => window.openFixtureTask?.(fixture.id)}>{action}</button>
+              <span className={`button tiny fixture-task-action ${status === 'done' ? 'fixture-completed' : 'ghost'}`} aria-hidden="true">{action}</span>
             </div>
           </article>;
         }) : <p className="muted">No published matches on this date.</p>}
@@ -173,9 +180,9 @@ export function DashboardScreen({ context }: { context: ScreenContext }) {
     <div className="layout2">
       <div className="card cardpad">
         <div className="sectionhead"><div><h2>Recent match assignments</h2><p className="sub">Select a match to start tagging or review its progress</p></div><button className="textlink" onClick={() => window.navigate?.('tasks')}>View all <Icon name="arrow" /></button></div>
-        {tasks.length ? tasks.slice().reverse().slice(0, 5).map((task, index) => <div className="taskrow" key={task.id} onClick={() => window.openTask?.(task.id)}>
+        {tasks.length ? tasks.slice().reverse().slice(0, 5).map((task, index) => <div className="taskrow" role="button" tabIndex={0} aria-label={`Open ${task.name}`} key={task.id} onClick={() => window.openTask?.(task.id)} onKeyDown={event => { if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openTask?.(task.id);} }}>
           <div className={`taskbadge ${index % 2 ? 'blue' : ''}`} title={`Match ${task.number}`}>{task.number}</div>
-          <div className="info"><strong><FixtureName task={task} fixtures={fixtures} badges={badges} /></strong><span>{task.number} · {formatTimestamp(task.duration)} footage · {task.sponsorGroupIds.length} sponsor lists</span></div>
+          <div className="info"><div className="match-title"><FixtureName task={task} fixtures={fixtures} badges={badges} /></div><span>{task.number} · {formatTimestamp(task.duration)} footage · {task.sponsorGroupIds.length} sponsor lists</span></div>
           <Status task={task} /><Icon name="chevron" />
         </div>) : <div className="empty"><strong>No assigned matches yet</strong><p>Matches appear after an administrator assigns them to you.</p></div>}
       </div>

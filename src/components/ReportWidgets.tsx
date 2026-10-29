@@ -3,6 +3,7 @@ import type { TaskSummary } from '../types/models';
 import { computeInsights, type InsightData, type InsightSources } from '../domain/analytics';
 import { formatTimestamp as fmt } from '../domain/intervals';
 import { BrandLogo } from './StudioWidgets';
+import { ExposureTrend } from './ExposureTrend';
 
 const percent = (n: number) => `${(Number.isFinite(n) ? n : 0).toFixed(1)}%`;
 function Section({ title, note, aside, children, className = '' }: { title: string; note: string; aside?: React.ReactNode; children: React.ReactNode; className?: string }) {
@@ -32,15 +33,15 @@ function Breakdown({ rows, total, quality = false }: { rows: { key: string; labe
 
 export function ExposureReport({ task, source, focusId }: { task: TaskSummary; source: InsightSources; focusId: string }) {
   const d = computeInsights(task, source);
-  const focus = d.brands.find(brand => brand.id === focusId);
+  const focus = d.active.find(brand => brand.id === focusId);
   const incomplete = !(task.submitted?.sponsors && task.submitted?.context);
-  const peak = Math.max(1, ...d.brands.map(brand => brand.seconds));
+  const peak = Math.max(1, ...d.active.map(brand => brand.seconds));
   const cards = [
     { label: 'TOTAL SPONSOR VISIBILITY', value: fmt(d.sumSeconds), note: 'Combined unique-brand seconds; multiple brands add separately' },
     { label: 'EXPOSURE FREQUENCY', value: String(d.frequency), note: 'Distinct positive-duration sponsor appearances' },
     { label: 'AVERAGE EXPOSURE DURATION', value: d.frequency ? fmt(d.avgExposure) : '—', note: 'Total visible brand seconds ÷ recorded appearances' },
     { label: 'SPONSOR VISIBLE FOOTAGE', value: percent(d.pct(d.coveredSeconds, d.videoSeconds)), note: `${fmt(d.coveredSeconds)} of ${fmt(d.videoSeconds)} footage with at least one sponsor` },
-    { label: 'BRANDS DETECTED', value: `${d.active.length}/${d.brands.length}`, note: 'Distinct visible brands in the configured list' },
+    { label: 'BRANDS WITH EXPOSURE', value: String(d.active.length), note: `${d.brands.length} configured in the match · only measured visibility counts` },
     { label: 'HIGH-VALUE EVENT EXPOSURE', value: d.highValueEvents.length ? fmt(d.highValueCoverageSeconds) : '—', note: `${d.highValueEvents.length} high-value event intervals classified` },
   ];
   const warnings = [
@@ -58,24 +59,20 @@ export function ExposureReport({ task, source, focusId }: { task: TaskSummary; s
       <span className={`insight-quality ${incomplete ? 'draft' : 'complete'}`}>{incomplete ? 'PRELIMINARY · ANNOTATION IN PROGRESS' : 'SUBMITTED DATA'}</span>
     </div>
     <div className="insight-stat-grid">{cards.map(card => <article className="insight-stat" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><p>{card.note}</p></article>)}</div>
-    <Section title="WHERE SPONSORS APPEAR IN THE MATCH" note="Five-minute segments. Bar height shows the share of footage covered by a sponsor-visibility annotation." className="insight-trend"
+    <Section title="WHERE SPONSORS APPEAR IN THE MATCH" note="Smooth exposure curves plotted from measured five-minute coverage; RGB lines distinguish leading brands." className="insight-trend"
       aside={<label className="insight-select">BRAND FILTER<select id="insightSponsorFilter" value={focusId} onChange={event => window.selectInsightSponsor?.(event.target.value)}>
-        <option value="">ALL SPONSORS</option>{d.brands.map(brand => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></label>}>
-      <div className="insight-bars">{d.buckets.map(bucket => {
-        const raw = focus ? focus.own.reduce((n, own) => n + Math.max(0, Math.min(own.end, bucket.end) - Math.max(own.start, bucket.start)), 0) : bucket.covered;
-        const share = Math.min(100, d.pct(raw, bucket.end - bucket.start));
-        return <div className="insight-tick" key={bucket.start} title={`${fmt(bucket.start)}–${fmt(bucket.end)}: ${fmt(raw)} covered`}><div className="insight-tick-track"><span style={{ height: `${share}%` }} /></div><span>{fmt(bucket.start)}</span></div>;
-      })}</div>
+        <option value="">ALL SPONSORS</option>{d.active.map(brand => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></label>}>
+      <ExposureTrend data={d} focusId={focusId} />
       <div className="insight-trend-footer"><span>FIRST FRAME 00:00</span><span>{focus?.name.toUpperCase() || 'ANY SPONSOR VISIBLE'}</span><span>FINAL FRAME {fmt(d.videoSeconds)}</span></div>
     </Section>
-    <Section title="BRAND EXPOSURE LEADERBOARD" note="Screen presence—not impressions. Share of voice is brand seconds divided by combined brand seconds." aside={<span className="insight-count">{d.brands.length} TRACKED BRANDS</span>}>
+    <Section title="BRAND EXPOSURE LEADERBOARD" note="Only brands with measurable positive-duration exposure. Share of voice is brand seconds divided by combined brand seconds." aside={<span className="insight-count">{d.active.length} BRANDS RECORDED</span>}>
       <div className="tablewrap"><table className="table insight-table"><thead><tr><th>BRAND</th><th>VISIBLE TIME</th><th>% OF MATCH</th><th>VISIBILITY SHARE</th><th>APPEARANCES</th><th>AVG DURATION</th><th>LONGEST</th><th>EVENTS</th></tr></thead>
-        <tbody>{d.brands.map((brand, index) => <tr key={brand.id}>
+        <tbody>{d.active.map((brand, index) => <tr key={brand.id}>
           <td><div className="insight-brand-cell"><span>{index + 1}</span><BrandLogo sponsor={brand} /><b>{brand.name}</b></div></td>
           <td><strong>{fmt(brand.seconds)}</strong><div className="insight-mini-meter"><i style={{ width: `${100 * brand.seconds / peak}%` }} /></div></td>
           <td>{percent(d.pct(brand.seconds, d.videoSeconds))}</td><td>{percent(d.pct(brand.seconds, d.sumSeconds))}</td><td>{brand.own.length}</td>
           <td>{brand.own.length ? fmt(brand.seconds / brand.own.length) : '—'}</td><td>{fmt(brand.longest)}</td><td>{brand.eventHits}</td>
-        </tr>)}{!d.brands.length && <tr><td colSpan={8}>No configured sponsors</td></tr>}</tbody></table></div>
+        </tr>)}{!d.active.length && <tr><td colSpan={8}>No measured sponsor exposure yet. Configured brands will appear here after they have positive-duration annotations.</td></tr>}</tbody></table></div>
     </Section>
     <div className="insight-columns">
       <Section title="SPONSORSHIP PLACEMENT TYPE" note="Which physical or broadcast placements contributed more visibility seconds?" aside={<span className="insight-count">CLASSIFIED {percent(d.placementCoverage)}</span>}>
@@ -129,9 +126,9 @@ export function ExposureReport({ task, source, focusId }: { task: TaskSummary; s
     </div>
     <Section title="CAMERA-ANGLE PERFORMANCE" note="Tagging-time coverage and sponsor presence in each broadcast camera view." aside={<span className="insight-count">{percent(d.pct(d.cameraCovered, d.videoSeconds))} CAMERA TAGGED</span>}>
       <div className="tablewrap"><table className="table insight-table"><thead><tr><th>CAMERA</th><th>CAMERA DURATION</th><th>% OF MATCH</th><th>BRAND EXPOSURE</th><th>BRANDS SEEN</th><th>TOP BRAND</th></tr></thead><tbody>
-        {d.cameras.map(camera => <tr key={camera.id}><td><b>{camera.name}</b></td><td>{fmt(camera.seconds)}</td><td>{percent(d.pct(camera.seconds, d.videoSeconds))}</td>
+        {d.cameras.filter(camera=>camera.seconds>0).map(camera => <tr key={camera.id}><td><b>{camera.name}</b></td><td>{fmt(camera.seconds)}</td><td>{percent(d.pct(camera.seconds, d.videoSeconds))}</td>
           <td>{fmt(camera.sponsorSeconds)}</td><td>{camera.sponsorCount}</td><td>{camera.leader && camera.leader.seconds > 0 ? camera.leader.name : '—'}</td></tr>)}
-        {!d.cameras.length && <tr><td colSpan={6}>No camera angles configured</td></tr>}
+        {!d.cameras.some(camera=>camera.seconds>0) && <tr><td colSpan={6}>No measurable camera intervals recorded yet.</td></tr>}
       </tbody></table></div>
     </Section>
     <section className="insight-notes"><div><h3>DATA QUALITY &amp; INTERPRETATION</h3>
@@ -159,7 +156,7 @@ export function TournamentBenchmark({ tasks, model }: { tasks: TaskSummary[]; mo
     item.longest = Math.max(item.longest, brand.longest);
     summary.set(key, item);
   }
-  const rows = [...summary.values()].sort((a, b) => b.seconds - a.seconds);
+  const rows = [...summary.values()].filter(row => row.seconds > 0).sort((a, b) => b.seconds - a.seconds);
   const cards = [
     ['MATCHES IN SAMPLE', String(eligible.length), 'Unannotated matches are excluded'],
     ['FOOTAGE IN SAMPLE', fmt(totalFootage), 'Sum of video durations in the sample'],
@@ -173,7 +170,7 @@ export function TournamentBenchmark({ tasks, model }: { tasks: TaskSummary[]; mo
       <div className="tablewrap"><table className="table insight-table"><thead><tr><th>BRAND</th><th>TOTAL EXPOSURE</th><th>MATCHES VISIBLE</th><th>AVERAGE PER VISIBLE MATCH</th><th>EVENT OVERLAPS</th></tr></thead>
         <tbody>{rows.map(row => <tr key={row.name}><td><b>{row.name}</b></td><td>{fmt(row.seconds)}</td><td>{row.matchesPresent} / {row.matchesConfigured} configured</td>
           <td>{row.matchesPresent ? fmt(row.seconds / row.matchesPresent) : '—'}</td><td>{row.eventHits}</td></tr>)}</tbody></table></div>
-      <p className="insight-rollup-note">This comparison uses only annotations currently available in this browser. It merges sponsor names case-insensitively and does not assume that similarly named brands are legally identical. The data does not synchronize across analysts or devices.</p>
+      <p className="insight-rollup-note">This comparison uses annotations returned by the shared workspace API for accessible matches. It merges sponsor names case-insensitively and does not assume that similarly named brands are legally identical.</p>
     </div>
   </details>;
 }

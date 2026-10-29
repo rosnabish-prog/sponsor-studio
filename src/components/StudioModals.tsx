@@ -4,7 +4,7 @@ import type { Fixture, Sponsor, SponsorGroup, StudioData, TagGroup, TaskSummary,
 export type DialogModel =
   | { type: 'confirm'; title: string; message: string; actionLabel: string; danger: boolean }
   | { type: 'assign'; task: TaskSummary; users: TeamMember[] }
-  | { type: 'task'; task?: TaskSummary; data: StudioData; fixtures: Fixture[] }
+  | { type: 'task'; task?: TaskSummary; data: StudioData; fixtures: Fixture[]; localVideoName?: string }
   | { type: 'group'; kind: 'sponsor' | 'event' | 'camera'; group?: SponsorGroup | TagGroup }
   | { type: 'sponsor'; group: SponsorGroup; sponsor?: Sponsor }
   | { type: 'item'; kind: 'event' | 'camera'; groupId: string }
@@ -43,7 +43,12 @@ function AssignModal({ task, users }: Extract<DialogModel, { type: 'assign' }>) 
   </>;
 }
 
-function TaskModal({ task, data, fixtures }: Extract<DialogModel, { type: 'task' }>) {
+function TaskModal({ task, data, fixtures, localVideoName }: Extract<DialogModel, { type: 'task' }>) {
+  const [sourceType, setSourceType] = useState(task?.videoType || 'none');
+  const [sourceUrl, setSourceUrl] = useState(task?.videoType === 's3' ? '' : task?.videoUrl || '');
+  const [removeVideo, setRemoveVideo] = useState(false);
+  const storedVideo = !!task?.videoAssetId;
+  const removable = !storedVideo && !removeVideo && !!task && (!!localVideoName || sourceType !== 'none' || !!sourceUrl);
   return <form id="studioModalForm" onSubmit={event => { event.preventDefault(); window.saveTask?.(task?.id || ''); }}>
     <div className="modalbody"><div className="formgrid">
       {!task && <Field full title="IMPORT FROM OFFICIAL 2026 MATCH CATALOG"><select id="taskfixture" defaultValue="" onChange={event => window.selectFixture?.(event.target.value)}>
@@ -65,8 +70,14 @@ function TaskModal({ task, data, fixtures }: Extract<DialogModel, { type: 'task'
       <Field full title="Camera angle attribute lists"><GroupChoices name="cgroups" groups={data.cameraGroups} selected={task?.cameraGroupIds || []} /></Field>
       <Field title="Sponsor visibility analyst"><select id="tsponsor" defaultValue={task?.sponsorAnalystId || ''}><Options users={data.users} /></select><small>Assign the same person in both fields for an all-in-one task.</small></Field>
       <Field title="Events & camera analyst"><select id="tcontext" defaultValue={task?.contextAnalystId || ''}><Options users={data.users} /></select><small>Or assign separately for two synchronized work streams.</small></Field>
-      <Field title="Video source"><select id="taskvideosrc" defaultValue={task?.videoType || 'none'}><option value="none">Attach video later</option><option value="https">Direct HTTPS video URL</option><option value="ftp">FTP / SFTP source (metadata)</option><option value="s3">Private AWS S3 video</option></select></Field>
-      <Field title="Source URL (optional)"><input id="taskurl" defaultValue={task?.videoType==='s3'?'':task?.videoUrl||''} placeholder="https://… or sftp://…" /><small>You can also open a local video in Annotation Studio.</small></Field>
+      <Field title="Video source"><select id="taskvideosrc" value={sourceType} disabled={storedVideo} onChange={event => {setSourceType(event.target.value as NonNullable<TaskSummary['videoType']>);setRemoveVideo(false);}}><option value="none">Attach video later</option><option value="https">Direct HTTPS video URL</option><option value="ftp">FTP / SFTP source (metadata)</option><option value="s3">Private AWS S3 video</option></select></Field>
+      <Field title="Source URL (optional)"><input id="taskurl" value={sourceUrl} onChange={event => setSourceUrl(event.target.value)} disabled={storedVideo || sourceType==='none'} placeholder="https://… or sftp://…" /><small>{storedVideo ? 'Private videos are attached in S3; this form does not delete S3 objects.' : 'The saved URL is removed when you remove the source. Local video stays on this device only.'}</small></Field>
+      {task && <div className="field full task-video-removal">
+        <input type="hidden" id="taskremovevideo" value={removeVideo ? 'yes' : ''} readOnly />
+        <div><b>ATTACHED VIDEO</b><span>{storedVideo ? task.videoName || 'Private AWS S3 video' : removeVideo ? 'Source will be removed when you save' : localVideoName || (sourceType === 'none' ? 'No video attached' : sourceUrl || sourceType.toUpperCase())}</span></div>
+        {removable && <button type="button" className="button warn" onClick={() => {setSourceType('none');setSourceUrl('');setRemoveVideo(true);}}>REMOVE VIDEO FROM TASK</button>}
+        {storedVideo && <small>Private S3 video removal requires a server-side delete operation and is not available in this edit form.</small>}
+      </div>}
     </div></div>
     <Footer><Cancel /><Save>{task ? 'Save changes' : 'Create task'}</Save></Footer>
   </form>;

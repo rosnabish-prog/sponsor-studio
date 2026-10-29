@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import type { StudioScreenModel } from '../types/screen';
 import type { AnnotationBase, CameraAnnotation, EventAnnotation, Sponsor, SponsorAnnotation, TagAttribute } from '../types/models';
 import { formatTimestamp as fmt } from '../domain/intervals';
@@ -61,9 +61,11 @@ export function StudioRail({ model }: StudioProps) {
   })}</div>;
 }
 
-function TimelineTrack({ name, items, kind, model }: { name: string; items: AnnotationBase[]; kind: TrackKind; model: StudioScreenModel }) {
+type TimelineDelete = { key: 'sponsors'|'events'|'cameras'; id: string; name: string; x: number; y: number };
+function TimelineTrack({ name, items, kind, model, onContextMenu }: { name: string; items: AnnotationBase[]; kind: TrackKind; model: StudioScreenModel; onContextMenu: (next: TimelineDelete) => void }) {
   const duration = model.duration || 3600;
-  return <div className="trackrow"><span className="trackname" title={name}>{name}</span>
+  const canDelete = kind === 'sponsor' ? model.canSponsor : model.canContext;
+  return <div className="trackrow" data-timeline-kind={kind}><span className="trackname" title={name}>{name}</span>
     <div className="track" onClick={event => {
       const rect = event.currentTarget.getBoundingClientRect();
       if (rect.width > 0) window.seekVideo?.(Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * duration);
@@ -72,7 +74,12 @@ function TimelineTrack({ name, items, kind, model }: { name: string; items: Anno
         const start = Math.max(0, Math.min(item.start, duration));
         const end = Math.max(0, Math.min(item.end == null ? Math.max(item.start, model.task.observedTime || 0, model.tick) : item.end, duration));
         const point = kind === 'event' && (item as EventAnnotation).kind === 'point';
-        return <span key={item.id} title={`${name}: ${fmt(item.start)}${point ? '' : ` – ${fmt(item.end == null ? model.tick : item.end)}`}`}
+        return <span key={item.id} title={`${name}: ${fmt(item.start)}${point ? '' : ` – ${fmt(item.end == null ? model.tick : item.end)}`}${canDelete ? ' · Right-click to delete' : ''}`}
+          onContextMenu={(event: MouseEvent<HTMLSpanElement>) => {
+            if(!canDelete)return;
+            event.preventDefault();event.stopPropagation();
+            onContextMenu({key:kind==='sponsor'?'sponsors':kind==='event'?'events':'cameras',id:item.id,name,x:event.clientX,y:event.clientY});
+          }}
           className={`block ${kind} ${item.end == null ? 'open' : ''} ${point ? 'dotpoint' : ''}`}
           style={{ left: `${100 * start / duration}%`, width: `${point ? .15 : Math.max(.15, 100 * (end - start) / duration)}%` }} />;
       })}
@@ -82,13 +89,34 @@ function TimelineTrack({ name, items, kind, model }: { name: string; items: Anno
 }
 
 export function StudioTimeline({ model }: StudioProps) {
-  const show = (kind: TrackKind) => model.selectedTab === 'all' || model.selectedTab === `${kind}s`;
+  const [filter, setFilter] = useState<'all'|'sponsors'|'events'|'cameras'>('all');
+  const [menu, setMenu] = useState<TimelineDelete | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const closeOutside = (event: PointerEvent) => { if (!menuRef.current?.contains(event.target as Node)) setMenu(null); };
+    const closeEscape = (event: KeyboardEvent) => { if(event.key==='Escape')setMenu(null); };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeEscape);
+    return () => { document.removeEventListener('pointerdown', closeOutside);document.removeEventListener('keydown', closeEscape); };
+  }, [menu]);
+  const show = (kind: TrackKind) => filter === 'all' || filter === `${kind}s`;
   const lines: { name: string; items: AnnotationBase[]; kind: TrackKind }[] = [];
-  if (show('sponsor')) model.sponsors.forEach(item => lines.push({ name: item.name, items: model.task.sponsors.filter(row => row.sponsorId === item.id), kind: 'sponsor' }));
-  if (show('event')) model.events.forEach(item => lines.push({ name: item.name, items: model.task.events.filter(row => row.eventId === item.id), kind: 'event' }));
-  if (model.selectedTab === 'all' || model.selectedTab === 'cameras') model.cameras.forEach(item => lines.push({ name: item.name, items: model.task.cameras.filter(row => row.cameraId === item.id), kind: 'camera' }));
-  return <><div className="track-top">{[0, .25, .5, .75, 1].map(share => <span key={share}>{fmt(model.duration * share)}</span>)}</div>
-    {lines.length ? lines.map((line, index) => <TimelineTrack key={`${line.kind}:${index}`} {...line} model={model} />) : <div className="empty">No tracks configured</div>}</>;
+  const measurable = (row:AnnotationBase) => row.end == null || row.end > row.start;
+  if (show('sponsor')) model.sponsors.forEach(item => {const items=model.task.sponsors.filter(row => row.sponsorId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'sponsor'});});
+  if (show('event')) model.events.forEach(item => {const items=model.task.events.filter(row => row.eventId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'event'});});
+  if (show('camera')) model.cameras.forEach(item => {const items=model.task.cameras.filter(row => row.cameraId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'camera'});});
+  return <div className="timeline-content">
+    <div className="timeline-filter"><label htmlFor="timelineLayerFilter">SHOW TRACKS</label><select id="timelineLayerFilter" value={filter} onChange={event => {setFilter(event.target.value as typeof filter);setMenu(null);}}>
+      <option value="all">All annotations</option><option value="sponsors">Sponsors</option><option value="events">Events</option><option value="cameras">Cameras</option>
+    </select><span>{lines.length} recorded tracks · right-click a segment to remove it</span></div>
+    {lines.length ? <><div className="track-top">{[0, .25, .5, .75, 1].map(share => <span key={share}>{fmt(model.duration * share)}</span>)}</div>
+      {lines.map((line, index) => <TimelineTrack key={`${line.kind}:${index}`} {...line} model={model} onContextMenu={setMenu} />)}</>
+      : <div className="timeline-empty">No {filter === 'all' ? '' : `${filter} `}intervals recorded yet. Use the tagging controls to begin an annotation.</div>}
+    {menu && <div ref={menuRef} className="timeline-context-menu" role="menu" style={{left:Math.max(8,Math.min(menu.x,window.innerWidth-215)),top:Math.max(8,Math.min(menu.y,window.innerHeight-65))}}>
+      <span>{menu.name}</span><button type="button" role="menuitem" onClick={() => {const target=menu;setMenu(null);window.deleteLog?.(target.key,target.id);}}>Delete annotation</button>
+    </div>}
+  </div>;
 }
 
 type LogEntry = (SponsorAnnotation & { key: 'sponsors'; type: string; itemId: string; color: string }) |

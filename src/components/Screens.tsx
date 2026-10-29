@@ -9,6 +9,7 @@ import { InsightsScreen } from './InsightsScreen';
 
 /** All eight product routes now have native JSX screen components. */
 export function Screen({ id, context }: { id: ScreenId; context: ScreenContext }) {
+  if (id === 'loading') return <div className="session-loading" role="status" aria-live="polite"><div className="session-loading-mark">MC26 <span>·</span> SPONSOR STUDIO</div><div className="session-loading-bar" /><p>Restoring your workspace…</p></div>;
   if (id === 'login') return <LoginScreen changeRequired={context.changeRequired ?? false} />;
   if (id === 'workspace') return <WorkspaceScreen workspaces={context.workspaces ?? []} />;
   const data = context.data;

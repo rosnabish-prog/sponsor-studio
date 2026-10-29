@@ -16,7 +16,7 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
     <details className="task-actions" id="taskActionMenu">
       <summary aria-label="Task actions"><span>ACTIONS</span><span className="menu-glyph" aria-hidden="true">⋯</span></summary>
       <div className="task-menu-content">
-        <StudioAction onClick={() => window.chooseVideo?.()}><Icon name="video" /> OPEN LOCAL VIDEO</StudioAction>
+        <StudioAction onClick={() => window.chooseVideo?.()}><Icon name="video" /> {model.isLocalVideo ? 'REPLACE LOCAL VIDEO' : 'OPEN LOCAL VIDEO'}</StudioAction>
         <StudioAction onClick={() => window.exportTask?.(model.id)}><Icon name="download" /> EXPORT JSON</StudioAction>
         {completed
           ? isAdmin && <StudioAction className="task-menu-reopen" onClick={() => window.reopenTask?.()}><Icon name="check" /> REOPEN TASK</StudioAction>
@@ -98,7 +98,7 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
           </div>
           <div id="controlsBody"><StudioControls model={model} /></div>
           <div className="tline-wrap">
-            <div className="sectionhead"><div><h3>Unified match timeline</h3><p className="sub">One shared time axis · switch visible layers using the controls above</p></div>
+            <div className="sectionhead"><div><h3>Unified match timeline</h3><p className="sub">Review recorded intervals by layer. Right-click a segment to delete it, if you have editing permission.</p></div>
               <div className="tline-legend"><span><i className="key" style={{ background: '#ff9b36' }} />Sponsors</span><span><i className="key" style={{ background: '#d7c7b5' }} />Events</span><span><i className="key" style={{ background: '#9cabb0' }} />Cameras</span></div></div>
             <div id="timelineBody"><StudioTimeline model={model} /></div>
           </div>

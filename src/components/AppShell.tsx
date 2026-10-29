@@ -37,7 +37,7 @@ const adminNav = [
 ] as const;
 
 export function AppShell({ screen, context, children }: {
-  screen: Exclude<ScreenId, 'login'|'workspace'>;
+  screen: Exclude<ScreenId, 'login'|'workspace'|'loading'>;
   context: ScreenContext;
   children: ReactNode;
 }) {

@@ -7,6 +7,8 @@ on:
       - public/**
       - package*.json
       - scripts/smoke_ui.cjs
+      - scripts/smoke_session_routes.cjs
+      - tests/ui-data-handling.test.tsx
       - .github/workflows/smoke-ui.yml
   workflow_dispatch:
 permissions:
@@ -22,5 +24,5 @@ jobs:
           cache: npm
       - name: Install frontend and UI automation dependencies
         run: npm ci
-      - name: Test studio interactions and annotation intervals
-        run: node scripts/smoke_ui.cjs
+      - name: Test current React UI, session restoration and data presentation
+        run: npm run test:ui

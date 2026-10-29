@@ -1311,3 +1311,87 @@ select:not([multiple]):disabled{
  font:650 10px/1.5 'IBM Plex Mono',monospace;
  padding:0 0 10px;
 }
+
+/* Restored-session screen: no transient login form or incorrect navigation state. */
+.session-loading{min-height:100vh;background:#0b0b0c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;color:#d5d5da;}
+.session-loading-mark{font:850 clamp(18px,3vw,30px)/1.2 'Manrope',system-ui,sans-serif;letter-spacing:-.04em;}
+.session-loading-mark span{color:var(--orange);padding:0 5px;}
+.session-loading-bar{height:3px;width:155px;border-radius:4px;background:linear-gradient(90deg,transparent,var(--orange),#75aaff,transparent);background-size:200% 100%;animation:session-sweep 1.3s ease-in-out infinite;}
+.session-loading p{font:500 12px/1.5 'Manrope',sans-serif;color:#9fa0a7;margin:0;}
+@keyframes session-sweep{0%{background-position:100% 0;}100%{background-position:-100% 0;}}
+@media(prefers-reduced-motion:reduce){.session-loading-bar{animation:none;}}
+
+/* Balanced team crests, names and central VS across card/table layouts. */
+.fixture-mini,.match-tile-match .fixture-mini{
+ display:grid!important;grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr)!important;
+ align-items:center!important;gap:8px!important;width:100%;min-width:0;
+ font:750 12px/1.4 'Manrope',system-ui,sans-serif!important;
+ letter-spacing:-.02em!important;text-transform:none!important;
+}
+.fixture-mini .fixture-mini-team,.match-tile-match .fixture-mini .fixture-mini-team{
+ display:flex!important;align-items:center!important;gap:8px;min-width:0;
+}
+.fixture-mini .fixture-mini-team.home{justify-content:flex-start;}
+.fixture-mini .fixture-mini-team.away{justify-content:flex-end;text-align:right;}
+.fixture-mini .fixture-mini-team .club-crest{flex:0 0 28px!important;width:28px!important;height:28px!important;}
+.fixture-mini .fixture-mini-name,.taskrow .info .fixture-mini-name{display:block;min-width:0;overflow-wrap:anywhere;color:#f2f2f4!important;font:750 12px/1.4 'Manrope',system-ui,sans-serif!important;}
+.fixture-mini .vstag,.match-tile-match .fixture-mini .vstag{justify-self:center;text-align:center;margin:0!important;color:var(--orange)!important;font:800 10px/1 'IBM Plex Mono',monospace!important;}
+.match-tile-match{width:100%;}
+.taskrow .info{min-width:0;}
+.taskrow .info .match-title{color:#f2f2f4;font:750 13px/1.4 'Manrope',system-ui,sans-serif!important;}
+.taskrow .info>span{display:block;color:#a4a4ac;font:500 11px/1.5 'Manrope',system-ui,sans-serif!important;margin-top:5px;}
+.table .mainname .fixture-mini{min-width:245px;}
+.fixture-card[role="button"]{cursor:pointer;transition:border-color .16s ease,transform .16s ease,background .16s ease;}
+.fixture-card[role="button"]:focus-visible{outline:2px solid var(--orange);outline-offset:3px;}
+.fixture-card[role="button"]:hover .fixture-task-action{border-color:var(--orange)!important;}
+
+/* Consistent heading and description hierarchy throughout the workspace. */
+.sectionhead h2,.sectionhead h3,.tag-toolbar h2,.insight-section-title h3{font-family:'Manrope',system-ui,sans-serif!important;font-weight:800!important;letter-spacing:-.04em!important;}
+.sectionhead .sub,.pagehead .sub,.app-focus .sub,.app-focus .tag-toolbar .sub,
+.app-focus .chip-group-title small,.app-focus .rail-compact-heading p,
+.insight-section-title p,.insight-head .sub,.studio-layer-hint{
+ font-family:'Manrope',system-ui,sans-serif!important;font-size:12px!important;font-weight:500!important;
+ line-height:1.55!important;letter-spacing:0!important;text-transform:none!important;color:#a8a8ae!important;
+}
+.app-focus .chip-group-title small{font-size:11px!important;text-align:right;}
+.sectionhead h2{font-size:19px!important;}
+.app-focus .studio-maincard .tag-toolbar h2{font-size:20px!important;}
+
+/* Recorded-only timeline, with independent layer dropdown and contextual deletion. */
+.timeline-content{position:relative;}
+.timeline-filter{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 16px;}
+.timeline-filter label{color:#babac1;font:750 10px 'Manrope',sans-serif!important;white-space:nowrap;letter-spacing:.05em;}
+.timeline-filter select{min-width:190px;max-width:260px;width:auto!important;background-color:#252528!important;color:#eee!important;border:1px solid #48484d!important;border-radius:10px!important;padding:9px 43px 9px 12px!important;font-size:12px!important;}
+.timeline-filter>span{color:#96969e;font:500 11px/1.5 'Manrope',sans-serif;}
+.timeline-empty{border:1px dashed #48484d;background:#222225;border-radius:13px;padding:22px;color:#b4b4bb;text-align:center;font:500 12px/1.5 'Manrope',sans-serif;}
+.app-focus .block:hover{filter:brightness(1.3);outline:1px solid #ffffff88;}
+.timeline-context-menu{position:fixed;z-index:90;min-width:200px;padding:6px;background:#29292e;border:1px solid #64646a;border-radius:12px;box-shadow:0 18px 45px #0009;}
+.timeline-context-menu span{display:block;color:#b8b8bf;font:650 10px/1.5 'Manrope',sans-serif;padding:8px 10px;max-width:230px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;}
+.timeline-context-menu button{display:block;text-align:left;width:100%;padding:11px 10px;border:0;border-radius:8px;background:transparent;color:#ffb3af!important;font:750 12px 'Manrope',sans-serif!important;}
+.timeline-context-menu button:hover,.timeline-context-menu button:focus-visible{background:#533036!important;}
+
+/* Show attached source and remove it only inside the match editor. */
+.task-video-removal{display:flex;flex-direction:row;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:#232326;border:1px solid #48484e;border-radius:13px;padding:15px;}
+.task-video-removal>div{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}
+.task-video-removal b{font:750 10px 'IBM Plex Mono',monospace;color:#c9c9d0;}
+.task-video-removal span{font:600 12px/1.5 'Manrope',sans-serif;color:#f2f2f4;overflow-wrap:anywhere;}
+.task-video-removal .button{flex:0 0 auto;}
+.task-video-removal small{flex-basis:100%;}
+
+/* Sponsor exposure is a real, measured chart rather than unlabelled bar marks. */
+.exposure-curve-wrap{margin-top:12px;}
+.exposure-curve-legend{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:10px 0;color:#d5d5dc;font:600 11px/1.5 'Manrope',sans-serif;}
+.exposure-curve-legend span{display:inline-flex;align-items:center;gap:7px;}
+.exposure-curve-legend i{width:11px;height:11px;border-radius:50%;display:inline-block;}
+.exposure-curve-legend small{color:#96969d;font-size:10px;}
+.exposure-curve-chart{width:100%;height:auto;max-height:305px;display:block;overflow:visible;}
+.exposure-curve-chart text{font-family:'IBM Plex Mono',monospace;}
+.exposure-curve-caption,.exposure-curve-empty{font:500 11px/1.6 'Manrope',sans-serif;color:#aaaab2;margin:8px 0 0;}
+.exposure-curve-empty{padding:10px 12px;background:#2a2729;border:1px solid #464347;border-radius:9px;}
+@media(max-width:700px){
+ .fixture-mini,.match-tile-match .fixture-mini{grid-template-columns:minmax(0,1fr) 27px minmax(0,1fr)!important;gap:5px!important;}
+ .fixture-mini .fixture-mini-team{gap:5px;}
+ .fixture-mini .fixture-mini-name{font-size:11px!important;}
+ .fixture-mini .fixture-mini-team .club-crest{width:24px!important;height:24px!important;flex-basis:24px!important;}
+ .timeline-filter>span{flex-basis:100%;}
+}

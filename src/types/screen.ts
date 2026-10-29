@@ -1,6 +1,6 @@
 import type { StudioData, Fixture, Sponsor, TagAttribute, TaskSummary } from './models';
 
-export type ScreenId = 'login' | 'workspace' | 'dashboard' | 'tasks' | 'studio' | 'sponsors' | 'attributes' | 'users' | 'reports';
+export type ScreenId = 'loading' | 'login' | 'workspace' | 'dashboard' | 'tasks' | 'studio' | 'sponsors' | 'attributes' | 'users' | 'reports';
 
 export interface ScreenContext {
   user?: { name: string; role: 'admin' | 'analyst' };
