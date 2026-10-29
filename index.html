@@ -683,7 +683,7 @@ let fixtureSyncLabel='Bundled schedule';let fixtureDay='all';
 // but convert attribute definitions to duration tagging for all future annotations.
 for(const group of db.eventGroups||[])for(const item of group.items||[])item.kind='range';
 const save=()=>{try{local.setItem(DBKEY,JSON.stringify(db))}catch(e){/* In-memory demonstration still works when storage is restricted. */}};
-save();let logged=(()=>{try{return session.getItem(SESSION)||''}catch(e){return ''}})(),view='dashboard',selectedTaskId='',reportTaskId='',studioTab='all',taskFilter='all',tick=0,seekStep=5,localVideos={},videoEl=null,forgot=false,modalOpen=false;
+save();let logged=(()=>{try{return session.getItem(SESSION)||''}catch(e){return ''}})(),view='dashboard',selectedTaskId='',reportTaskId='',studioTab='all',taskFilter='all',insightFocusId='',tick=0,seekStep=5,localVideos={},videoEl=null,forgot=false,modalOpen=false;
 const me=()=>db.users.find(x=>x.id===logged);const currentTask=()=>db.tasks.find(x=>x.id===selectedTaskId);const reportTask=()=>db.tasks.find(x=>x.id===reportTaskId)||db.tasks[0];const visibleTasks=()=>me()?.role==='admin'?db.tasks:db.tasks.filter(t=>t.sponsorAnalystId===logged||t.contextAnalystId===logged);
 const taskStatus=t=>t.submitted?.sponsors&&t.submitted?.context?'done':t.sponsors.length||t.events.length||t.cameras.length||t.submitted?.sponsors||t.submitted?.context?'progress':'ready';
 const statusHTML=t=>{let s=taskStatus(t);return `<span class="status ${s}">${s==='done'?'Completed':s==='progress'?'In progress':'Ready to tag'}</span>`};
@@ -923,6 +923,83 @@ window.removeItem=(kind,gid,id)=>{let gs=kind==='event'?db.eventGroups:db.camera
 function usersView(){return `<div class="pagehead"><div><div class="eyebrow">WORKSPACE / PEOPLE</div><h1>Analysts & access</h1><p class="sub">Assign either one analyst to both streams or two analysts to split tagging responsibilities.</p></div><button class="button primary" onclick="userModal()">${icons('plus')} Add analyst</button></div><div class="card cardpad"><div class="tablewrap"><table class="table"><thead><tr><th>Team member</th><th>Role</th><th>Email</th><th>Active assignments</th><th></th></tr></thead><tbody>${db.users.map(u=>`<tr><td><div class="row"><div class="avatar">${esc(u.name.slice(0,2).toUpperCase())}</div><b>${esc(u.name)}</b></div></td><td><span class="tag ${u.role==='admin'?'pink':''}">${esc(u.role)}</span></td><td>${esc(u.email)}</td><td>${db.tasks.filter(t=>t.sponsorAnalystId===u.id||t.contextAnalystId===u.id).length}</td><td>${u.role==='analyst'?`<button class="button ghost tiny" onclick="userModal('${u.id}')">Edit</button>`:''}</td></tr>`).join('')}</tbody></table></div></div><div class="infohint">This demo stores account passwords in local browser storage for demonstration only. Production authentication must use a secured server, password hashing, verified email recovery, sessions and server-enforced permissions.</div>`}
 window.userModal=(id='')=>{let u=db.users.find(x=>x.id===id);openModal(u?'Edit analyst':'Add analyst',`<div class="formgrid"><div class="field"><label>Full name</label><input id="uname" value="${esc(u?.name||'')}"></div><div class="field"><label>Work email</label><input type="email" id="uemail" value="${esc(u?.email||'')}"></div><div class="field full"><label>Demo password ${u?'(leave empty to keep current)':''}</label><input type="password" id="upass" placeholder="At least 8 characters" autocomplete="new-password"></div></div>`,`<button class="button ghost" onclick="closeModal()">Cancel</button><button class="button primary" onclick="saveUser('${id}')">Save analyst</button>`)};
 window.saveUser=id=>{let u=db.users.find(x=>x.id===id),name=formVal('uname').trim(),email=formVal('uemail').trim().toLowerCase(),pwd=formVal('upass');if(!name||!/^\S+@\S+\.\S+$/.test(email))return notify('Add a name and valid email address.');if(db.users.some(x=>x.email===email&&x.id!==id))return notify('An account already uses this email.');if((!u||pwd)&&pwd.length<8)return notify('Demo password must have at least eight characters.');if(u){u.name=name;u.email=email;if(pwd)u.password=pwd}else db.users.push({id:uid(),name,email,password:pwd,role:'analyst'});save();closeModal();render();notify('Analyst saved')};
+/* Analytics computed strictly from annotated intervals; no inferred impressions or valuations. */
+function insightData(t){
+ const videoSeconds=Math.max(1,Number(t.duration)||3600);
+ const annotations=[...t.sponsors,...t.events,...t.cameras];
+ const endpoint=Math.min(videoSeconds,Math.max(0,Number(t.observedTime)||0,...annotations.map(x=>Number(x.end==null?x.start:x.end)||0)));
+ const clampTime=v=>Math.max(0,Math.min(videoSeconds,Number(v)||0));
+ const span=x=>({start:clampTime(x.start),end:clampTime(x.end==null?endpoint:x.end)});
+ const spans=xs=>xs.map(span).filter(x=>x.end>x.start);
+ const length=xs=>xs.reduce((sum,x)=>sum+x.end-x.start,0);
+ const pct=(v,base)=>base>0?100*v/base:0;
+ const union=xs=>merged(xs);
+ const brands=sponsorFor(t).map(s=>{
+  const rows=t.sponsors.filter(x=>x.sponsorId===s.id);
+  const own=union(spans(rows));
+  const duration=length(own);
+  const eventHits=t.events.filter(e=>{
+   if(e.kind==='point'&&e.end===e.start)return own.some(x=>e.start>=x.start&&e.start<x.end);
+   return spans([e]).some(ev=>own.some(x=>overlap(ev,x)>0));
+  }).length;
+  return {...s,own,seconds:duration,entries:rows.length,segments:own.length,
+   longest:Math.max(0,...own.map(x=>x.end-x.start)),
+   first:own.length?own[0].start:null,eventHits};
+ }).sort((a,b)=>b.seconds-a.seconds);
+ const active=brands.filter(b=>b.seconds>0);
+ const sumSeconds=brands.reduce((n,b)=>n+b.seconds,0);
+ const anySponsor=union(brands.flatMap(b=>b.own));
+ const coveredSeconds=length(anySponsor);
+ const cameras=camerasFor(t).map(c=>{
+  const windows=union(spans(t.cameras.filter(a=>a.cameraId===c.id)));
+  const cameraTime=length(windows);
+  const sponsors=brands.map(b=>{
+   const seconds=length(union(b.own.flatMap(x=>windows.map(w=>({start:Math.max(x.start,w.start),end:Math.min(x.end,w.end)})).filter(p=>p.end>p.start))));
+   return {id:b.id,name:b.name,seconds};
+  });
+  return {id:c.id,name:c.name,seconds:cameraTime,sponsorSeconds:sponsors.reduce((n,b)=>n+b.seconds,0),
+   sponsorCount:sponsors.filter(x=>x.seconds>0).length,
+   leader:sponsors.sort((a,b)=>b.seconds-a.seconds)[0]};
+ }).sort((a,b)=>b.seconds-a.seconds);
+ const cameraCovered=length(union(spans(t.cameras)));
+ const eventRows=t.events.map(e=>{
+  const isPoint=e.kind==='point'&&e.start===e.end;
+  const window=span(e);
+  const valid=window.end>window.start;
+  const brandMatches=brands.map(b=>{
+   const seconds=isPoint?0:(valid?length(b.own.map(x=>({start:Math.max(window.start,x.start),end:Math.min(window.end,x.end)})).filter(x=>x.end>x.start)):0);
+   const hit=isPoint?b.own.some(x=>e.start>=x.start&&e.start<x.end):seconds>0;
+   return {id:b.id,name:b.name,seconds,hit};
+  }).filter(b=>b.hit);
+  const covered=valid?length(union(anySponsor.map(x=>({start:Math.max(x.start,window.start),end:Math.min(x.end,window.end)})).filter(x=>x.end>x.start))):0;
+  return {id:e.id,eventId:e.eventId,name:labelFor(t,'events',e.eventId),start:window.start,end:window.end,
+   duration:Math.max(0,window.end-window.start),open:e.end==null,legacyPoint:isPoint,brands:brandMatches,
+   coverageSeconds:covered,coveragePct:valid?pct(covered,window.end-window.start):0};
+ }).sort((a,b)=>a.start-b.start);
+ const eventGroups=new Map();
+ for(const e of eventRows){let v=eventGroups.get(e.name)||{name:e.name,count:0,withBrands:0,seconds:0,brandNames:new Set()};v.count++;v.withBrands+=e.brands.length>0?1:0;v.seconds+=e.duration;e.brands.forEach(b=>v.brandNames.add(b.name));eventGroups.set(e.name,v)}
+ const pairs=[];
+ for(let i=0;i<active.length;i++)for(let j=i+1;j<active.length;j++){
+  const seconds=length(active[i].own.flatMap(a=>active[j].own.map(b=>({start:Math.max(a.start,b.start),end:Math.min(a.end,b.end)})).filter(x=>x.end>x.start)));
+  if(seconds>0)pairs.push({a:active[i].name,b:active[j].name,seconds});
+ }
+ pairs.sort((a,b)=>b.seconds-a.seconds);
+ const buckets=[];
+ const step=300;
+ for(let start=0;start<videoSeconds;start+=step){
+  const window={start,end:Math.min(videoSeconds,start+step)};
+  const brandSeconds=brands.reduce((n,b)=>n+length(b.own.map(x=>({start:Math.max(x.start,window.start),end:Math.min(x.end,window.end)})).filter(x=>x.end>x.start)),0);
+  const covered=length(anySponsor.map(x=>({start:Math.max(x.start,window.start),end:Math.min(x.end,window.end)})).filter(x=>x.end>x.start));
+  buckets.push({start,end:window.end,brandSeconds,covered,pct:pct(covered,window.end-window.start),
+   eventCount:eventRows.filter(e=>e.start>=start&&e.start<window.end).length});
+ }
+ const sponsorOpen=t.sponsors.filter(x=>x.end==null).length;
+ const eventOpen=t.events.filter(x=>x.end==null).length;
+ const cameraOpen=t.cameras.filter(x=>x.end==null).length;
+ return {brands,active,videoSeconds,endpoint,sumSeconds,coveredSeconds,cameras,cameraCovered,eventRows,
+ eventGroups:[...eventGroups.values()].sort((a,b)=>b.count-a.count),pairs,buckets,
+ sponsorOpen,eventOpen,cameraOpen,pct,number:n=>Number(n).toFixed(1)};
+}
 function buildReport(t){let m=metrics(t),knownDuration=t.duration||3600;let eventCards=getEvents(t).map(e=>{let names=sponsorFor(t).filter(s=>sponsorOnEvent(t,s.id,e)).map(x=>x.name);return `<div class="eventcard"><div class="row between"><b>${esc(labelFor(t,'events',e.eventId))}</b><span class="tag">${fmt(e.start)} – ${e.end==null?'LIVE':fmt(e.end)}</span></div><p>${names.length?`${names.length} visible brand${names.length!==1?'s':''}: ${esc(names.join(', '))}`:'No tagged sponsor visible during this interval'}</p></div>`});let sorted=m.rows.filter(x=>x.sec>0);let max=Math.max(1,...sorted.map(x=>x.sec));return `<div class="stats">${[['eye',m.recorded,'Sponsors detected'],['clock',fmt(m.total),'Combined brand exposure'],['tags',m.exposures,'Visibility intervals'],['chart',m.events,'Key event logs']].map(x=>`<div class="card statcard"><div class="staticon">${icons(x[0])}</div><div class="svalue" style="font-size:23px">${x[1]}</div><div class="slabel">${x[2]}</div></div>`).join('')}</div><div class="report-layout"><div class="card cardpad"><div class="sectionhead"><div><h2>Sponsor exposure ranking</h2><p class="sub">Unique sponsor visibility, not the number of duplicate placements</p></div></div>${sorted.length?sorted.map(x=>`<div class="sponsor-bar"><b title="${esc(x.name)}">${esc(x.name)}</b><div class="meter"><i style="width:${100*x.sec/max}%"></i></div><span>${fmt(x.sec)}</span></div>`).join(''):'<div class="empty"><strong>No sponsor exposure logged yet</strong><p>Tag a sponsor interval in the studio to generate analytics.</p></div>'}</div><div class="card cardpad"><div class="sectionhead"><div><h2>Key moment associations</h2><p class="sub">Brands present during any portion of the tagged event interval</p></div></div><div style="max-height:390px;overflow:auto">${eventCards.join('')||'<div class="empty"><strong>No match events recorded yet</strong><p>Record goals, replays and other moments to see sponsor context.</p></div>'}</div></div></div><div class="report-layout" style="margin-top:18px"><div class="card cardpad"><div class="sectionhead"><h2>Camera-context distribution</h2><span class="tag">${t.cameras.length} camera logs</span></div><div class="tablewrap"><table class="table"><thead><tr><th>Camera angle</th><th>Recorded time</th><th>Brands with exposure</th></tr></thead><tbody>${camerasFor(t).map(c=>{let cams=intervals(t.cameras,'cameraId',c.id,t.observedTime||0);let total=merged(cams).reduce((n,z)=>n+z.end-z.start,0);let exposed=m.rows.filter(s=>intervals(t.sponsors,'sponsorId',s.id,t.observedTime||0).some(z=>cams.some(v=>overlap(z,v)>0))).length;return `<tr><td><strong>${esc(c.name)}</strong></td><td>${fmt(total)}</td><td>${exposed}</td></tr>`}).join('')||'<tr><td colspan="3">No camera angles</td></tr>'}</tbody></table></div></div><div class="card cardpad"><div class="sectionhead"><h2>Measurement notes</h2></div><div style="font-size:12px;color:#78788d;line-height:1.8"><p><strong>Combined brand exposure</strong> adds the visible time of each unique sponsor. It can exceed the footage length when several different brands appear simultaneously.</p><p><strong>Exposure percentage</strong> for each brand is its unique visibility duration divided by ${fmt(knownDuration)} of footage.</p><p><strong>Event association</strong> is timestamp intersection, not a causal claim or a valuation of an advertisement.</p><p><strong>Camera distribution</strong> shows tagged camera time. Unlabeled segments are not classified.</p></div></div></div><div class="card cardpad" style="margin-top:18px"><div class="sectionhead"><h2>Sponsor detail</h2><span class="tag">${m.rows.length} configured brands</span></div><div class="tablewrap"><table class="table"><thead><tr><th>Brand</th><th>Exposure</th><th>% of footage</th><th>Appearances</th><th>Tagged event overlaps</th></tr></thead><tbody>${m.rows.map(s=>`<tr><td><div class="row">${logo(s)}<strong>${esc(s.name)}</strong></div></td><td>${fmt(s.sec)}</td><td>${(s.sec/knownDuration*100).toFixed(1)}%</td><td>${s.appearances}</td><td>${s.eventHits}</td></tr>`).join('')}</tbody></table></div></div>`}
 function reportsView(){let ts=visibleTasks();let t=ts.find(x=>x.id===reportTaskId)||ts[0];if(!t)return `<div class="pagehead"><div><h1>Intelligence reports</h1><p class="sub">No assigned matches yet.</p></div></div>`;reportTaskId=t.id;return `<div class="pagehead"><div><div class="eyebrow">SPONSOR INTELLIGENCE / INSIGHTS</div><h1>Exposure analytics</h1><p class="sub">Understand brand visibility against key events and camera contexts.</p></div><div class="row wrap"><select class="smallselect" onchange="chooseReport(this.value)">${ts.map(x=>`<option value="${x.id}" ${x.id===t.id?'selected':''}>${esc(x.number)} · ${esc(x.name)}</option>`).join('')}</select><button class="button ghost" onclick="exportTask('${t.id}')">${icons('download')} Export JSON</button><button class="button primary" onclick="openTask('${t.id}')">Open studio ${icons('arrow')}</button></div></div>${matchHero(t)}${buildReport(t)}`}
 window.chooseReport=id=>{reportTaskId=id;render()};
