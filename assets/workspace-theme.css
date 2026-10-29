@@ -1178,3 +1178,17 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
     height:70px!important;max-height:70px!important;
   }
 }
+
+/* Text-only sponsor fallback labels were still tiny (G / P / HR).
+   Make brand initials as legible as the resized full-color logos. */
+.app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo .tinylogo {
+ font-family:'Manrope',system-ui,sans-serif!important;
+ font-size:clamp(25px,2.2vw,32px)!important;
+ font-weight:850!important;
+ line-height:1!important;
+ letter-spacing:-.035em!important;
+ text-align:center!important;
+}
+.app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo .tinylogo img {
+ filter:none!important;
+}
