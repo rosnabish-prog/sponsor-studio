@@ -10,8 +10,9 @@ Recommended production layout:
 4. Run the `migrations` image as a one-shot ECS task, using the same revision and database secret as the API, **before** updating ECS services. Migrations must complete successfully before rollout. Do not attempt `npm run db:deploy` inside the default API image because its dev-only Prisma CLI is absent.
 5. Serve the React production build behind CloudFront (S3 private origin with OAC). Proxy `/api/*` to the API origin via ALB. Use the same browser origin for API and UI so HTTP-only `SameSite=Strict` cookies work reliably. Set `APP_ORIGIN` to that HTTPS origin.
 6. Configure the video S3 bucket and a **separate** CloudFront video distribution with OAC, restricted viewer access via trusted key group and private signed playback URLs. For media CORS and key-pair settings, see [API README](../../apps/api/README.md).
-7. Deliver API secrets through Secrets Manager / ECS task environment injection: `DATABASE_URL`, `APP_ORIGIN`, `S3_VIDEO_BUCKET`, `AWS_REGION`, `CLOUDFRONT_VIDEO_DOMAIN`, `CLOUDFRONT_KEY_PAIR_ID`, `CLOUDFRONT_PRIVATE_KEY`.
-8. Set up Route 53, ACM certificates, CloudWatch logs, error alerts, S3 storage lifecycle, RDS alarms, application rate-limiting/WAF, and restore drills before taking customer data.
+7. Deliver API secrets through Secrets Manager / ECS task environment injection: `DATABASE_URL`, `APP_ORIGIN`, `S3_VIDEO_BUCKET`, `AWS_REGION`, `CLOUDFRONT_VIDEO_DOMAIN`, `CLOUDFRONT_KEY_PAIR_ID`, `CLOUDFRONT_PRIVATE_KEY`. Verify an SES email identity and optionally configure `PASSWORD_RESET_SENDER` for account recovery; grant the ECS runtime task the narrow `ses:SendEmail` permission.
+8. Schedule `node apps/api/dist/maintenance.js` daily using the migration/maintenance image in a short-lived ECS task to purge expired/revoked sessions and spent password recovery tokens.
+9. Set up Route 53, ACM certificates, CloudWatch logs, error alerts, S3 storage lifecycle, RDS alarms, application rate-limiting/WAF, and restore drills before taking customer data.
 
 CloudFront video signing keys must be generated and stored outside source control. Access to uploaded videos is mediated by API authorization and time-limited CloudFront signatures; S3 objects remain private.
 

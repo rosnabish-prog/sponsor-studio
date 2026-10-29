@@ -15,7 +15,7 @@ Use Node.js 22 or later and Docker Compose.
 
 No real AWS credentials are needed for login/task development; video endpoints return HTTP 503 until storage and CloudFront are configured. The database must be reachable to serve requests.
 
-The API validates DTOs, hashes passwords with Argon2id, uses random opaque HTTP-only session cookies (SHA-256 digests in PostgreSQL), applies request rate limits, and checks workspace membership. Cross-origin requests are allowed only from `APP_ORIGIN`. Sessions expire after seven days; logout revokes the current token. Do not use the local example password in production.
+The API validates DTOs, hashes passwords with Argon2id, uses random opaque HTTP-only session cookies (SHA-256 digests in PostgreSQL), applies request rate limits, and checks workspace membership. Cross-origin requests are allowed only from `APP_ORIGIN`. Sessions expire after seven days; logout revokes the current token. Do not use the local example password in production. Password recovery sends a one-use, hashed, 30-minute reset token through Amazon SES and revokes every previous session when the password changes. It returns the same acknowledgment for known and unknown email addresses.
 
 ## Implemented routes
 
@@ -28,6 +28,8 @@ Routes below are prefixed with `/api`. Most require a valid session cookie.
 | POST | `/auth/login` | Start session (email, password) |
 | GET | `/auth/me` | Current signed-in user |
 | POST | `/auth/logout` | Revoke session |
+| POST | `/auth/password-reset/request` | Request a 30-minute email recovery link; SES sender required |
+| POST | `/auth/password-reset/confirm` | Change password using a one-time token; revoke all existing sessions |
 | GET / POST | `/workspaces` | List memberships / create workspace (owner role) |
 | POST | `/workspaces/:workspaceId/members` | Owner/admin adds an **already registered** user by email |
 | GET | `/workspaces/:workspaceId/members` | Workspace team list |
@@ -72,13 +74,19 @@ Uploaded files are kept private. The client uploads 16 MiB chunks with up to thr
 
 Use the actual deployed origin, not the example value. The video bucket and CloudFront distribution are **not provisioned** by this repository.
 
+## Password recovery and scheduled cleanup
+
+Verify a sending identity/domain in AWS SES, allow the API task role to send through SES, and set `PASSWORD_RESET_SENDER` to the verified sender and `AWS_REGION` to the same SES region. Use a real HTTPS `APP_ORIGIN` in production. The server never returns the reset token in an API response or writes it to its logs. When SES is unconfigured, requesting recovery returns HTTP 503; the local demo password-change option is separate.
+
+Expired/revoked sessions and used/expired recovery tokens are pruned with `npm run maintenance:sessions --workspace @sponsor-studio/api` after compilation. Schedule `node apps/api/dist/maintenance.js` once a day as a separate ECS task (the `migrations` Docker build target includes the compiled job and dependencies). The cleanup command does not remove customer task or annotation data.
+
 ## Still P0 work, not yet done
 
 - Provision AWS IAM, S3, CloudFront and production deployment infrastructure; the application-level multipart and signed-playback API is implemented but not verified against real AWS resources.
-- Add race-safe concurrency control and query pagination for simultaneous annotation workers, scheduled session cleanup, production observability and database backups.
+- Add query pagination for large worker queues, production observability, and database backups. Per-task annotation writes are serialized by database row locks, and an expired-session cleanup job is now available but must be scheduled in AWS.
 - Move logos out of the workspace JSON catalog into durable asset storage, and implement server-side analytics aggregation if reports become large.
-- Add password reset/email verification and organization invitation flows before external rollout.
-- Run end-to-end Playwright UI/API integration in GitHub CI before treating API mode as stable; initial browser mode is now wired but not yet a production sign-off.
+- Verify AWS SES delivery and sender/domain settings before enabling password reset; implement email verification and organization invitation flows before external rollout.
+- The end-to-end Playwright UI/API integration passes on the feature branch; production AWS media access, load tests, and deployment smoke tests remain unverified.
 - Next.js and Tailwind migration is **not part of this P0 backend increment**; retaining existing React/Vite/CSS protects the current UI.
 
 The included SQL migration is generated from Prisma schema. `prisma migrate dev` applies it to a local database; production environments should run `prisma migrate deploy` in a controlled deployment process.

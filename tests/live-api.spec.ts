@@ -1,5 +1,18 @@
 import { test, expect } from '@playwright/test';
 
+test('live password recovery uses an email-only request and a separate token form',async({page})=>{
+  await page.goto('http://127.0.0.1:4173',{waitUntil:'domcontentloaded'});
+  await page.getByRole('link',{name:'Forgot password?'}).click();
+  await expect(page.locator('#loginemail')).toBeVisible();
+  await expect(page.locator('#loginpass')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'EMAIL RESET LINK'})).toBeVisible();
+  await page.goto('http://127.0.0.1:4173/#reset=test-token-for-ui-only');
+  await expect(page.getByRole('heading',{name:'NEW PASSWORD.'})).toBeVisible();
+  await expect(page.locator('#newpwd')).toBeVisible();
+  await expect(page.locator('#confirmnewpwd')).toBeVisible();
+  await expect(page.locator('#loginemail')).toHaveCount(0);
+});
+
 test('live React mode signs in, creates a workspace task and persists sponsor tags', async ({ page }) => {
   const id=Math.random().toString(36).slice(2,10);
   const apiFailures:string[]=[];

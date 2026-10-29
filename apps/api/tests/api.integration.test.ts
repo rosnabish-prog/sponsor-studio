@@ -71,6 +71,43 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
     assert.equal((await run(path + `/annotations/${annotation.json.id}`, 'PATCH', { quality: 'clear' }, bob.cookie)).status, 200);
     assert.equal((await run('/auth/logout', 'POST', undefined, bob.cookie)).status, 201);
     assert.equal((await run('/auth/me', 'GET', undefined, bob.cookie)).status, 401);
+
+    // SES delivery is mocked at the SDK boundary; the token is never returned
+    // by the API, is single-use, and invalidates existing login sessions.
+    const { SESv2Client } = await import('@aws-sdk/client-sesv2');
+    const originalSend = SESv2Client.prototype.send;
+    const senderBefore = process.env.PASSWORD_RESET_SENDER;
+    const regionBefore = process.env.AWS_REGION;
+    const originBefore = process.env.APP_ORIGIN;
+    let resetEmail = '';
+    try {
+      process.env.PASSWORD_RESET_SENDER = 'recovery@example.org';
+      process.env.AWS_REGION = 'us-east-1';
+      process.env.APP_ORIGIN = 'http://127.0.0.1:4173';
+      SESv2Client.prototype.send = (async command => {
+        const body = command.input as { Content: { Simple: { Body: { Text: { Data: string } } } } };
+        resetEmail = body.Content.Simple.Body.Text.Data;
+        return { MessageId: 'mocked-ses-mail-id' };
+      }) as typeof SESv2Client.prototype.send;
+      const resetRequest = await run('/auth/password-reset/request','POST',{email:alice.json.user.email});
+      assert.equal(resetRequest.status,201,JSON.stringify(resetRequest.json));
+      assert.deepEqual(resetRequest.json,{ok:true});
+      const link=resetEmail.match(/https?:\/\/[^\s]+/)?.[0];
+      assert.ok(link,'SES should receive a recovery link');
+      const token=new URLSearchParams(new URL(link).hash.slice(1)).get('reset');
+      assert.ok(token);
+      const confirmed=await run('/auth/password-reset/confirm','POST',{token,password:'replacement-safe-password-A2'});
+      assert.equal(confirmed.status,201,JSON.stringify(confirmed.json));
+      assert.equal((await run('/auth/me','GET',undefined,alice.cookie)).status,401);
+      assert.equal((await run('/auth/password-reset/confirm','POST',{token,password:'replacement-safe-password-A3'})).status,400);
+      assert.equal((await run('/auth/login','POST',{email:alice.json.user.email,password:'safe-test-password-A1'})).status,401);
+      assert.equal((await run('/auth/login','POST',{email:alice.json.user.email,password:'replacement-safe-password-A2'})).status,201);
+    } finally {
+      SESv2Client.prototype.send=originalSend;
+      if(senderBefore===undefined)delete process.env.PASSWORD_RESET_SENDER;else process.env.PASSWORD_RESET_SENDER=senderBefore;
+      if(regionBefore===undefined)delete process.env.AWS_REGION;else process.env.AWS_REGION=regionBefore;
+      if(originBefore===undefined)delete process.env.APP_ORIGIN;else process.env.APP_ORIGIN=originBefore;
+    }
   } finally {
     await app.close();
   }

@@ -157,6 +157,7 @@ let view: 'dashboard'|'tasks'|'studio'|'sponsors'|'attributes'|'users'|'reports'
 let selectedTaskId='',reportTaskId='',taskFilter='all',insightFocusId='',fixtureSyncLabel='Bundled schedule';
 let studioTab:'all'|'sponsors'|'events'|'cameras'='all';
 let tick=0,seekStep=5,localVideos:Record<string,string>={},videoEl:HTMLVideoElement|null=null,forgot=false,registering=false,modalOpen=false;
+let resetToken=apiEnabled?new URLSearchParams(window.location.hash.slice(1)).get('reset')||'':'';
 const me=()=>db.users.find(x=>x.id===logged)||(remoteUser&&logged?{...remoteUser,password:'',role:'admin' as const}:undefined);const currentTask=()=>db.tasks.find(x=>x.id===selectedTaskId);const reportTask=()=>db.tasks.find(x=>x.id===reportTaskId)||db.tasks[0];const visibleTasks=()=>me()?.role==='admin'?db.tasks:db.tasks.filter(t=>t.sponsorAnalystId===logged||t.contextAnalystId===logged);
 const taskStatus=(t:TaskSummary):'ready'|'progress'|'done'=>t.submitted?.sponsors&&t.submitted?.context?'done':t.sponsors.length||t.events.length||t.cameras.length||t.submitted?.sponsors||t.submitted?.context?'progress':'ready';
 const foundUser=(id:string)=>db.users.find(u=>u.id===id);const nameUser=(id:string)=>foundUser(id)?.name||'Unassigned';
@@ -187,8 +188,31 @@ window.acceptInAppConfirm=()=>{
 };
 const formVal=(id:string)=>(document.getElementById(id) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null)?.value||'';
 window.fillDemo=email=>{const input=document.getElementById('loginemail') as HTMLInputElement|null;if(input)input.value=email;const pass=document.getElementById('loginpass') as HTMLInputElement|null;if(pass)pass.value='Demo1234!'};
-window.toggleForgot=b=>{forgot=b;registering=false;render()};
+window.toggleForgot=b=>{
+ if(!b&&resetToken){resetToken='';window.history.replaceState({},'',window.location.pathname);}
+ forgot=b;registering=false;render();
+};
 window.toggleRegister=b=>{registering=b;forgot=false;render()};
+window.requestPasswordReset=async e=>{
+ e.preventDefault();if(!apiEnabled)return;
+ try{
+  await api.requestPasswordReset(formVal('loginemail').trim());
+  notify('If the account exists, a password reset link will arrive by email.');
+ }catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Email recovery unavailable';}
+};
+window.confirmPasswordReset=async e=>{
+ e.preventDefault();if(!apiEnabled||!resetToken)return;
+ const password=formVal('newpwd');
+ if(password!==formVal('confirmnewpwd')){
+  const err=document.getElementById('authError');if(err)err.textContent='The passwords do not match.';
+  return;
+ }
+ try{
+  await api.resetPassword(resetToken,password);
+  resetToken='';window.history.replaceState({},'',window.location.pathname);
+  forgot=false;render();notify('Password updated. All earlier sessions have been signed out.');
+ }catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Could not reset password';}
+};
 window.login=async e=>{
  e.preventDefault();const email=formVal('loginemail').trim().toLowerCase(),pwd=formVal('loginpass');
  if(apiEnabled){try{const result=await api.login({email,password:pwd});remoteUser=result.user;await loadLiveSession()}catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Sign in failed';}return}
@@ -641,7 +665,7 @@ window.exportTask=id=>{let t=db.tasks.find(x=>x.id===id);if(!t||!visibleTasks().
 function render(){
  const user=me();
  if(!user){
-  mount('login',{forgot,registering,apiEnabled});
+  mount('login',{forgot,registering,resetToken,apiEnabled});
   return;
  }
  if(apiEnabled&&!workspaceId){mount('workspace',{workspaces:liveWorkspaces.map(x=>x.workspace)});return}
@@ -680,7 +704,8 @@ refreshFixtureFeed();
 const fixtureRefreshId=setInterval(refreshFixtureFeed,5*60*1000);
 const onStorage=(e:StorageEvent)=>{if(e.key===DBKEY){try{db=JSON.parse(e.newValue||'null')||seed()}catch{return}if(!modalOpen)render()}};
 if(!apiEnabled)window.addEventListener('storage',onStorage);
-if(apiEnabled)void loadLiveSession().catch(()=>{logged='';remoteUser=null;render()});
+if(apiEnabled&&resetToken)render(); // The recovery link takes precedence over any existing signed-in session.
+else if(apiEnabled)void loadLiveSession().catch(()=>{logged='';remoteUser=null;render()});
 else{render();optimizeStoredSponsorLogos();}
 return ()=>{
  clearInterval(fixtureRefreshId);

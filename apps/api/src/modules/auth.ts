@@ -1,8 +1,9 @@
 import { randomBytes, createHash } from 'node:crypto';
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { Algorithm, hash, verify } from '@node-rs/argon2';
 import {
-  Body, CanActivate, ConflictException, Controller, ExecutionContext, Get,
-  Injectable, Post, Req, Res, UnauthorizedException, UseGuards,
+  BadRequestException, Body, CanActivate, ConflictException, Controller, ExecutionContext, Get,
+  Injectable, Post, Req, Res, ServiceUnavailableException, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { IsEmail, IsString, Length, MaxLength } from 'class-validator';
@@ -11,6 +12,7 @@ import { DatabaseService } from './database';
 
 const COOKIE = 'ss_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
+const RESET_MS = 30 * 60 * 1000;
 const cookieOptions = () => ({
   httpOnly: true as const,
   secure: process.env.NODE_ENV === 'production',
@@ -31,6 +33,15 @@ export class CredentialsDto {
 
 export class RegisterDto extends CredentialsDto {
   @IsString() @Length(1, 150) name!: string;
+}
+
+export class ResetRequestDto {
+  @IsEmail() @MaxLength(320) email!: string;
+}
+
+export class ResetPasswordDto {
+  @IsString() @Length(32, 128) token!: string;
+  @IsString() @Length(12, 128) password!: string;
 }
 
 @Injectable()
@@ -80,6 +91,72 @@ export class AuthService {
   async revoke(token: unknown): Promise<void> {
     if (typeof token !== 'string') return;
     await this.db.session.updateMany({ where: { tokenHash: digest(token), revokedAt: null }, data: { revokedAt: new Date() } });
+  }
+
+  async requestPasswordReset(emailInput: string) {
+    const sender = process.env.PASSWORD_RESET_SENDER;
+    const region = process.env.AWS_REGION;
+    const origin = process.env.APP_ORIGIN;
+    if (!sender || !region || !origin ||
+      (process.env.NODE_ENV === 'production' && !origin.startsWith('https://'))) {
+      throw new ServiceUnavailableException('Email recovery is not configured');
+    }
+
+    const user = await this.db.user.findUnique({
+      where: { email: emailInput.trim().toLowerCase() }, select: { id: true, email: true },
+    });
+    // Same response for nonexistent and existing addresses; never expose the token to the browser.
+    if (!user) return { ok: true };
+    const recent = await this.db.passwordResetToken.findFirst({ where: {
+      userId: user.id, createdAt: { gt: new Date(Date.now() - 5 * 60 * 1000) },
+    } });
+    if (recent) return { ok: true }; // Also limit email volume per account, not just per requesting IP.
+    const token = randomBytes(32).toString('base64url');
+    const created = await this.db.$transaction(async tx => {
+      await tx.passwordResetToken.deleteMany({ where: { userId: user.id } });
+      return tx.passwordResetToken.create({ data: {
+        userId: user.id, tokenHash: digest(token), expiresAt: new Date(Date.now() + RESET_MS),
+      } });
+    });
+    const url = new URL(origin);
+    // URL fragments never reach CDN/origin access logs or request referrers.
+    url.hash = `reset=${encodeURIComponent(token)}`;
+    try {
+      const ses = new SESv2Client({ region });
+      await ses.send(new SendEmailCommand({
+        FromEmailAddress: sender,
+        Destination: { ToAddresses: [user.email] },
+        Content: { Simple: {
+          Subject: { Data: 'Reset your Sponsor Studio password' },
+          Body: { Text: { Data: `Use this link to reset your password (valid for 30 minutes):\n\n${url.toString()}\n\nIf you did not request this, ignore this email.` } },
+        } },
+      }));
+    } catch {
+      await this.db.passwordResetToken.deleteMany({ where: { id: created.id } });
+      throw new ServiceUnavailableException('Could not deliver password reset email');
+    }
+    return { ok: true };
+  }
+
+  async resetPassword(token: string, password: string) {
+    const record = await this.db.passwordResetToken.findUnique({ where: { tokenHash: digest(token) } });
+    if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException('Invalid or expired reset link');
+    }
+    const passwordHash = await hash(password, {
+      algorithm: Algorithm.Argon2id, memoryCost: 19_456, timeCost: 2, outputLen: 32, parallelism: 1,
+    });
+    await this.db.$transaction(async tx => {
+      const claimed = await tx.passwordResetToken.updateMany({
+        where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } },
+        data: { usedAt: new Date() },
+      });
+      if (!claimed.count) throw new BadRequestException('Invalid or expired reset link');
+      await tx.user.update({ where: { id: record.userId }, data: { passwordHash } });
+      await tx.session.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.passwordResetToken.deleteMany({ where: { userId: record.userId, id: { not: record.id } } });
+    });
+    return { ok: true };
   }
 }
 
@@ -131,5 +208,17 @@ export class AuthController {
     await this.auth.revoke(req.cookies?.[COOKIE]);
     res.clearCookie(COOKIE, { path: '/', sameSite: 'strict', secure: process.env.NODE_ENV === 'production', httpOnly: true });
     return { ok: true };
+  }
+
+  @Post('password-reset/request')
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  requestReset(@Body() input: ResetRequestDto) {
+    return this.auth.requestPasswordReset(input.email);
+  }
+
+  @Post('password-reset/confirm')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  confirmReset(@Body() input: ResetPasswordDto) {
+    return this.auth.resetPassword(input.token, input.password);
   }
 }

@@ -9,7 +9,7 @@ import { InsightsScreen } from './InsightsScreen';
 
 /** All eight product routes now have native JSX screen components. */
 export function Screen({ id, context }: { id: ScreenId; context: ScreenContext }) {
-  if (id === 'login') return <LoginScreen forgot={context.forgot ?? false} registering={context.registering ?? false} />;
+  if (id === 'login') return <LoginScreen forgot={context.forgot ?? false} registering={context.registering ?? false} resetToken={context.resetToken ?? ''} />;
   if (id === 'workspace') return <WorkspaceScreen workspaces={context.workspaces ?? []} />;
   const data = context.data;
   let content: React.ReactNode;
