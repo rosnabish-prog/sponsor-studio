@@ -160,3 +160,13 @@ This release focuses on eight measures chosen for low-effort but commercially us
 - Half mappings are relative to the actual **video timestamps**, not football game clock: examples 30/30 for a 60-minute video without halftime, or 30/60 for a 90-minute footage containing a 30-minute halftime interval. The mapping assumes the video begins at first-half kickoff and ends with second-half play; trim or annotate other footage separately.
 - High-value event exposure is based on interval intersections and is **not** a claim of viewership, audience impressions, sponsor ROI, or ad valuation.
 - All user accounts, photos, and annotations remain browser-local in this GitHub Pages demo, without shared cloud persistence.
+
+## October 29 reference-inspired orange workspace redesign
+
+The full frontend now shares a single responsive **dark-charcoal and warm-orange** design system in `assets/workspace-theme.css`: 20px-style rounded cards, pill navigation and filters, soft elevated buttons, branded orange call-to-action surfaces, and subtle interaction feedback. The supplied **Seebot logo** now appears as a compact `POWERED BY` lockup immediately beside the Messi Cup logo on the login, admin, and annotation headers (rather than the far right).
+
+The Admin overview has an orange tournament fixture ribbon that opens **Matches**; that page contains the existing searchable/filtered assigned tasks as responsive match cards, followed by the official fixture catalog for task creation. The dashboard retains a production-queue table for operational scanning, avoiding duplicate full catalogs.
+
+The same styling is applied to video controls, sponsor logo sidebar, timeline, event chips, admin/team setup, sponsor and attribute libraries, forms, confirmations, and detailed Insights analytics. All existing annotation rules and local JSON exports remain in place. Brand tags still indicate active intervals through an orange selected border, **without a separate visibility-status dot**. The video remains non-sticky.
+
+This is a visual redesign of the existing browser-local demonstration, **not** deployment of secure multi-device user storage or shared annotation synchronization. Refresh cached styles after deployment if the old square-edged layout persists.
