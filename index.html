@@ -218,7 +218,7 @@ input[type="range"]{accent-color:#e6e6e6!important}.toast{background:#ddd!import
  scrollbar-color:#555 #111;padding:0 6px 18px 0;
 }
 .app-focus .studio-media-column > .video-box {
- position:sticky;top:0;z-index:10;
+ position:static;
  background:#080808!important;border:1px solid #404040!important;
  border-radius:0!important;box-shadow:0 9px 24px #000c;
 }
@@ -461,7 +461,7 @@ input[type="range"]{accent-color:#e6e6e6!important}.toast{background:#ddd!import
 <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
 <symbol id="i-settings" viewBox="0 0 24 24"><path d="M3 4h18M3 12h18M3 20h18M8 2v4m8 4v4m-8 4v4"/></symbol>
 </defs></svg>
-<div id="root"></div><div id="toast" class="toast hidden"></div><input id="videofile" type="file" accept="video/*" hidden>
+<div id="root"></div><div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div><input id="videofile" type="file" accept="video/*" hidden>
 <script>
 (()=>{'use strict';
 const DBKEY='messicup_sponsor_studio_v5', SESSION='messicup_studio_user_v5';
