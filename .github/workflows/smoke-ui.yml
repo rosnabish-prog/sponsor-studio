@@ -1,0 +1,24 @@
+name: Browser smoke test
+on:
+  push:
+    paths:
+      - index.html
+      - scripts/smoke_ui.cjs
+      - .github/workflows/smoke-ui.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install UI automation dependency
+        run: npm install --no-save puppeteer-core@24
+      - name: Start site
+        run: python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/sponsor-web.log 2>&1 &
+      - name: Test annotation UI in Chrome
+        run: node scripts/smoke_ui.cjs
