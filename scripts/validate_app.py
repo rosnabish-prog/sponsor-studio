@@ -46,7 +46,12 @@ theme=Path('assets/workspace-theme.css').read_text(encoding='utf-8')
 for selector in ['.identity-lockup', '.ops-nav', '.dashboard-banner', '.match-tile', '.studio-grid', '.sponsor-rail', '.insight-block', '.modal', '.login-central', '@media(max-width:680px)']:
     assert selector in theme, f'Theme missing {selector}'
 assert theme.count('{')==theme.count('}'), 'Theme CSS delimiters unbalanced'
-assert Path('assets/powered-by-seebot.svg').exists()
+logo_asset=Path('assets/seebot-wordmark-orange-20261029.svg')
+assert logo_asset.exists(), 'Updated orange Powered by logo missing'
+orange_logo=logo_asset.read_text(encoding='utf-8')
+assert '#FF7A3D' in orange_logo and '#F4F5F5' not in orange_logo, 'Brand color must match user-provided orange'
+assert html.count('assets/seebot-wordmark-orange-20261029.svg')==3, 'All header views must use new orange logo'
+assert 'assets/powered-by-seebot.svg' not in html, 'Cached legacy logo references must not remain'
 payload=json.loads(Path('data/fixtures.json').read_text(encoding='utf-8'))
 assert len(payload.get('matches',[]))>=10
 assert len(payload.get('clubs',[]))>=10
