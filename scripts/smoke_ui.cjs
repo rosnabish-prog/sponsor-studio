@@ -66,6 +66,12 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(!document.querySelector('.rail-group-heading'),'sponsor categories hidden');
  expect(!document.querySelector('.rail-brand-name'),'sponsor names hidden from cards');
  expect(document.querySelector('.rail-brand').hasAttribute('aria-label'),'logo-first sponsor remains accessible');
+ const sponsorStyle=fs.readFileSync('assets/workspace-theme.css','utf8');
+ assert.ok(sponsorStyle.includes('.app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo .tinylogo img'),'larger sponsor image styling exists');
+ assert.ok(sponsorStyle.includes('height:78px!important')&&sponsorStyle.includes('height:96px!important'),'desktop logo size and card height increased');
+ assert.ok(sponsorStyle.includes('grid-template-columns:minmax(0,1fr)!important'),'mobile sponsor logos get full row width');
+ assert.ok(sponsorStyle.includes('object-fit:contain!important'),'logo scaling preserves aspect ratio');
+ assert.ok(sponsorStyle.includes('.rail-brand .rail-live-pill'),'OFF and LIVE status pill styling is retained');
  const transparentTheme=fs.readFileSync('assets/workspace-theme.css','utf8');
  assert.ok(transparentTheme.includes('.tinylogo img,.logo-preview img')&&transparentTheme.includes('background:transparent!important'),'logo images have no CSS white background');
  assert.ok(html.includes("ctx.clearRect(0,0,w,h)")&&html.includes("canvas.toDataURL('image/png')"),'logo conversion preserves PNG alpha');
