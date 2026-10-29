@@ -1000,7 +1000,86 @@ function insightData(t){
  eventGroups:[...eventGroups.values()].sort((a,b)=>b.count-a.count),pairs,buckets,
  sponsorOpen,eventOpen,cameraOpen,pct,number:n=>Number(n).toFixed(1)};
 }
-function buildReport(t){let m=metrics(t),knownDuration=t.duration||3600;let eventCards=getEvents(t).map(e=>{let names=sponsorFor(t).filter(s=>sponsorOnEvent(t,s.id,e)).map(x=>x.name);return `<div class="eventcard"><div class="row between"><b>${esc(labelFor(t,'events',e.eventId))}</b><span class="tag">${fmt(e.start)} – ${e.end==null?'LIVE':fmt(e.end)}</span></div><p>${names.length?`${names.length} visible brand${names.length!==1?'s':''}: ${esc(names.join(', '))}`:'No tagged sponsor visible during this interval'}</p></div>`});let sorted=m.rows.filter(x=>x.sec>0);let max=Math.max(1,...sorted.map(x=>x.sec));return `<div class="stats">${[['eye',m.recorded,'Sponsors detected'],['clock',fmt(m.total),'Combined brand exposure'],['tags',m.exposures,'Visibility intervals'],['chart',m.events,'Key event logs']].map(x=>`<div class="card statcard"><div class="staticon">${icons(x[0])}</div><div class="svalue" style="font-size:23px">${x[1]}</div><div class="slabel">${x[2]}</div></div>`).join('')}</div><div class="report-layout"><div class="card cardpad"><div class="sectionhead"><div><h2>Sponsor exposure ranking</h2><p class="sub">Unique sponsor visibility, not the number of duplicate placements</p></div></div>${sorted.length?sorted.map(x=>`<div class="sponsor-bar"><b title="${esc(x.name)}">${esc(x.name)}</b><div class="meter"><i style="width:${100*x.sec/max}%"></i></div><span>${fmt(x.sec)}</span></div>`).join(''):'<div class="empty"><strong>No sponsor exposure logged yet</strong><p>Tag a sponsor interval in the studio to generate analytics.</p></div>'}</div><div class="card cardpad"><div class="sectionhead"><div><h2>Key moment associations</h2><p class="sub">Brands present during any portion of the tagged event interval</p></div></div><div style="max-height:390px;overflow:auto">${eventCards.join('')||'<div class="empty"><strong>No match events recorded yet</strong><p>Record goals, replays and other moments to see sponsor context.</p></div>'}</div></div></div><div class="report-layout" style="margin-top:18px"><div class="card cardpad"><div class="sectionhead"><h2>Camera-context distribution</h2><span class="tag">${t.cameras.length} camera logs</span></div><div class="tablewrap"><table class="table"><thead><tr><th>Camera angle</th><th>Recorded time</th><th>Brands with exposure</th></tr></thead><tbody>${camerasFor(t).map(c=>{let cams=intervals(t.cameras,'cameraId',c.id,t.observedTime||0);let total=merged(cams).reduce((n,z)=>n+z.end-z.start,0);let exposed=m.rows.filter(s=>intervals(t.sponsors,'sponsorId',s.id,t.observedTime||0).some(z=>cams.some(v=>overlap(z,v)>0))).length;return `<tr><td><strong>${esc(c.name)}</strong></td><td>${fmt(total)}</td><td>${exposed}</td></tr>`}).join('')||'<tr><td colspan="3">No camera angles</td></tr>'}</tbody></table></div></div><div class="card cardpad"><div class="sectionhead"><h2>Measurement notes</h2></div><div style="font-size:12px;color:#78788d;line-height:1.8"><p><strong>Combined brand exposure</strong> adds the visible time of each unique sponsor. It can exceed the footage length when several different brands appear simultaneously.</p><p><strong>Exposure percentage</strong> for each brand is its unique visibility duration divided by ${fmt(knownDuration)} of footage.</p><p><strong>Event association</strong> is timestamp intersection, not a causal claim or a valuation of an advertisement.</p><p><strong>Camera distribution</strong> shows tagged camera time. Unlabeled segments are not classified.</p></div></div></div><div class="card cardpad" style="margin-top:18px"><div class="sectionhead"><h2>Sponsor detail</h2><span class="tag">${m.rows.length} configured brands</span></div><div class="tablewrap"><table class="table"><thead><tr><th>Brand</th><th>Exposure</th><th>% of footage</th><th>Appearances</th><th>Tagged event overlaps</th></tr></thead><tbody>${m.rows.map(s=>`<tr><td><div class="row">${logo(s)}<strong>${esc(s.name)}</strong></div></td><td>${fmt(s.sec)}</td><td>${(s.sec/knownDuration*100).toFixed(1)}%</td><td>${s.appearances}</td><td>${s.eventHits}</td></tr>`).join('')}</tbody></table></div></div>`}
+function buildReport(t){
+ const d=insightData(t),pct=d.pct,percent=n=>(Number.isFinite(n)?n:0).toFixed(1)+'%';
+ const focused=d.brands.find(b=>b.id===insightFocusId),hasData=d.active.length>0;
+ const coverage=percent(pct(d.coveredSeconds,d.videoSeconds));
+ const incomplete=!(t.submitted?.sponsors&&t.submitted?.context);
+ const cards=[
+  {label:'BRANDS VISIBLE',value:d.active.length+'/'+d.brands.length,note:'Unique brands with tagged exposure'},
+  {label:'BROADCAST WITH ANY SPONSOR',value:coverage,note:fmt(d.coveredSeconds)+' of '+fmt(d.videoSeconds)+' footage'},
+  {label:'COMBINED BRAND EXPOSURE',value:fmt(d.sumSeconds),note:'Different brands are added separately'},
+  {label:'TAGGED KEY EVENTS',value:d.eventRows.length,note:d.eventRows.filter(e=>e.brands.length>0).length+' with a sponsor overlap'}
+ ];
+ const activeBrands=d.brands.filter(b=>b.seconds>0),peak=Math.max(1,...activeBrands.map(b=>b.seconds));
+ const focusOptions=`<option value="">ALL SPONSORS</option>${d.brands.map(b=>`<option value="${esc(b.id)}" ${insightFocusId===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}`;
+ const timeBars=d.buckets.map(bucket=>{
+  const own=focused?focused.own:[],raw=focused?own.reduce((sum,x)=>sum+Math.max(0,Math.min(x.end,bucket.end)-Math.max(x.start,bucket.start)),0):bucket.covered;
+  const share=Math.max(0,Math.min(100,pct(raw,bucket.end-bucket.start)));
+  return `<div class="insight-tick" title="${fmt(bucket.start)}–${fmt(bucket.end)}: ${fmt(raw)} covered"><div class="insight-tick-track"><span style="height:${share}%"></span></div><span>${fmt(bucket.start)}</span></div>`;
+ }).join('');
+ const eventSummaries=d.eventGroups.map(g=>`<div class="insight-event-summary"><strong>${esc(g.name)}</strong><span>${g.withBrands} / ${g.count} WITH SPONSORS</span><b>${fmt(g.seconds)}</b></div>`).join('');
+ const eventCards=d.eventRows.slice(0,80).map(e=>`<div class="insight-event-card">
+  <div class="insight-event-heading"><div><b>${esc(e.name)}</b><span>${fmt(e.start)} – ${e.legacyPoint?'LEGACY POINT':e.open?'OPEN':fmt(e.end)}</span></div>
+  <button class="insight-jump" onclick="goToAnnotatedTime('${t.id}',${e.start})">OPEN AT TIME</button></div>
+  <div class="insight-event-metrics"><strong>${e.brands.length} BRANDS OVERLAPPED</strong><span>${e.legacyPoint?'MOMENT TAG':percent(e.coveragePct)+' OF EVENT HAS A BRAND VISIBLE'}</span></div>
+  <p>${e.brands.length?esc(e.brands.map(b=>b.name).join(' · ')):'No sponsor visibility overlaps this event'}</p>
+ </div>`).join('');
+ const rankRows=d.brands.map((b,i)=>`<tr><td><div class="insight-brand-cell"><span>${i+1}</span>${logo(b)}<b>${esc(b.name)}</b></div></td>
+ <td><strong>${fmt(b.seconds)}</strong><div class="insight-mini-meter"><i style="width:${Math.min(100,100*b.seconds/peak)}%"></i></div></td>
+ <td>${percent(pct(b.seconds,d.videoSeconds))}</td>
+ <td>${percent(pct(b.seconds,d.sumSeconds))}</td>
+ <td>${b.entries}</td><td>${fmt(b.longest)}</td><td>${b.eventHits}</td></tr>`).join('');
+ const cameraRows=d.cameras.map(c=>`<tr><td><b>${esc(c.name)}</b></td>
+ <td>${fmt(c.seconds)}</td><td>${percent(pct(c.seconds,d.videoSeconds))}</td>
+ <td>${fmt(c.sponsorSeconds)}</td><td>${c.sponsorCount}</td><td>${c.leader?.seconds>0?esc(c.leader.name):'—'}</td></tr>`).join('');
+ const pairs=d.pairs.slice(0,8).map(p=>`<div class="insight-pair"><span>${esc(p.a)} <em>+</em> ${esc(p.b)}</span><b>${fmt(p.seconds)}</b></div>`).join('');
+ const warnings=[
+  d.sponsorOpen>0?`${d.sponsorOpen} sponsor visibility tag(s) still open`:null,
+  d.eventOpen>0?`${d.eventOpen} key-event interval(s) still open`:null,
+  d.cameraOpen>0?`${d.cameraOpen} camera interval(s) still open`:null,
+  d.cameraCovered===0?'No camera-angle coverage recorded':null,
+  d.active.length===0?'No sponsor intervals have measurable duration':null
+ ].filter(Boolean);
+ return `<div class="insights-dashboard">
+ <div class="insight-head"><div><div class="eyebrow">MATCH BROADCAST INTELLIGENCE</div>
+ <h2>SPONSOR EXPOSURE REPORT</h2><p class="sub">Calculated from sponsor visibility, event intervals and broadcast camera tags.</p></div>
+ <span class="insight-quality ${incomplete?'draft':'complete'}">${incomplete?'PRELIMINARY · ANNOTATION IN PROGRESS':'SUBMITTED DATA'}</span></div>
+ <div class="insight-stat-grid">${cards.map(c=>`<article class="insight-stat"><span>${c.label}</span><strong>${c.value}</strong><p>${c.note}</p></article>`).join('')}</div>
+ <div class="insight-block insight-trend">
+  <div class="insight-section-title"><div><h3>WHERE SPONSORS APPEAR IN THE MATCH</h3>
+  <p>5-minute footage segments. Bar height is the share of each segment with a visible sponsor.</p></div>
+  <label class="insight-select">BRAND FILTER<select id="insightSponsorFilter" onchange="selectInsightSponsor(this.value)">${focusOptions}</select></label></div>
+  <div class="insight-bars">${timeBars}</div>
+  <div class="insight-trend-footer"><span>FIRST FRAME 00:00</span><span>${focused?esc(focused.name.toUpperCase()):'ANY SPONSOR VISIBLE'}</span><span>FINAL FRAME ${fmt(d.videoSeconds)}</span></div>
+ </div>
+ <div class="insight-block"><div class="insight-section-title"><div><h3>BRAND EXPOSURE LEADERBOARD</h3>
+ <p>Screen presence—not impressions. Share of voice is brand seconds divided by combined brand seconds.</p></div><span class="insight-count">${d.brands.length} TRACKED BRANDS</span></div>
+ <div class="tablewrap"><table class="table insight-table"><thead><tr><th>BRAND</th><th>VISIBLE TIME</th><th>% OF MATCH</th><th>VISIBILITY SHARE</th><th>INTERVALS</th><th>LONGEST</th><th>EVENTS</th></tr></thead>
+ <tbody>${rankRows||'<tr><td colspan="7">No configured sponsors</td></tr>'}</tbody></table></div></div>
+ <div class="insight-columns">
+  <section class="insight-block"><div class="insight-section-title"><div><h3>KEY EVENT SPONSOR ASSOCIATIONS</h3><p>Exactly which brands overlapped each recorded match action.</p></div><span class="insight-count">${d.eventRows.length} EVENTS</span></div>
+  <div class="insight-event-summaries">${eventSummaries||'<p class="insight-muted">No key events have been tagged.</p>'}</div>
+  <div class="insight-events-list">${eventCards||'<p class="insight-muted">Tag events with start and end timestamps to reveal sponsor exposure during important moments.</p>'}</div>
+  </section>
+  <section class="insight-block"><div class="insight-section-title"><div><h3>SIMULTANEOUS BRAND VISIBILITY</h3>
+  <p>Brands that appeared together, counted as one exposure per brand.</p></div></div>
+  ${pairs||'<p class="insight-muted">No overlapping sponsor pairs recorded yet.</p>'}
+  <div class="insight-coverage-note"><b>NO SPONSOR VISIBLE</b><strong>${fmt(Math.max(0,d.videoSeconds-d.coveredSeconds))}</strong><span>Portion of the footage not covered by any tagged sponsor.</span></div>
+  </section></div>
+ <section class="insight-block"><div class="insight-section-title"><div><h3>CAMERA-ANGLE PERFORMANCE</h3><p>Tagging-time coverage and sponsor presence in each broadcast camera view.</p></div>
+ <span class="insight-count">${percent(pct(d.cameraCovered,d.videoSeconds))} CAMERA TAGGED</span></div>
+ <div class="tablewrap"><table class="table insight-table"><thead><tr><th>CAMERA</th><th>CAMERA DURATION</th><th>% OF MATCH</th><th>BRAND EXPOSURE</th><th>BRANDS SEEN</th><th>TOP BRAND</th></tr></thead>
+ <tbody>${cameraRows||'<tr><td colspan="6">No camera angles configured</td></tr>'}</tbody></table></div></section>
+ <section class="insight-notes"><div><h3>DATA QUALITY & INTERPRETATION</h3>
+ <p>Based only on manually tagged sponsor presence. All durations reference footage timestamps, not clock time or estimated audience exposure. Different brands visible simultaneously each contribute their own exposure seconds, so combined brand exposure may exceed video duration. A sponsor is counted once even when its logo is repeated in the frame.</p>
+ <p>These annotations cannot establish logo size, screen coverage, ad prominence, audience impressions, monetary valuation, or whether an advertised brand was noticed by a viewer.</p></div>
+ <div><h4>ANNOTATION CHECKS</h4><p>Latest annotated timestamp: ${fmt(d.endpoint)} of ${fmt(d.videoSeconds)}.</p>
+ ${warnings.length?warnings.map(w=>`<div class="insight-warning">${esc(w)}</div>`).join(''):'<div class="insight-ok">No open tags or missing camera coverage detected</div>'}</div></section>
+ </div>`;
+}
+window.selectInsightSponsor=id=>{insightFocusId=id;let t=reportTask();if(!t)return;const root=document.querySelector('.insights-dashboard');if(root)root.outerHTML=buildReport(t)};
+window.goToAnnotatedTime=(id,time)=>{openTask(id);seekVideo(time)};
 function reportsView(){let ts=visibleTasks();let t=ts.find(x=>x.id===reportTaskId)||ts[0];if(!t)return `<div class="pagehead"><div><h1>Intelligence reports</h1><p class="sub">No assigned matches yet.</p></div></div>`;reportTaskId=t.id;return `<div class="pagehead"><div><div class="eyebrow">SPONSOR INTELLIGENCE / INSIGHTS</div><h1>Exposure analytics</h1><p class="sub">Understand brand visibility against key events and camera contexts.</p></div><div class="row wrap"><select class="smallselect" onchange="chooseReport(this.value)">${ts.map(x=>`<option value="${x.id}" ${x.id===t.id?'selected':''}>${esc(x.number)} · ${esc(x.name)}</option>`).join('')}</select><button class="button ghost" onclick="exportTask('${t.id}')">${icons('download')} Export JSON</button><button class="button primary" onclick="openTask('${t.id}')">Open studio ${icons('arrow')}</button></div></div>${matchHero(t)}${buildReport(t)}`}
 window.chooseReport=id=>{reportTaskId=id;render()};
 window.showReport=id=>{reportTaskId=id;view='reports';render();window.scrollTo(0,0)};
