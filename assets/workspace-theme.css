@@ -1021,3 +1021,48 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
   padding:3px 5px;font-size:9px!important;
  }
 }
+
+/* Event and camera tags use the same meaningful ON/OFF state as sponsor cards.
+   The entire chip remains one accessible hit area; no nested action buttons. */
+.app-focus .event-chip.tagged-state-chip{
+ display:inline-flex!important;align-items:center!important;
+ gap:7px!important;max-width:100%!important;min-height:38px!important;
+ background:#29292c!important;color:#ececee!important;
+ border:1px solid #48484d!important;
+ padding:6px 8px 6px 12px!important;border-radius:999px!important;
+ box-shadow:none!important;
+}
+.app-focus .event-chip.tagged-state-chip .chip-label{
+ font:750 11px/1.3 'Manrope',sans-serif!important;
+ white-space:normal!important;text-align:left!important;
+}
+.app-focus .event-chip.tagged-state-chip .chip-symbol{color:#b9b9bf!important;}
+.app-focus .event-chip.tagged-state-chip.active{
+ background:#20352c!important;
+ color:#f6fff9!important;
+ border-color:#4fc493!important;
+ box-shadow:0 0 0 1px #4fc49355!important;
+}
+.app-focus .event-chip.tagged-state-chip.active .chip-symbol{color:#91edba!important;}
+.app-focus .tagged-state-chip .tag-live-pill{
+ display:inline-flex;align-items:center;justify-content:center;
+ flex:0 0 auto!important;min-width:53px;
+ min-height:25px;padding:4px 7px;
+ border-radius:999px;white-space:nowrap;pointer-events:none;
+ font:800 10px/1 'IBM Plex Mono',monospace!important;
+}
+.app-focus .tagged-state-chip .tag-live-pill.off{
+ background:#48262b;color:#ff9aa1;border:1px solid #7a3a41;
+}
+.app-focus .tagged-state-chip .tag-live-pill.on{
+ background:#184c35;color:#91edba;border:1px solid #3ea979;
+}
+@media(max-width:680px){
+ .app-focus .event-chip.tagged-state-chip{
+  gap:5px!important;padding:5px 6px 5px 9px!important;
+ }
+ .app-focus .tagged-state-chip .tag-live-pill{
+  min-width:45px;min-height:22px;
+  font-size:9px!important;padding:4px 5px!important;
+ }
+}
