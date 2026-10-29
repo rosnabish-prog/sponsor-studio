@@ -366,6 +366,49 @@ function expect(expr,message){assert.ok(expr,message)}
  const wrongFile=new window.File(['not a video'],'notes.txt',{type:'text/plain'});
  assert.equal(window.attachLocalVideoFile(wrongFile),false,'non-video files rejected');
 
+ // Match Catalog shows task lifecycle instead of always offering Create Task.
+ window.navigate('tasks');
+ const readyFixture=document.querySelector('.fixture-card[data-fixture-id="M13"]');
+ expect(readyFixture,'a pre-existing seeded fixture is present in the official catalog');
+ assert.equal(readyFixture.querySelector('.fixture-task-state').textContent.trim(),'READY TO TAG','already created match is marked ready');
+ assert.ok(readyFixture.querySelector('.fixture-task-action').textContent.includes('OPEN TASK'),'created fixture is never offered another Create Task action');
+ const countBeforeCatalog=db().tasks.length;
+ window.openFixtureTask('M13');
+ expect(document.querySelector('.studio-head'),'opening existing catalog entry opens the annotation studio');
+ assert.ok(document.querySelector('.studio-head').textContent.includes('M13'),'existing fixture goes to correct task');
+ assert.equal(db().tasks.length,countBeforeCatalog,'catalog does not create duplicates');
+ window.navigate('tasks');
+ const newFixture=document.querySelector('.fixture-card[data-fixture-id="M19"]');
+ expect(newFixture,'another official fixture available for a new task');
+ assert.equal(newFixture.querySelector('.fixture-task-state').textContent.trim(),'NOT CREATED','fixture with no task has neutral state');
+ assert.ok(newFixture.querySelector('.fixture-task-action').textContent.includes('CREATE TASK'),'fixture without a task can be created');
+ window.openFixtureTask('M19');
+ assert.equal(document.querySelector('#taskfixture').value,'M19','Create Task preselects the requested official fixture');
+ window.saveTask('');
+ const catalogTask=db().tasks.find(t=>t.fixtureId==='M19');
+ expect(catalogTask,'newly created task linked to its official fixture ID');
+ window.navigate('tasks');
+ let catalogCard=document.querySelector('.fixture-card[data-fixture-id="M19"]');
+ assert.equal(catalogCard.querySelector('.fixture-task-state').textContent.trim(),'READY TO TAG','newly created fixture displays Ready');
+ assert.ok(catalogCard.querySelector('.fixture-task-action').textContent.includes('OPEN TASK'),'newly created fixture now opens rather than creates');
+ // A submitted single stream isn't full match completion.
+ window.openFixtureTask('M19');
+ const linkedCount=db().tasks.length;
+ window.submitMyTask();
+ expect(document.querySelector('#modal'),'submitting both streams confirms in platform');
+ window.acceptInAppConfirm();
+ const completedMatch=db().tasks.find(t=>t.id===catalogTask.id);
+ assert.equal(completedMatch.submitted.sponsors,true);
+ assert.equal(completedMatch.submitted.context,true);
+ window.navigate('tasks');
+ catalogCard=document.querySelector('.fixture-card[data-fixture-id="M19"]');
+ assert.equal(catalogCard.querySelector('.fixture-task-state').textContent.trim(),'COMPLETED','finished match is marked Completed in catalog');
+ assert.ok(catalogCard.querySelector('.fixture-task-action').textContent.includes('COMPLETED'),'Completed replaces Create Task button');
+ assert.ok(catalogCard.classList.contains('fixture-task-done'),'completed fixture receives completed styling');
+ window.openFixtureTask('M19');
+ assert.ok(document.querySelector('.studio-head').textContent.includes('M19'),'Completed action opens existing review');
+ assert.equal(db().tasks.length,linkedCount,'completed match is never recreated');
+
  window.openTask('task_demo1');
  document.querySelector('.focusbrand.brand-home').click();
  expect(document.querySelector('.ops-nav'),'logo navigates to dashboard');
