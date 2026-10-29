@@ -35,7 +35,7 @@ export function LoginScreen({ forgot, registering = false, resetToken = '' }: { 
         <form id="signInForm" className="loginform" onSubmit={submit}>
           {registering && <>
             <div className="field"><label htmlFor="regname">FULL NAME</label><input id="regname" type="text" maxLength={150} placeholder="Your name" autoComplete="name" required /></div>
-            <div className="field"><label htmlFor="regorg">ORGANIZATION NAME</label><input id="regorg" type="text" maxLength={150} placeholder="Your company" required /></div>
+            <div className="field"><label htmlFor="regorg">ORGANIZATION NAME (OPTIONAL)</label><input id="regorg" type="text" maxLength={150} placeholder="Leave blank if joining an existing team" /></div>
           </>}
           {!resetToken && <div className="field">
             <label htmlFor="loginemail">EMAIL ADDRESS</label>

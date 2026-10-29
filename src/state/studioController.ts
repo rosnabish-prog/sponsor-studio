@@ -703,6 +703,14 @@ function render(){
 refreshFixtureFeed();
 const fixtureRefreshId=setInterval(refreshFixtureFeed,5*60*1000);
 const onStorage=(e:StorageEvent)=>{if(e.key===DBKEY){try{db=JSON.parse(e.newValue||'null')||seed()}catch{return}if(!modalOpen)render()}};
+const onHashChange=()=>{
+ if(!apiEnabled)return;
+ const incoming=new URLSearchParams(window.location.hash.slice(1)).get('reset')||'';
+ if(incoming&&incoming!==resetToken){
+  resetToken=incoming;forgot=false;registering=false;logged='';remoteUser=null;workspaceId='';render();
+ }
+};
+if(apiEnabled)window.addEventListener('hashchange',onHashChange);
 if(!apiEnabled)window.addEventListener('storage',onStorage);
 if(apiEnabled&&resetToken)render(); // The recovery link takes precedence over any existing signed-in session.
 else if(apiEnabled)void loadLiveSession().catch(()=>{logged='';remoteUser=null;render()});
@@ -710,6 +718,7 @@ else{render();optimizeStoredSponsorLogos();}
 return ()=>{
  clearInterval(fixtureRefreshId);
  if(!apiEnabled)window.removeEventListener('storage',onStorage);
+ if(apiEnabled)window.removeEventListener('hashchange',onHashChange);
  document.removeEventListener('keydown',runKeydown);
  document.getElementById('videofile')?.removeEventListener('change',handleVideoFileChange);
  for(const url of Object.values(localVideos))URL.revokeObjectURL(url);
