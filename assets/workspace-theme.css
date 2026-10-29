@@ -1125,37 +1125,37 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
 }
 
 
-/* Balanced sponsor branding in the right tagging panel.
-   The LIVE/OFF control stays visible and logos retain their natural ratio. */
+/* Compact sponsor logos — reduce both artwork width and card height.
+   Keep PNG transparency and green/red state pills untouched. */
 .app-focus .sponsor-rail .rail-cards .rail-brand{
-  height:84px!important;
-  min-height:84px!important;
-  padding:8px 75px 8px 12px!important;
+  height:72px!important;
+  min-height:72px!important;
+  padding:7px 75px 7px 12px!important;
 }
 .app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo{
   display:grid!important;
   align-items:center!important;
   justify-items:center!important;
   width:100%!important;
-  height:64px!important;
-  min-height:64px!important;
+  height:54px!important;
+  min-height:54px!important;
   overflow:visible!important;
 }
 .app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo .tinylogo{
   width:100%!important;
-  height:64px!important;
-  max-height:64px!important;
-  min-height:64px!important;
+  height:54px!important;
+  max-height:54px!important;
+  min-height:54px!important;
   padding:0!important;
   overflow:visible!important;
   background:transparent!important;
 }
 .app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo .tinylogo img{
   display:block!important;
-  width:100%!important;
-  height:62px!important;
-  max-width:90%!important;
-  max-height:62px!important;
+  width:68%!important;
+  height:44px!important;
+  max-width:68%!important;
+  max-height:44px!important;
   object-fit:contain!important;
   object-position:center!important;
   background:transparent!important;
@@ -1165,16 +1165,16 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
     grid-template-columns:minmax(0,1fr)!important;
   }
   .app-focus .sponsor-rail .rail-cards .rail-brand{
-    height:78px!important;
-    min-height:78px!important;
+    height:70px!important;
+    min-height:70px!important;
     padding:6px 64px 6px 10px!important;
   }
   .app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo,
   .app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo .tinylogo{
-    height:60px!important;min-height:60px!important;max-height:60px!important;
+    height:52px!important;min-height:52px!important;max-height:52px!important;
   }
   .app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo .tinylogo img{
-    height:58px!important;max-height:58px!important;
+    height:42px!important;max-height:42px!important;
   }
 }
 
@@ -1182,7 +1182,7 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
    Make brand initials as legible as the resized full-color logos. */
 .app-focus .sponsor-rail .rail-cards .rail-brand .rail-logo .tinylogo {
  font-family:'Manrope',system-ui,sans-serif!important;
- font-size:clamp(23px,2vw,28px)!important;
+ font-size:clamp(19px,1.7vw,23px)!important;
  font-weight:850!important;
  line-height:1!important;
  letter-spacing:-.035em!important;
