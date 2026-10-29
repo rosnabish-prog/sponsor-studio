@@ -613,6 +613,181 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
  .login-top>span{font-size:9px!important;}
  .login-central{margin:25px 12px!important;}
 }
+
+/* Modal and studio scroll model — separate invisible scrollbar rails.
+   On desktop, the entire viewport is split into two independent work areas.
+   The LEFT side scrolls its video, tagging, timeline and recorded actions.
+   The RIGHT side scrolls only sponsor logos; the right heading remains visible.
+   Neither scroll can move the other column. */
+* { scrollbar-width:none!important; }
+*::-webkit-scrollbar { width:0!important;height:0!important;display:none!important; }
+*::-webkit-scrollbar-track {background:transparent!important;}
+*::-webkit-scrollbar-thumb {background:transparent!important;}
+
+.overlay {
+ overflow:hidden!important;
+ padding:clamp(10px,2vh,24px)!important;
+}
+.overlay .modal {
+ display:flex!important;flex-direction:column!important;
+ width:min(710px,100%)!important;
+ max-height:calc(100dvh - 2 * clamp(10px,2vh,24px))!important;
+ min-height:0!important;overflow:hidden!important;
+}
+.overlay .modal[style*="width:min(860px"]{
+ width:min(860px,100%)!important;
+}
+.overlay .modalhead,.overlay .modalfoot {
+ flex:0 0 auto!important;
+ background:#1d1d20!important;
+}
+.overlay .modalbody {
+ flex:1 1 auto!important;
+ min-height:0!important;
+ overflow-y:auto!important;overflow-x:hidden!important;
+ overscroll-behavior-y:contain!important;
+ -webkit-overflow-scrolling:touch;
+}
+.overlay .modalhead {padding:18px clamp(16px,2.5vw,26px)!important;}
+.overlay .modalbody {padding:20px clamp(16px,2.5vw,26px)!important;}
+.overlay .modalfoot {padding:14px clamp(16px,2.5vw,26px)!important;}
+
+/* Stop the page itself from scrolling only when the desktop annotation
+   workspace is open. The two child panels own the scroll gestures. */
+@media(min-width:681px) {
+ html:has(.app-focus),body:has(.app-focus) {
+   height:100%!important;
+   overflow:hidden!important;
+ }
+ .app-focus {
+   display:flex!important;
+   flex-direction:column!important;
+   height:100dvh!important;
+   min-height:0!important;
+   max-height:100dvh!important;
+   overflow:hidden!important;
+ }
+ .app-focus .focusbar {
+   flex:0 0 auto!important;
+   position:relative!important;
+   top:auto!important;
+   z-index:20!important;
+ }
+ .app-focus .focuscontent {
+   display:flex!important;
+   flex-direction:column!important;
+   flex:1 1 0%!important;
+   min-height:0!important;
+   height:auto!important;
+   overflow:hidden!important;
+   padding-bottom:12px!important;
+ }
+ .app-focus .studio-head {
+   flex:0 0 auto!important;
+   min-height:0!important;
+   margin-bottom:13px!important;
+ }
+ .app-focus .studio-grid {
+   display:grid!important;
+   grid-template-columns:minmax(0,1fr) clamp(230px,21vw,310px)!important;
+   align-items:stretch!important;
+   flex:1 1 0%!important;
+   height:0!important;
+   min-height:0!important;
+   max-height:100%!important;
+   overflow:hidden!important;
+   gap:15px!important;
+ }
+ .app-focus .studio-media-column {
+   height:100%!important;
+   max-height:100%!important;
+   min-height:0!important;
+   overflow-x:hidden!important;
+   overflow-y:auto!important;
+   overscroll-behavior-y:contain!important;
+   -webkit-overflow-scrolling:touch;
+   padding:0 6px 20px 0!important;
+   align-self:stretch!important;
+   position:relative!important;
+   scrollbar-width:none!important;
+ }
+ .app-focus .studio-media-column > .video-box {
+   position:relative!important;
+   top:auto!important;
+ }
+ .app-focus .sponsor-rail {
+   display:block!important;
+   align-self:stretch!important;
+   height:100%!important;
+   min-height:0!important;
+   max-height:100%!important;
+   overflow-y:auto!important;
+   overflow-x:hidden!important;
+   overscroll-behavior-y:contain!important;
+   -webkit-overflow-scrolling:touch;
+   position:relative!important;
+   scrollbar-width:none!important;
+ }
+ .app-focus .sponsor-rail .rail-compact-heading {
+   position:sticky!important;
+   top:0!important;
+   z-index:4!important;
+   background:#1c1c1e!important;
+   box-shadow:0 6px 12px #0002!important;
+ }
+ .app-focus .sponsor-rail .rail-scroll {
+   display:block!important;
+   flex:none!important;
+   height:auto!important;
+   max-height:none!important;
+   overflow:visible!important;
+   overflow-y:visible!important;
+ }
+ .app-focus .studio-media-column:focus-visible,
+ .app-focus .sponsor-rail:focus-visible {
+   outline:2px solid #ff9b36!important;
+   outline-offset:-2px!important;
+   border-radius:12px!important;
+ }
+}
+/* Compact/mobile: restore normal page scrolling, while leaving the
+   sponsor area independently scrollable when its list is long. */
+@media(max-width:680px){
+ html:has(.app-focus),body:has(.app-focus){
+   height:auto!important;overflow-y:auto!important;
+ }
+ .app-focus{
+   height:auto!important;min-height:100dvh!important;max-height:none!important;
+   overflow:visible!important;display:block!important;
+ }
+ .app-focus .focuscontent{
+   display:block!important;height:auto!important;min-height:0!important;
+   overflow:visible!important;padding-bottom:38px!important;
+ }
+ .app-focus .studio-grid{
+   display:flex!important;flex-direction:column!important;
+   height:auto!important;min-height:0!important;max-height:none!important;
+   overflow:visible!important;
+ }
+ .app-focus .studio-media-column{
+   height:auto!important;max-height:none!important;min-height:0!important;
+   overflow:visible!important;padding:0!important;
+ }
+ .app-focus .sponsor-rail{
+   display:block!important;
+   height:auto!important;min-height:0!important;max-height:340px!important;
+   overflow-y:auto!important;overflow-x:hidden!important;
+   overscroll-behavior-y:contain!important;
+ }
+ .app-focus .sponsor-rail .rail-compact-heading{
+   position:sticky!important;top:0!important;z-index:4!important;
+   background:#1c1c1e!important;
+ }
+ .app-focus .sponsor-rail .rail-scroll{
+   height:auto!important;max-height:none!important;overflow:visible!important;
+ }
+}
+
 @media(prefers-reduced-motion:reduce){
  *,*::before,*::after{transition:none!important;animation:none!important;}
 }
