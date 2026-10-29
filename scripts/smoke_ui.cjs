@@ -237,6 +237,34 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.equal(document.querySelectorAll('.insight-rollup .insight-stat').length,4,'tournament overview has four comparison KPIs');
  expect(document.querySelector('.insight-rollup .insight-table tbody tr'),'cross-match sponsor benchmark table');
 
+ // Opening a video is local-only; playback uses the original ratio, native controls,
+ // and a clear non-uploaded status. No fake server upload is performed.
+ window.URL.createObjectURL=()=>'blob:http://localhost/test-footage';
+ window.URL.revokeObjectURL=()=>{};
+ const videoFile=new window.File(['small test video'], 'reference-clip.mp4', {type:'video/mp4'});
+ window.openTask('task_demo1');
+ assert.equal(window.attachLocalVideoFile(videoFile),true,'local MP4 file picker should accept video');
+ const loadedVideo=document.getElementById('matchVideo');
+ expect(loadedVideo,'choosing a file renders an actual video element');
+ assert.ok(loadedVideo.hasAttribute('controls'),'native play and fullscreen controls visible');
+ assert.ok(document.querySelector('.vidframe').classList.contains('video-native-frame'),'native video frame class applied');
+ assert.ok(document.getElementById('videoSourceState').textContent.includes('NOT UPLOADED'),'local video is never misleadingly presented as uploaded');
+ assert.ok(document.getElementById('videoFileStatus').textContent.includes('reference-clip.mp4'),'video file name shown in player');
+ assert.equal(db().tasks.find(t=>t.id==='task_demo1').videoName,'reference-clip.mp4','file metadata saved for reconnect');
+ const videoTheme=fs.readFileSync('assets/workspace-theme.css','utf8');
+ assert.ok(videoTheme.includes('.vidframe.video-native-frame video'),'video content size rule exists');
+ assert.ok(videoTheme.includes('object-fit:contain!important'),'video rendered without cropping');
+ assert.ok(videoTheme.includes('aspect-ratio:auto!important'),'video is not forced to a 16:9 frame');
+ assert.ok(videoTheme.includes('height:auto!important'),'player height uses video proportions');
+ Object.defineProperty(loadedVideo,'duration',{configurable:true,value:76});
+ Object.defineProperty(loadedVideo,'videoWidth',{configurable:true,value:1920});
+ Object.defineProperty(loadedVideo,'videoHeight',{configurable:true,value:1080});
+ loadedVideo.dispatchEvent(new window.Event('loadedmetadata'));
+ assert.ok(document.getElementById('videoFileStatus').textContent.includes('1920 × 1080'),'loaded source dimensions shown');
+ assert.equal(db().tasks.find(t=>t.id==='task_demo1').duration,76,'real video duration updates task clock');
+ const wrongFile=new window.File(['not a video'],'notes.txt',{type:'text/plain'});
+ assert.equal(window.attachLocalVideoFile(wrongFile),false,'non-video files rejected');
+
  window.openTask('task_demo1');
  document.querySelector('.focusbrand.brand-home').click();
  expect(document.querySelector('.ops-nav'),'logo navigates to dashboard');
@@ -245,6 +273,6 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.ok(theme.includes('@media(max-width:680px)'),'mobile layout restores natural page scrolling');
 
  assert.deepEqual(errors,[],'no uncaught DOM errors');
- console.log('PASS isolated studio panes, hidden scrollbars, fixed modal header, responsive fallback, layer tabs, tagging and camera switching');
+ console.log('PASS real local file playback, video-aspect fit, video metadata status, scroll panes, dialog and annotations');
  dom.window.close();
 })().catch(err=>{console.error(err);dom.window.close();process.exit(1)});
