@@ -22,6 +22,13 @@ python3 -m http.server 8080
 
 Visit `http://localhost:8080`.
 
+### Fonts
+
+Fonts are self-hosted in `assets/fonts/` as WOFF2 subsets, with declarations in `assets/fonts.css`.
+The page preloads Manrope (interface text) and IBM Plex Mono (metadata); Barlow Condensed
+and DM Sans remain bundled for older components. No Google Fonts network requests are
+required at runtime. Each family’s Open Font License is included alongside the files.
+
 ### Interactive demo credentials
 
 | Role | Email | Password |

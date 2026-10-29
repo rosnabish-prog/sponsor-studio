@@ -2,7 +2,7 @@
 """Validate the static app and public-fixture snapshot before deployment."""
 from html.parser import HTMLParser
 from pathlib import Path
-import json, subprocess, tempfile
+import json, re, subprocess, tempfile
 
 class Scripts(HTMLParser):
     def __init__(self):
@@ -39,10 +39,24 @@ assert 'app-focus' in html
 assert 'deleteSponsor' in html
 assert 'fixtureCatalog' in html
 assert 'assets/workspace-theme.css' in html, 'Theme CSS must be linked by the application'
+assert 'assets/fonts.css?v=selfhosted-20261029' in html, 'Self-hosted font stylesheet must load early'
+assert 'rel="preload" href="assets/fonts/manrope-400-800-latin.woff2"' in html, 'Primary font must be preloaded'
+assert 'rel="preload" href="assets/fonts/ibm-plex-mono-400-latin.woff2"' in html, 'Metadata font must be preloaded'
 assert 'identity-lockup' in html, 'Partner logo lockup missing'
 assert 'dashboard-banner' in html, 'Orange workspace dashboard ribbon missing'
 assert 'match-tile-grid' in html, 'Responsive match cards missing'
 theme=Path('assets/workspace-theme.css').read_text(encoding='utf-8')
+fonts_css=Path('assets/fonts.css').read_text(encoding='utf-8')
+for stylesheet in [html,theme,fonts_css]:
+    assert 'fonts.googleapis.com' not in stylesheet and 'fonts.gstatic.com' not in stylesheet, 'Fonts must never depend on external Google services'
+font_files=re.findall(r"url\('fonts/([^']+\.woff2)'\)",fonts_css)
+assert len(font_files)==22 and len(set(font_files))==22, 'Expected all 22 self-hosted font subsets'
+for filename in font_files:
+    font_path=Path('assets/fonts')/filename
+    assert font_path.exists() and font_path.stat().st_size>5000, f'Missing or incomplete font: {filename}'
+    assert font_path.read_bytes()[:4]==b'wOF2', f'Invalid WOFF2 font: {filename}'
+for family in ['manrope','dmsans','ibmplexmono','barlowcondensed']:
+    assert (Path('assets/fonts')/f'OFL-{family}.txt').exists(), f'Missing font license for {family}'
 for selector in ['.identity-lockup', '.ops-nav', '.dashboard-banner', '.match-tile', '.studio-grid', '.sponsor-rail', '.insight-block', '.modal', '.login-central', '@media(max-width:680px)']:
     assert selector in theme, f'Theme missing {selector}'
 assert theme.count('{')==theme.count('}'), 'Theme CSS delimiters unbalanced'

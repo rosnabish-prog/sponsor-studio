@@ -2,7 +2,6 @@
    Reference: deep charcoal canvas, warm orange accents, large rounded cards,
    compact filter pills and a small paired partner lockup.
    Overrides the historical inline stylesheet without changing annotation logic. */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
 :root {
  --orange:#ff9b36;
