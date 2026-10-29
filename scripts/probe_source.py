@@ -34,3 +34,17 @@ print("BUTTONS",json.dumps(p.buttons[:35]))
 for s in p.scripts:
     if s["content"] and any(x in s["content"] for x in ("Boca","M13","match")):
         print("DATA_SCRIPT",len(s["content"]),s["content"][:350])
+
+from urllib.parse import urljoin
+for obj in [x for x in p.scripts if x["src"]][:3]:
+    path=obj["src"]
+    with urllib.request.urlopen(urllib.request.Request(urljoin(url,path),headers={"User-Agent":"Mozilla/5.0"}),timeout=40) as response:
+        js=response.read().decode("utf-8","replace")
+    print("BUNDLE",path,"SIZE",len(js))
+    for key in ('/api/','https://','/matches','getMatches','fixtures','kickoff','fetch(','axios','matchId','matchNumber','match_number','/v1/'):
+        mm=list(re.finditer(re.escape(key),js,re.I))
+        print("JSKEY",key,"COUNT",len(mm))
+        for match in mm[:5]:
+            print("JS_SNIP",key,js[max(0,match.start()-160):match.end()+260][:420].replace(chr(10),' '))
+    allurls=re.findall(r'https?://[^\\s"\x27<>\\\\]+',js)
+    print("JS_URLS",json.dumps(sorted(set(allurls))[:50])[:4000])
