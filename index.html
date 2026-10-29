@@ -967,11 +967,11 @@ function controlsHTML(t){
  const events=eventsFor(t),cameras=camerasFor(t),canTag=canEdit(t,'context');
  const chips=events.map(ev=>{
   const active=t.events.some(a=>a.eventId===ev.id&&a.end==null);
-  return `<button class="event-chip ${active?'active':''}" type="button" onclick="tagEvent('${esc(ev.id)}')" ${canTag?'':'disabled'} aria-pressed="${active}" title="${esc(ev.name)}"><span class="chip-symbol">↔</span>${esc(ev.name)}</button>`;
+  return `<button class="event-chip tagged-state-chip ${active?'active':''}" type="button" onclick="tagEvent('${esc(ev.id)}')" ${canTag?'':'disabled'} aria-pressed="${active}" aria-label="${esc(ev.name)} · ${active?'LIVE, tap to end':'OFF, tap to start'}" title="${esc(ev.name)} · ${active?'LIVE':'OFF'}"><span class="chip-symbol">↔</span><span class="chip-label">${esc(ev.name)}</span><span class="tag-live-pill ${active?'on':'off'}" aria-hidden="true">${active?'● LIVE':'● OFF'}</span></button>`;
  }).join('');
  const angles=cameras.map(cam=>{
   const active=t.cameras.some(a=>a.cameraId===cam.id&&a.end==null);
-  return `<button class="event-chip camera-chip ${active?'active':''}" type="button" onclick="tagCamera('${esc(cam.id)}')" ${canTag?'':'disabled'} aria-pressed="${active}"><span class="chip-symbol">◎</span>${esc(cam.name)}</button>`;
+  return `<button class="event-chip camera-chip tagged-state-chip ${active?'active':''}" type="button" onclick="tagCamera('${esc(cam.id)}')" ${canTag?'':'disabled'} aria-pressed="${active}" aria-label="${esc(cam.name)} · ${active?'LIVE, tap to end':'OFF, tap to start or switch'}" title="${esc(cam.name)} · ${active?'LIVE':'OFF'}"><span class="chip-symbol">◎</span><span class="chip-label">${esc(cam.name)}</span><span class="tag-live-pill ${active?'on':'off'}" aria-hidden="true">${active?'● LIVE':'● OFF'}</span></button>`;
  }).join('');
  const eventSection=`<section class="studio-chip-group"><div class="chip-group-title"><span>KEY MATCH EVENTS</span><small>TAP TO START · TAP AGAIN TO END</small></div><div class="event-chip-row">${chips||'<span class="small muted">No match events assigned</span>'}</div></section>`;
  const cameraSection=`<section class="studio-chip-group"><div class="chip-group-title"><span>CAMERA ANGLES</span><small>TAP AGAIN TO END · SWITCH TO CLOSE PREVIOUS</small></div><div class="event-chip-row">${angles||'<span class="small muted">No camera angles assigned</span>'}</div></section>`;
