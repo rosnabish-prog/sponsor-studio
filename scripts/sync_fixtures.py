@@ -80,7 +80,7 @@ def main():
     for m in matches:
         code = text(m.get("code"), 20)
         date = text(m.get("date"), 10)
-        if not code or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", date):
+        if not code or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             continue
         home_team = teams_by_id.get(m.get("home_id"), {})
         away_team = teams_by_id.get(m.get("away_id"), {})
