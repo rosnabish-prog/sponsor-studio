@@ -163,7 +163,7 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.equal(newlyCreated.sponsors.length,0,'new assignment has no sponsor events');
  window.seekVideo(25);
  document.querySelector('.rail-brand').click();
- assert.equal(newlyCreated.sponsors.length,1,'first annotation starts new match');
+ assert.equal(db().tasks.find(t=>t.id===assigned.id).sponsors.length,1,'first annotation starts new match');
  window.navigate('tasks');
  const taskRow=[...document.querySelectorAll('tr')].find(tr=>tr.textContent.includes('TEST-M99'));
  expect(taskRow,'new match appears in task list');
