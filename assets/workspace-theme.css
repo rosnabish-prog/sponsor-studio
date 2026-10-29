@@ -1066,3 +1066,60 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
   font-size:9px!important;padding:4px 5px!important;
  }
 }
+
+/* Context-aware right tagging rail: Sponsors, Events and Cameras share one area. */
+.app-focus .sponsor-rail .side-tag-list{
+ display:grid!important;
+ grid-template-columns:minmax(0,1fr)!important;
+ gap:9px!important;
+ align-content:start!important;
+ width:100%!important;
+}
+.app-focus .sponsor-rail .side-tag-list .event-chip.tagged-state-chip{
+ width:100%!important;
+ min-width:0!important;
+ min-height:63px!important;
+ display:flex!important;
+ justify-content:flex-start!important;
+ align-items:center!important;
+ padding:11px 12px!important;
+ gap:9px!important;
+ background:#28282b!important;
+ border:1px solid #47474b!important;
+ border-radius:14px!important;
+ box-shadow:none!important;
+}
+.app-focus .sponsor-rail .side-tag-list .event-chip.tagged-state-chip:hover:not(:disabled){
+ background:#313134!important;
+ border-color:#8f755b!important;
+}
+.app-focus .sponsor-rail .side-tag-list .event-chip.tagged-state-chip.active{
+ background:#20352c!important;
+ border-color:#4fc493!important;
+ box-shadow:0 0 0 1px #4fc49355!important;
+}
+.app-focus .sponsor-rail .side-tag-list .tagged-state-chip .chip-label{
+ flex:1 1 auto!important;
+ min-width:0!important;
+ font-size:12px!important;
+ font-weight:800!important;
+ line-height:1.45!important;
+ overflow-wrap:anywhere;
+}
+.app-focus .sponsor-rail .side-tag-list .tagged-state-chip .chip-symbol{
+ flex:0 0 18px!important;
+ text-align:center!important;
+}
+.app-focus .sponsor-rail .side-tag-list .tag-live-pill{
+ margin-left:auto!important;
+}
+@media(max-width:680px){
+ .app-focus .sponsor-rail .side-tag-list{
+  grid-template-columns:1fr!important;
+  gap:7px!important;
+ }
+ .app-focus .sponsor-rail .side-tag-list .event-chip.tagged-state-chip{
+  min-height:52px!important;
+  padding:9px 10px!important;
+ }
+}
