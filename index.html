@@ -638,6 +638,18 @@ input[type="range"]{accent-color:#e6e6e6!important}.toast{background:#ddd!import
 .insight-ok{border-color:#397c54;color:#8accac}
 @media(max-width:950px){.insight-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.insight-columns,.insight-notes{grid-template-columns:1fr}}
 @media(max-width:560px){.insight-block{padding:11px}.insight-stat{min-height:125px;padding:12px}.insight-tick>span{font-size:7px}.insight-event-summaries{grid-template-columns:1fr}}
+
+/* Tournament-level sponsor benchmark */
+.insight-rollup{border:1px solid #484848;background:#0e0e0e;margin:26px 0}
+.insight-rollup>summary{list-style:none;cursor:pointer;padding:21px;display:flex;justify-content:space-between;gap:16px;align-items:center}
+.insight-rollup>summary::-webkit-details-marker{display:none}
+.insight-rollup>summary h2{font:800 26px 'Barlow Condensed',Impact,sans-serif;letter-spacing:.025em;margin:7px 0}
+.insight-rollup>summary .sub{margin:0;color:#999}
+.insight-expand-label{white-space:nowrap;color:#ddd;border:1px solid #777;padding:9px;font:700 10px ui-monospace,monospace}
+.insight-rollup[open] .insight-expand-label{background:#f3f3f3;color:#111}
+.insight-rollup-body{border-top:1px solid #393939;padding:20px}
+.insight-rollup-note{font:500 11px/1.65 ui-monospace,monospace;color:#999;margin-top:18px}
+@media(max-width:600px){.insight-rollup>summary{padding:14px;align-items:flex-start;flex-direction:column}.insight-rollup-body{padding:11px}}
 </style>
 </head>
 <body>
@@ -1146,7 +1158,46 @@ function buildReport(t){
 }
 window.selectInsightSponsor=id=>{insightFocusId=id;let t=reportTask();if(!t)return;const root=document.querySelector('.insights-dashboard');if(root)root.outerHTML=buildReport(t)};
 window.goToAnnotatedTime=(id,time)=>{openTask(id);seekVideo(time)};
-function reportsView(){let ts=visibleTasks();let t=ts.find(x=>x.id===reportTaskId)||ts[0];if(!t)return `<div class="pagehead"><div><h1>Intelligence reports</h1><p class="sub">No assigned matches yet.</p></div></div>`;reportTaskId=t.id;return `<div class="pagehead"><div><div class="eyebrow">SPONSOR INTELLIGENCE / INSIGHTS</div><h1>Exposure analytics</h1><p class="sub">Understand brand visibility against key events and camera contexts.</p></div><div class="row wrap"><select class="smallselect" onchange="chooseReport(this.value)">${ts.map(x=>`<option value="${x.id}" ${x.id===t.id?'selected':''}>${esc(x.number)} · ${esc(x.name)}</option>`).join('')}</select><button class="button ghost" onclick="exportTask('${t.id}')">${icons('download')} Export JSON</button><button class="button primary" onclick="openTask('${t.id}')">Open studio ${icons('arrow')}</button></div></div>${matchHero(t)}${buildReport(t)}`}
+function tournamentBenchmark(tasks){
+ const eligible=tasks.filter(t=>t.sponsors.length>0||t.submitted?.sponsors);
+ if(eligible.length<2)return '';
+ const all=eligible.map(t=>({t,data:insightData(t)}));
+ const totalFootage=all.reduce((sum,x)=>sum+x.data.videoSeconds,0);
+ const summary=new Map();
+ for(const {t,data} of all){
+  for(const brand of data.brands){
+   const key=brand.name.trim().toLocaleLowerCase();
+   const item=summary.get(key)||{name:brand.name,seconds:0,matchesPresent:0,matchesConfigured:0,eventHits:0,
+    longest:0};
+   item.matchesConfigured++;
+   if(brand.seconds>0)item.matchesPresent++;
+   item.seconds+=brand.seconds;
+   item.eventHits+=brand.eventHits;
+   item.longest=Math.max(item.longest,brand.longest);
+   summary.set(key,item);
+  }
+ }
+ const rows=[...summary.values()].sort((a,b)=>b.seconds-a.seconds);
+ const studied=all.reduce((sum,x)=>sum+x.data.coveredSeconds,0);
+ return `<details class="insight-rollup">
+  <summary><div><span class="eyebrow">TOURNAMENT INTELLIGENCE / MULTI-MATCH COMPARISON</span>
+   <h2>COMPARE SPONSORS ACROSS MATCHES</h2>
+   <p class="sub">${eligible.length} matches with sponsor annotation data · Click to expand tournament analysis.</p>
+   </div><span class="insight-expand-label">EXPAND REPORT ⌄</span></summary>
+  <div class="insight-rollup-body"><div class="insight-stat-grid">
+   <article class="insight-stat"><span>MATCHES IN SAMPLE</span><strong>${eligible.length}</strong><p>Unannotated matches are excluded</p></article>
+   <article class="insight-stat"><span>FOOTAGE IN SAMPLE</span><strong>${fmt(totalFootage)}</strong><p>Sum of video durations in the sample</p></article>
+   <article class="insight-stat"><span>SPONSOR-VISIBLE FOOTAGE</span><strong>${fmt(studied)}</strong><p>Sum of footage covered by any sponsor tag</p></article>
+   <article class="insight-stat"><span>BRANDS IN SAMPLE</span><strong>${rows.filter(r=>r.seconds>0).length}</strong><p>Distinct normalized brand names</p></article>
+  </div><div class="insight-section-title" style="margin-top:18px"><div><h3>TOURNAMENT BRAND BENCHMARK</h3>
+  <p>Aggregated tagged exposure across selected matches. The sample is not a claim about unprocessed fixtures.</p></div></div>
+  <div class="tablewrap"><table class="table insight-table"><thead><tr><th>BRAND</th><th>TOTAL EXPOSURE</th><th>MATCHES VISIBLE</th><th>AVERAGE PER VISIBLE MATCH</th><th>EVENT OVERLAPS</th></tr></thead>
+  <tbody>${rows.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${fmt(r.seconds)}</td><td>${r.matchesPresent} / ${r.matchesConfigured} configured</td>
+   <td>${r.matchesPresent?fmt(r.seconds/r.matchesPresent):'—'}</td><td>${r.eventHits}</td></tr>`).join('')}</tbody></table></div>
+  <p class="insight-rollup-note">This comparison uses only annotations currently available in this browser. It merges sponsor names case-insensitively and does not assume that similarly named brands are legally identical. The data does not synchronize across analysts or devices.</p>
+  </div></details>`;
+}
+function reportsView(){let ts=visibleTasks();let t=ts.find(x=>x.id===reportTaskId)||ts[0];if(!t)return `<div class="pagehead"><div><h1>Intelligence reports</h1><p class="sub">No assigned matches yet.</p></div></div>`;reportTaskId=t.id;return `<div class="pagehead"><div><div class="eyebrow">SPONSOR INTELLIGENCE / INSIGHTS</div><h1>Exposure analytics</h1><p class="sub">Understand brand visibility against key events and camera contexts.</p></div><div class="row wrap"><select class="smallselect" onchange="chooseReport(this.value)">${ts.map(x=>`<option value="${x.id}" ${x.id===t.id?'selected':''}>${esc(x.number)} · ${esc(x.name)}</option>`).join('')}</select><button class="button ghost" onclick="exportTask('${t.id}')">${icons('download')} Export JSON</button><button class="button primary" onclick="openTask('${t.id}')">Open studio ${icons('arrow')}</button></div></div>${matchHero(t)}${buildReport(t)}${tournamentBenchmark(ts)}`}
 window.chooseReport=id=>{reportTaskId=id;render()};
 window.showReport=id=>{reportTaskId=id;view='reports';render();window.scrollTo(0,0)};
 function insightExport(d){
