@@ -457,7 +457,7 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
 }
 .app-focus .task-menu-content button {border-radius:9px!important;font-family:'Manrope',sans-serif!important;}
 .app-focus .task-menu-content button:hover{background:#353539!important;}
-.app-focus .task-menu-content .task-menu-complete{background:#41301e!important;color:#ffbe72!important;}
+.app-focus .task-menu-content .task-menu-complete,.app-focus .task-menu-content .task-menu-reopen{background:#41301e!important;color:#ffbe72!important;}
 .app-focus .rail-logo .tinylogo img{filter:drop-shadow(0 2px 5px #0009)!important;}
 .app-focus .video-stamp {border-radius:999px!important;}
 .app-focus .fakepitch{background:#24292d!important;}
