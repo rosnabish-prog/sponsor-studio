@@ -370,7 +370,7 @@ function expect(expr,message){assert.ok(expr,message)}
  window.navigate('tasks');
  const readyFixture=document.querySelector('.fixture-card[data-fixture-id="M13"]');
  expect(readyFixture,'a pre-existing seeded fixture is present in the official catalog');
- assert.equal(readyFixture.querySelector('.fixture-task-state').textContent.trim(),'READY TO TAG','already created match is marked ready');
+ assert.equal(readyFixture.querySelector('.fixture-task-state').textContent.trim(),'IN PROGRESS','previously tagged fixture is shown as in progress');
  assert.ok(readyFixture.querySelector('.fixture-task-action').textContent.includes('OPEN TASK'),'created fixture is never offered another Create Task action');
  const countBeforeCatalog=db().tasks.length;
  window.openFixtureTask('M13');
