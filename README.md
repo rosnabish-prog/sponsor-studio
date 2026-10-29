@@ -94,7 +94,7 @@ The annotation workspace fills the browser width, places the video above large s
 
 ## Analyst workspace – intervals and shortcuts
 
-The tagging workspace has a pinned video player, a scrollable logo-first sponsor rail on the right, and compact event/camera chips beneath the player. Uploaded sponsor logos are shown on dark cards without white background fills. The media column and sponsor rail scroll separately so footage remains visible during annotation.
+The tagging workspace has a naturally scrolling (non-sticky) video player, a compact logo-only sponsor rail on the right, and small event/camera chips beneath the player. Sponsor images are shown on dark rectangular cards without white CSS background fills. The rail is a flat list without category headings; hover or focus reveals the brand name through accessible labels/tooltips. Uploaded images with white pixels baked into the asset will still show those pixels; use transparent PNG/SVG assets when possible.
 
 - Sponsor visibility: tap a brand to start, tap again when it is no longer present anywhere in the frame. Multiple identical placements count as one active sponsor.
 - Key events: **all newly tagged events are start/end intervals**, including goals, substitutions, replays and celebrations. First tap starts, second tap ends. New event attributes are always intervals. Older historical point annotations are preserved, not assigned invented durations.
@@ -103,3 +103,12 @@ The tagging workspace has a pinned video player, a scrollable logo-first sponsor
 - JSON and reports include event/camera start, end, duration and sponsor overlaps.
 
 Note: this is still a browser-local functional demo. It does not synchronize user edits, videos or uploaded brand images between independent browsers.
+
+
+## October 29 workspace refinements
+
+- The match title has a right-aligned **Actions** dropdown replacing the multi-button toolbar. Footage, JSON export, submission, admin sponsor editing, task editing, and returning to tasks are there.
+- The player **is not sticky**. Both the video and associated controls scroll normally with the page.
+- Sponsor cards are small horizontal rectangles with the logo as the only visible label, plus a red or green indicator. The sidebar does not display Main/Sideline group headings or instructional blocks.
+- If an already active **sponsor, key event, or camera** is tapped again at the same video timestamp (within **0.2 seconds**), its open annotation is removed and the operator receives a toast near the bottom of the screen. Clicking a *different* camera at the current camera's starting timestamp replaces the camera rather than creating a zero-length angle.
+- A genuinely later click ends the open interval. Seeks to timestamps earlier than a tag's start cannot close that tag. Existing closed records are not automatically erased.
