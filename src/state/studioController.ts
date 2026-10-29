@@ -203,7 +203,6 @@ window.login=async e=>{
  try{const result=await api.login({email,password:pwd});remoteUser=result.user;await loadLiveSession()}catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Sign in failed';}
 };
 window.selectWorkspace=id=>{if(liveWorkspaces.some(w=>w.workspace.id===id)){view='dashboard';selectedTaskId='';writeStudioRoute(view);void loadWorkspace(id).catch(error=>notify('Workspace load failed: '+error.message))}};
-window.createWorkspace=async e=>{e.preventDefault();try{const created=await api.createWorkspace(formVal('newWorkspaceName').trim());liveWorkspaces=await api.workspaces();view='dashboard';writeStudioRoute(view);await loadWorkspace(created.id)}catch(error){notify('Workspace creation failed: '+(error instanceof Error?error.message:'Unknown error'))}};
 window.logout=()=>{void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];selectedTaskId='';view='dashboard';writeStudioRoute(view,'',true);if(videoEl){videoEl.pause()}clearLocalVideos();render()};
 window.showWorkspaceSwitcher=()=>{workspaceId='';render()};
 window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;view=v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';writeStudioRoute(view);render();window.scrollTo(0,0)};

@@ -33,8 +33,8 @@ function EventButtons({ model, camera }: StudioProps & { camera: boolean }) {
 }
 
 export function StudioControls({ model }: StudioProps) {
-  if (model.selectedTab === 'events') return <div className="studio-layer-hint">Key match event buttons are in the right panel. Select an event there to start or end its interval; the timeline below displays event annotations.</div>;
-  if (model.selectedTab === 'cameras') return <div className="studio-layer-hint">Camera-angle buttons are in the right panel. Select an angle there to begin or end its interval; switching cameras closes the previous view.</div>;
+  if (model.selectedTab === 'events') return <section className="studio-chip-group studio-secondary-controls"><div className="chip-group-title"><span>CAMERA ANGLES</span><small>CAMERA SWITCHES END THE PREVIOUS VIEW</small></div><div className="event-chip-row">{model.cameras.length ? <EventButtons model={model} camera /> : <span className="studio-layer-hint">No camera angles assigned to this match.</span>}</div></section>;
+  if (model.selectedTab === 'cameras') return <section className="studio-chip-group studio-secondary-controls"><div className="chip-group-title"><span>KEY MATCH EVENTS</span><small>TAP TO START · TAP AGAIN TO END</small></div><div className="event-chip-row">{model.events.length ? <EventButtons model={model} camera={false} /> : <span className="studio-layer-hint">No key match events assigned to this match.</span>}</div></section>;
   if (model.selectedTab === 'sponsors') return <div className="studio-layer-hint">Select sponsor logos from the right-hand SPONSORS panel. The timeline below shows sponsor visibility only.</div>;
   return <>
     <section className="studio-chip-group"><div className="chip-group-title"><span>KEY MATCH EVENTS</span><small>TAP TO START · TAP AGAIN TO END</small></div><div className="event-chip-row"><EventButtons model={model} camera={false} /></div></section>
@@ -83,7 +83,6 @@ function TimelineTrack({ name, items, kind, model, onContextMenu }: { name: stri
           className={`block ${kind} ${item.end == null ? 'open' : ''} ${point ? 'dotpoint' : ''}`}
           style={{ left: `${100 * start / duration}%`, width: `${point ? .15 : Math.max(.15, 100 * (end - start) / duration)}%` }} />;
       })}
-      <span className="playhead" style={{ left: `${100 * model.tick / duration}%` }} />
     </div>
   </div>;
 }
@@ -111,7 +110,10 @@ export function StudioTimeline({ model }: StudioProps) {
       <option value="all">All annotations</option><option value="sponsors">Sponsors</option><option value="events">Events</option><option value="cameras">Cameras</option>
     </select><span>{lines.length} recorded tracks · right-click a segment to remove it</span></div>
     {lines.length ? <><div className="track-top">{[0, .25, .5, .75, 1].map(share => <span key={share}>{fmt(model.duration * share)}</span>)}</div>
-      {lines.map((line, index) => <TimelineTrack key={`${line.kind}:${index}`} {...line} model={model} onContextMenu={setMenu} />)}</>
+      <div className="timeline-track-stack">
+        {lines.map((line, index) => <TimelineTrack key={`${line.kind}:${index}`} {...line} model={model} onContextMenu={setMenu} />)}
+        <div className="timeline-global-playhead-area" aria-hidden="true"><span className="timeline-global-playhead" style={{left:`${100 * Math.max(0,Math.min(1,model.tick/(model.duration||3600)))}%`}} /></div>
+      </div></>
       : <div className="timeline-empty">No {filter === 'all' ? '' : `${filter} `}intervals recorded yet. Use the tagging controls to begin an annotation.</div>}
     {menu && <div ref={menuRef} className="timeline-context-menu" role="menu" style={{left:Math.max(8,Math.min(menu.x,window.innerWidth-215)),top:Math.max(8,Math.min(menu.y,window.innerHeight-65))}}>
       <span>{menu.name}</span><button type="button" role="menuitem" onClick={() => {const target=menu;setMenu(null);window.deleteLog?.(target.key,target.id);}}>Delete annotation</button>

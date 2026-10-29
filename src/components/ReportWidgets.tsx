@@ -59,7 +59,7 @@ export function ExposureReport({ task, source, focusId }: { task: TaskSummary; s
       <span className={`insight-quality ${incomplete ? 'draft' : 'complete'}`}>{incomplete ? 'PRELIMINARY · ANNOTATION IN PROGRESS' : 'SUBMITTED DATA'}</span>
     </div>
     <div className="insight-stat-grid">{cards.map(card => <article className="insight-stat" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><p>{card.note}</p></article>)}</div>
-    <Section title="WHERE SPONSORS APPEAR IN THE MATCH" note="Smooth exposure curves plotted from measured five-minute coverage; RGB lines distinguish leading brands." className="insight-trend"
+    <Section title="WHERE SPONSORS APPEAR IN THE MATCH" note={focus ? `${focus.name} was visible for ${fmt(focus.seconds)} (${percent(d.pct(focus.seconds,d.videoSeconds))} of the broadcast).` : d.active.length ? `${fmt(d.coveredSeconds)} of ${fmt(d.videoSeconds)} has recorded sponsor visibility across ${d.active.length} brands.` : 'No sponsor exposure has been recorded in this match.'} className="insight-trend"
       aside={<label className="insight-select">BRAND FILTER<select id="insightSponsorFilter" value={focusId} onChange={event => window.selectInsightSponsor?.(event.target.value)}>
         <option value="">ALL SPONSORS</option>{d.active.map(brand => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></label>}>
       <ExposureTrend data={d} focusId={focusId} />

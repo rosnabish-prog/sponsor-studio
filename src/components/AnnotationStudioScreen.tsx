@@ -77,7 +77,8 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
             <span className={`status ${model.status}`}>{model.status === 'done' ? 'Completed' : model.status === 'progress' ? 'In progress' : 'Ready to tag'}</span>{' '}
             <span>{model.date || 'Date not specified'}</span><span>·</span>
             <span>{formatTimestamp(model.duration)} expected video length</span><span>·</span>
-            <span>Sponsors: {model.sponsorAnalyst}</span><span>·</span><span>Context: {model.contextAnalyst}</span>
+            <span>Sponsor tagging: {model.sponsorAnalyst === 'Unassigned' ? 'Unassigned' : `Assigned to ${model.sponsorAnalyst}`}</span><span>·</span>
+            <span>Events & cameras: {model.contextAnalyst === 'Unassigned' ? 'Unassigned' : `Assigned to ${model.contextAnalyst}`}</span>
           </div>
         </div>
         <ActionMenu model={model} isAdmin={isAdmin} />

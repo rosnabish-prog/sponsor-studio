@@ -70,7 +70,9 @@ export function AppShell({ screen, context, children }: {
           <div className="ops-year">● 2026 TOURNAMENT <i /> OCT 25 – NOV 1</div>
           <div className="ops-user">
             <span>{user.name} <small>/ {user.role.toUpperCase()}</small></span>
-            {context.workspaceName && <button onClick={() => window.showWorkspaceSwitcher?.()} aria-label="Manage workspaces">{context.workspaceName}</button>}
+            {context.workspaceName && (context.workspaces?.length ?? 0) > 1
+              ? <button onClick={() => window.showWorkspaceSwitcher?.()} aria-label="Switch workspace">{context.workspaceName}</button>
+              : <span className="ops-workspace-name" aria-label="Current workspace">{context.workspaceName}</span>}
             <button onClick={() => window.logout?.()} aria-label="Sign out"><Icon name="logout" /> SIGN OUT</button>
           </div>
         </div>
