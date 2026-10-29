@@ -1203,9 +1203,35 @@ function attrsView(){const gs=[['event','Key event attributes',db.eventGroups],[
 window.groupModal=(kind,id='')=>{let groups=kind==='sponsor'?db.sponsorGroups:kind==='event'?db.eventGroups:db.cameraGroups;let g=groups.find(x=>x.id===id);openModal(g?'Edit attribute list':'New attribute list',`<div class="field"><label>List name</label><input id="gname" value="${esc(g?.name||'')}" placeholder="${kind==='sponsor'?'Main stadium sponsors':kind==='event'?'Match moments':'Broadcast camera presets'}"></div>${kind==='sponsor'?`<div class="field" style="margin-top:15px"><label>Description</label><textarea id="gdesc" rows="2" placeholder="Optional">${esc(g?.description||'')}</textarea></div>`:''}`,`<button class="button ghost" onclick="closeModal()">Cancel</button><button class="button primary" onclick="saveGroup('${kind}','${id}')">Save list</button>`)};
 window.saveGroup=(kind,id)=>{let gs=kind==='sponsor'?db.sponsorGroups:kind==='event'?db.eventGroups:db.cameraGroups;let v=formVal('gname').trim();if(!v)return notify('List name is required.');let g=gs.find(x=>x.id===id);if(g){g.name=v;if(kind==='sponsor')g.description=formVal('gdesc')}else gs.push({id:uid(),name:v,...(kind==='sponsor'?{description:formVal('gdesc'),sponsors:[]}:{items:[]})});save();closeModal();render();notify('Attribute list saved')};
 window.addSponsorToCurrentTask=()=>{let t=currentTask();if(!t||me()?.role!=='admin')return;let g=db.sponsorGroups.find(x=>t.sponsorGroupIds.includes(x.id));if(!g){notify('Assign a sponsor list to the task first.');return}sponsorModal(g.id)};
-window.sponsorModal=(gid,sid='')=>{let g=db.sponsorGroups.find(x=>x.id===gid),s=g?.sponsors.find(x=>x.id===sid);if(!g)return;openModal(s?'Edit sponsor':'Add a sponsor',`<div class="formgrid"><div class="field full"><label>Sponsor name</label><input id="sname" value="${esc(s?.name||'')}" placeholder="Brand name" required></div><div class="field"><label>UPLOAD SPONSOR LOGO / FULL BRAND IMAGE</label><input type="file" id="simage" accept="image/png,image/jpeg,image/webp,image/svg+xml" onchange="previewSponsorLogo(this)"><div id="logo-preview" class="logo-preview">${s?.logo?`<img src="${esc(s.logo)}" alt="Current sponsor logo">`:'SELECT AN IMAGE — THIS WILL APPEAR ON THE ANALYST TAGGING CARD'}</div><small>Stored as a small browser-local thumbnail. Full-quality originals belong in backend object storage.</small></div><div class="field"><label>Fallback brand color</label><input type="color" id="scolor" value="${esc(s?.color||'#7059c4')}" style="padding:5px;height:45px"></div></div>`,`<button class="button ghost" onclick="closeModal()">Cancel</button>${s?`<button class="button warn" onclick="deleteSponsor('${gid}','${sid}')">Delete</button>`:''}<button class="button primary" onclick="saveSponsor('${gid}','${sid}')">Save sponsor</button>`)};
+window.sponsorModal=(gid,sid='')=>{let g=db.sponsorGroups.find(x=>x.id===gid),s=g?.sponsors.find(x=>x.id===sid);if(!g)return;openModal(s?'Edit sponsor':'Add a sponsor',`<div class="formgrid"><div class="field full"><label>Sponsor name</label><input id="sname" value="${esc(s?.name||'')}" placeholder="Brand name" required></div><div class="field"><label>UPLOAD SPONSOR LOGO / FULL BRAND IMAGE</label><input type="file" id="simage" accept="image/png,image/jpeg,image/webp,image/svg+xml" onchange="previewSponsorLogo(this)"><div id="logo-preview" class="logo-preview">${s?.logo?`<img src="${esc(s.logo)}" alt="Current sponsor logo">`:'SELECT AN IMAGE — THIS WILL APPEAR ON THE ANALYST TAGGING CARD'}</div><small>Transparent PNG logos stay transparent. Existing white-backed logos must be uploaded again after this fix. Stored as a small browser-local thumbnail; originals are not uploaded.</small></div><div class="field"><label>Fallback brand color</label><input type="color" id="scolor" value="${esc(s?.color||'#7059c4')}" style="padding:5px;height:45px"></div></div>`,`<button class="button ghost" onclick="closeModal()">Cancel</button>${s?`<button class="button warn" onclick="deleteSponsor('${gid}','${sid}')">Delete</button>`:''}<button class="button primary" onclick="saveSponsor('${gid}','${sid}')">Save sponsor</button>`)};
 window.previewSponsorLogo=input=>{const p=document.getElementById('logo-preview'),f=input?.files?.[0];if(!p||!f)return;if(!f.type.startsWith('image/')){p.textContent='Please select an image';return}const rd=new FileReader();rd.onload=()=>{p.innerHTML='<img alt="New sponsor logo preview">';p.firstChild.src=rd.result};rd.readAsDataURL(f)};
-function thumbnail(file){return new Promise((resolve,reject)=>{let fr=new FileReader();fr.onerror=reject;fr.onload=()=>{let img=new Image();img.onload=()=>{let w=220,h=140,c=document.createElement('canvas');c.width=w;c.height=h;let ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,w,h);let sc=Math.min(w/img.width,h/img.height);let sw=img.width*sc,sh=img.height*sc;ctx.drawImage(img,(w-sw)/2,(h-sh)/2,sw,sh);resolve(c.toDataURL('image/jpeg',.76))};img.onerror=reject;img.src=fr.result};fr.readAsDataURL(file)})}
+function thumbnail(file){
+ return new Promise((resolve,reject)=>{
+  const reader=new FileReader();
+  reader.onerror=()=>reject(new Error('Unable to read image'));
+  reader.onload=()=>{
+   const img=new Image();
+   img.onload=()=>{
+    try{
+     const w=220,h=140,canvas=document.createElement('canvas');
+     canvas.width=w;canvas.height=h;
+     const ctx=canvas.getContext('2d');
+     if(!ctx)throw new Error('Image processing unavailable');
+     // The default canvas is transparent. Never fill it white or convert to JPEG:
+     // both would destroy the alpha channel of transparent sponsor logos.
+     ctx.clearRect(0,0,w,h);
+     const scale=Math.min(w/img.width,h/img.height);
+     const sw=img.width*scale,sh=img.height*scale;
+     ctx.drawImage(img,(w-sw)/2,(h-sh)/2,sw,sh);
+     resolve(canvas.toDataURL('image/png'));
+    }catch(err){reject(err)}
+   };
+   img.onerror=()=>reject(new Error('Unable to decode image'));
+   img.src=reader.result;
+  };
+  reader.readAsDataURL(file);
+ });
+}
 window.saveSponsor=async(gid,sid)=>{let g=db.sponsorGroups.find(x=>x.id===gid),name=formVal('sname').trim(),file=document.getElementById('simage').files[0];if(!g||!name)return notify('Sponsor name required');if(file&&file.size>6*1024*1024)return notify('Sponsor image must be under 6 MB');let logoData;try{if(file)logoData=await thumbnail(file)}catch(e){return notify('Could not read this logo image.')}let s=g.sponsors.find(x=>x.id===sid);if(!s){s={id:uid()};g.sponsors.push(s)}s.name=name;s.color=formVal('scolor');if(logoData)s.logo=logoData;save();closeModal();render();notify('Sponsor saved')};
 window.deleteSponsor=(gid,sid)=>{let g=db.sponsorGroups.find(x=>x.id===gid);if(!g)return;let used=db.tasks.some(t=>t.sponsors.some(v=>v.sponsorId===sid));if(used)return notify('This brand has recorded annotations. Preserve the history; create a new list instead.');const sponsor=g.sponsors.find(x=>x.id===sid);confirmInApp('Delete sponsor',`Delete ${sponsor?.name||'this sponsor'} and its uploaded brand image from the list?`,()=>{g.sponsors=g.sponsors.filter(x=>x.id!==sid);save();render();notify('Sponsor removed')},{actionLabel:'DELETE SPONSOR'})};
 window.attrItemModal=(kind,gid)=>openModal('Add '+(kind==='event'?'match event':'camera angle'),`<div class="formgrid"><div class="field"><label>Attribute name</label><input id="iname" placeholder="${kind==='event'?'Goal, replay, substitution':'Wide · left goal'}"></div>
