@@ -2,6 +2,12 @@ import { test, expect } from '@playwright/test';
 
 test('live React mode signs in, creates a workspace task and persists sponsor tags', async ({ page }) => {
   const id=Math.random().toString(36).slice(2,10);
+  const apiFailures:string[]=[];
+  page.on('response',async response=>{
+    if(response.url().includes('/api/')&&response.status()>=400){
+      apiFailures.push(`${response.request().method()} ${response.url()} ${response.status()} ${await response.text().catch(()=>'?')}`);
+    }
+  });
   await page.goto('http://127.0.0.1:4173', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button',{name:'NEW ORGANIZATION? CREATE ACCOUNT'}).click();
   await page.locator('#regname').fill('P0 Reviewer');
@@ -11,6 +17,26 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
   await page.getByRole('button',{name:'CREATE ACCOUNT'}).click();
   await expect(page.locator('.ops-nav')).toBeVisible({timeout:20_000});
 
+  const getWorkspace=async()=>page.evaluate(async()=>{
+    const list=await fetch('/api/workspaces',{credentials:'include'}).then(r=>r.json());
+    return list[0].workspace.id as string;
+  });
+  const workspaceId=await getWorkspace();
+  // New workspaces do not inherit demo data. Add the list through the same
+  // authenticated endpoint that workspace administrators use.
+  await page.evaluate(async w=>{
+    const response=await fetch(`/api/workspaces/${w}/catalog`,{
+      method:'PUT', credentials:'include', headers:{'content-type':'application/json'},
+      body:JSON.stringify({version:0,payload:{
+        sponsorGroups:[{id:'sg_main',name:'Sponsor E2E',description:'',sponsors:[{id:'s_e2e',name:'Adidas x Messi',logo:'',color:'#ff7a3d'}]}],
+        eventGroups:[],cameraGroups:[],
+      }}),
+    });
+    if(!response.ok)throw new Error(`Seed catalog: ${response.status} ${await response.text()}`);
+  },workspaceId);
+  await page.reload();
+  await expect(page.locator('.ops-nav')).toBeVisible({timeout:15_000});
+
   await page.getByRole('button',{name:'Matches'}).first().click();
   await page.getByRole('button',{name:'New task'}).click();
   await page.locator('#taskname').fill('P0 E2E Match '+id);
@@ -18,15 +44,15 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
   await page.locator('#taskduration').fill('90');
   await page.locator('#studioModalForm').getByRole('button',{name:'Create task'}).click();
 
-  const getWorkspace=async()=>page.evaluate(async()=>{
-    const list=await fetch('/api/workspaces',{credentials:'include'}).then(r=>r.json());
-    return list[0].workspace.id as string;
-  });
-  const workspaceId=await getWorkspace();
-  await expect.poll(async()=>page.evaluate(async w=>{
-    const tasks=await fetch(`/api/workspaces/${w}/tasks`,{credentials:'include'}).then(r=>r.json());
-    return tasks.length as number;
-  },workspaceId)).toBe(1);
+  try {
+    await expect.poll(async()=>page.evaluate(async w=>{
+      const tasks=await fetch(`/api/workspaces/${w}/tasks`,{credentials:'include'}).then(r=>r.json());
+      return tasks.length as number;
+    },workspaceId)).toBe(1);
+  } catch(error) {
+    const toast=await page.locator('#toast').textContent().catch(()=>null);
+    throw new Error(`Task creation failed: ${String(error)}; API errors: ${apiFailures.join(' | ')}; last toast: ${toast}`);
+  }
 
   await page.reload();
   await expect(page.locator('.ops-nav')).toBeVisible({timeout:15_000});

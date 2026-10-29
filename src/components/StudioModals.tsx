@@ -37,7 +37,7 @@ function AssignModal({ task, users }: Extract<DialogModel, { type: 'assign' }>) 
           <div className="field"><label htmlFor="assignContextWorker">Events & camera analyst</label><select id="assignContextWorker" defaultValue={task.contextAnalystId || ''}><Options users={users} /></select><small>Records key match events and broadcast camera angles.</small></div>
         </div>
         {(task.submitted?.sponsors || task.submitted?.context) && <p className="assignment-notice">A completed tagging stream remains locked when reassigned. An admin must reopen it separately to permit changes.</p>}
-        <p className="assignment-storage-note">Demo-only: task assignments are stored in this browser and are not delivered to analysts on other devices.</p>
+        {!apiEnabled && <p className="assignment-storage-note">Demo-only: task assignments are stored in this browser and are not delivered to analysts on other devices.</p>}
       </div>
       <Footer><Cancel /><Save>Save assignment</Save></Footer>
     </form>

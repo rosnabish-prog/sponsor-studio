@@ -41,7 +41,7 @@ export async function persistStudio(
     let previous=before.tasks.find(t=>t.id===task.id);
     if (!previous) {
       const result=await api.createTask(workspaceId,{
-        ...taskFields(task),number:task.number,fixtureId:task.fixtureId,
+        ...taskFields(task),number:task.number,fixtureId:task.fixtureId||undefined,
         matchDate:task.date ? `${task.date}T00:00:00.000Z` : undefined,
       });
       rekey('task',task.id,result.id);
