@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { ScreenContext, ScreenId } from '../types/legacy';
+import type { ScreenContext, ScreenId } from '../types/screen';
 
 function Icon({ name }: { name: string }) {
   return <svg className="ic"><use href={`#i-${name}`} /></svg>;

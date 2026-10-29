@@ -634,6 +634,11 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
  max-height:calc(100dvh - 2 * clamp(10px,2vh,24px))!important;
  min-height:0!important;overflow:hidden!important;
 }
+.overlay .modal.modal-wide {width:min(860px,100%)!important;}
+.overlay .modal > form {
+ display:flex!important;flex-direction:column!important;
+ flex:1 1 auto!important;min-height:0!important;overflow:hidden!important;
+}
 .overlay .modal[style*="width:min(860px"]{
  width:min(860px,100%)!important;
 }
@@ -793,7 +798,7 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
 }
 
 
-/* Consistent orange selected state across legacy and new tab systems. */
+/* Consistent orange selected state across the component tab systems. */
 .studio-tabs button.active,.studio-tabs .chip.active,
 .segmented button.on,.segmented button[aria-pressed="true"],
 [data-studio-tab][aria-pressed="true"],

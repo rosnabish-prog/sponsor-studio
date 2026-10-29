@@ -1,6 +1,6 @@
-import type { StudioScreenModel } from '../types/legacy';
+import type { StudioScreenModel } from '../types/screen';
 import { formatTimestamp } from '../domain/intervals';
-import { NativeMarkup } from './NativeMarkup';
+import { StudioControls, StudioLogs, StudioRail, StudioTimeline } from './StudioWidgets';
 
 function Icon({ name }: { name: string }) {
   return <svg className="ic"><use href={`#i-${name}`} /></svg>;
@@ -35,7 +35,9 @@ function VideoPanel({ model }: { model: StudioScreenModel }) {
   const { videoSrc, isLocalVideo, videoName, videoType } = model;
   const sourceState = isLocalVideo ? 'LOCAL VIDEO · NOT UPLOADED' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : videoName ? 'LOCAL FILE DISCONNECTED' : 'NO VIDEO ATTACHED';
   const sourceNote = isLocalVideo
-    ? `OPENED LOCALLY: ${videoName || 'Video file'} · Not uploaded, saved, or shared with other devices.`
+    ? model.videoError || (model.videoDimensions
+      ? `LOCAL FILE: ${videoName || 'Video'} · ${model.videoDimensions} · ${formatTimestamp(model.duration)} · Not uploaded or shared. Reselect after refresh.`
+      : `OPENED LOCALLY: ${videoName || 'Video file'} · Not uploaded, saved, or shared with other devices.`)
     : !videoSrc && videoName
       ? `Previously selected: ${videoName} · Reopen this local video after refreshing or reopening the browser.`
       : 'Choose a video on this device or configure a direct HTTPS source. Local video is never uploaded to the server.';
@@ -52,16 +54,16 @@ function VideoPanel({ model }: { model: StudioScreenModel }) {
         </div>}
     </div>
     <div className="video-controls">
-      <button onClick={() => window.togglePlay?.()} title="Play / Pause" id="playbutton"><Icon name="play" /></button>
-      <button onClick={() => window.skipByStep?.(-1)} aria-label="Seek backward" title="Seek backward"><span className="skip-number" id="skipBack">−5s</span></button>
-      <input className="seek" id="seek" aria-label="Video timestamp" type="range" min="0" max={model.duration} defaultValue={model.tick} step="0.1" onInput={event => window.seekVideo?.(event.currentTarget.value)} />
-      <button onClick={() => window.skipByStep?.(1)} aria-label="Seek forward" title="Seek forward"><span className="skip-number" id="skipForward">+5s</span></button>
+      <button onClick={() => window.togglePlay?.()} title="Play / Pause" id="playbutton"><Icon name={model.playing ? 'pause' : 'play'} /></button>
+      <button onClick={() => window.skipByStep?.(-1)} aria-label="Seek backward" title="Seek backward"><span className="skip-number" id="skipBack">−{model.seekStep}s</span></button>
+      <input className="seek" id="seek" aria-label="Video timestamp" type="range" min="0" max={model.duration} value={model.tick} step="0.1" onChange={event => window.seekVideo?.(event.currentTarget.value)} />
+      <button onClick={() => window.skipByStep?.(1)} aria-label="Seek forward" title="Seek forward"><span className="skip-number" id="skipForward">+{model.seekStep}s</span></button>
       <span className="vidtime" id="vidtime">{formatTimestamp(model.tick)} / {formatTimestamp(model.duration)}</span>
       <div className="skip-setting" role="group" aria-label="Seek step">
-        <span>STEP</span><button className="active" id="seekstep-5" onClick={() => window.setSeekStep?.(5)} aria-pressed="true">5 SEC</button>
-        <button id="seekstep-10" onClick={() => window.setSeekStep?.(10)} aria-pressed="false">10 SEC</button>
+        <span>STEP</span><button className={model.seekStep === 5 ? 'active' : ''} id="seekstep-5" onClick={() => window.setSeekStep?.(5)} aria-pressed={model.seekStep === 5}>5 SEC</button>
+        <button className={model.seekStep === 10 ? 'active' : ''} id="seekstep-10" onClick={() => window.setSeekStep?.(10)} aria-pressed={model.seekStep === 10}>10 SEC</button>
       </div>
-      <button className="rate" onClick={() => window.cycleRate?.()} id="rateButton">1×</button>
+      <button className="rate" onClick={() => window.cycleRate?.()} id="rateButton">{model.playbackRate}×</button>
     </div>
   </div>;
 }
@@ -98,18 +100,18 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
           <div className="contextline"><Icon name="clock" /> Current video timestamp <b id="currentT">{formatTimestamp(model.tick)}</b>
             <span style={{ marginLeft: 'auto' }}>{model.canSponsor ? 'Sponsor tagging enabled' : 'Sponsor tagging view only'} · {model.canContext ? 'Context tagging enabled' : 'Context view only'}</span>
           </div>
-          <div id="controlsBody"><NativeMarkup markup={model.controlsMarkup} /></div>
+          <div id="controlsBody"><StudioControls model={model} /></div>
           <div className="tline-wrap">
             <div className="sectionhead"><div><h3>Unified match timeline</h3><p className="sub">One shared time axis · switch visible layers using the controls above</p></div>
               <div className="tline-legend"><span><i className="key" style={{ background: '#ff9b36' }} />Sponsors</span><span><i className="key" style={{ background: '#d7c7b5' }} />Events</span><span><i className="key" style={{ background: '#9cabb0' }} />Cameras</span></div></div>
-            <div id="timelineBody"><NativeMarkup markup={model.timelineMarkup} /></div>
+            <div id="timelineBody"><StudioTimeline model={model} /></div>
           </div>
         </div>
-        <div className="card cardpad" style={{ marginTop: 17 }}><div className="sectionhead"><h2>Recorded actions</h2><span className="tag" id="logcount">{model.logCount} logs</span></div><div id="logBody"><NativeMarkup markup={model.logsMarkup} /></div></div>
+        <div className="card cardpad" style={{ marginTop: 17 }}><div className="sectionhead"><h2>Recorded actions</h2><span className="tag" id="logcount">{model.logCount} logs</span></div><div id="logBody"><StudioLogs model={model} /></div></div>
       </div>
       <aside className="sponsor-rail" aria-label={`${model.railTitle} tagging panel`} tabIndex={0}>
         <div className="rail-compact-heading"><h2 id="railTagTitle">{model.railTitle}</h2><p id="railTagHint">{model.railHint}</p></div>
-        <div id="sponsorRail" className="rail-scroll"><NativeMarkup markup={model.railMarkup} /></div>
+        <div id="sponsorRail" className="rail-scroll"><StudioRail model={model} /></div>
       </aside>
     </div>
   </>;

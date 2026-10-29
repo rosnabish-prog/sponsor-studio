@@ -1,4 +1,4 @@
-import type { StudioData, Fixture } from './models';
+import type { StudioData, Fixture, Sponsor, TagAttribute, TaskSummary } from './models';
 
 export type ScreenId = 'login' | 'dashboard' | 'tasks' | 'studio' | 'sponsors' | 'attributes' | 'users' | 'reports';
 
@@ -20,9 +20,12 @@ export interface ScreenContext {
 export interface ReportsScreenModel {
   tasks: { id: string; number: string; name: string }[];
   selectedId?: string;
-  matchMarkup: string;
-  analyticsMarkup: string;
-  tournamentMarkup: string;
+  selectedTask?: TaskSummary;
+  data: StudioData;
+  focusId: string;
+  fixtures: Fixture[];
+  badges: Record<string, string>;
+  visibleTasks: TaskSummary[];
 }
 
 export interface StudioScreenModel {
@@ -45,14 +48,19 @@ export interface StudioScreenModel {
   sponsorCount: number;
   logCount: number;
   cameraLabel: string;
+  seekStep: number;
+  playbackRate: number;
+  videoDimensions: string;
+  videoError: string;
+  playing: boolean;
   railTitle: string;
   railHint: string;
   submitted: { sponsors: boolean; context: boolean };
-  controlsMarkup: string;
-  timelineMarkup: string;
-  logsMarkup: string;
-  railMarkup: string;
+  task: TaskSummary;
+  sponsors: Sponsor[];
+  events: TagAttribute[];
+  cameras: TagAttribute[];
 }
 
 /** Synchronous commit so annotation handlers can immediately access mounted DOM. */
-export type LegacyMount = (screen: ScreenId, context: ScreenContext, afterCommit?: () => void) => void;
+export type StudioMount = (screen: ScreenId, context: ScreenContext, afterCommit?: () => void) => void;

@@ -3,6 +3,7 @@ export interface Sponsor {
   name: string;
   logo?: string;
   color?: string;
+  logoTrimmed?: boolean;
 }
 
 export interface SponsorGroup {
@@ -30,6 +31,30 @@ export interface TeamMember {
   name: string;
   email: string;
   role: 'admin' | 'analyst';
+  password: string;
+}
+
+export interface AnnotationBase {
+  id: string;
+  start: number;
+  end: number | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface SponsorAnnotation extends AnnotationBase {
+  sponsorId: string;
+  placement?: string | null;
+  quality?: string | null;
+}
+
+export interface EventAnnotation extends AnnotationBase {
+  eventId: string;
+  kind: 'range' | 'point';
+}
+
+export interface CameraAnnotation extends AnnotationBase {
+  cameraId: string;
 }
 
 export interface TaskSummary {
@@ -47,10 +72,18 @@ export interface TaskSummary {
   cameraGroupIds: string[];
   sponsorAnalystId: string;
   contextAnalystId: string;
-  sponsors: { end: number | null }[];
-  events: { end: number | null }[];
-  cameras: { end: number | null }[];
-  submitted?: { sponsors: boolean; context: boolean };
+  sponsors: SponsorAnnotation[];
+  events: EventAnnotation[];
+  cameras: CameraAnnotation[];
+  submitted: { sponsors: boolean; context: boolean };
+  videoType?: 'none' | 'https' | 'ftp';
+  videoUrl?: string;
+  videoName?: string;
+  videoSize?: number;
+  videoMime?: string;
+  observedTime?: number;
+  periods?: { firstEnd: number; secondStart: number } | null;
+  createdAt?: string;
 }
 
 export interface Fixture {

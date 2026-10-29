@@ -1,4 +1,4 @@
-import type { ScreenContext } from '../types/legacy';
+import type { ScreenContext } from '../types/screen';
 import type { Fixture, StudioData, TaskSummary } from '../types/models';
 import { formatTimestamp } from '../domain/intervals';
 

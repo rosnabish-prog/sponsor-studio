@@ -1,4 +1,4 @@
-import type { ScreenContext, ScreenId } from '../types/legacy';
+import type { ScreenContext, ScreenId } from '../types/screen';
 import { AppShell } from './AppShell';
 import { LoginScreen } from './LoginScreen';
 import { DashboardScreen, MatchesScreen } from './MatchScreens';

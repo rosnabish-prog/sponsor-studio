@@ -1,5 +1,5 @@
-import type { ReportsScreenModel } from '../types/legacy';
-import { NativeMarkup } from './NativeMarkup';
+import type { ReportsScreenModel } from '../types/screen';
+import { ReportsBody } from './ReportWidgets';
 
 function Icon({ name }: { name: string }) {
   return <svg className="ic"><use href={`#i-${name}`} /></svg>;
@@ -24,9 +24,7 @@ export function InsightsScreen({ model }: { model: ReportsScreenModel }) {
         <button className="button primary" onClick={() => window.openTask?.(model.selectedId!)}>Open studio <Icon name="arrow" /></button>
       </div>
     </div>
-    <NativeMarkup markup={model.matchMarkup} />
-    <NativeMarkup markup={model.analyticsMarkup} />
-    <NativeMarkup markup={model.tournamentMarkup} />
+    <ReportsBody model={model} />
   </>;
 }
 

@@ -6,7 +6,7 @@ A branded, interactive **React + TypeScript frontend demonstration** for sponsor
 
 The application now builds with **React 19, TypeScript, and Vite**. All eight top-level screens—login, dashboard, matches, Annotation Studio, sponsor library, attributes, team, and insights—are native JSX components in `src/components/`. Navigation and both header layouts are React-owned, with the existing classes, colors and visual assets preserved. The original stylesheet and its subsequent orange overrides are imported, in that order, from `src/styles/`; static image assets remain in `public/assets/`.
 
-**Migration status:** Every page screen is JSX and strictly type-checked. The existing annotation state machine, local persistence, modal forms, and some deeply nested studio/insight report fragments remain in `src/legacy/app.ts` (excluded from strict checks), bridged to React via `ScreenHost` and `NativeMarkup`. A subsequent controller/widget migration would eliminate that remaining legacy module. This separation keeps the existing tagging behavior stable while allowing the screens themselves to be maintained as React components.
+**Migration status:** All eight screens, Annotation Studio controls and timeline, recorded-action editors, modal forms, insights report and tournament rollup are native React components. No HTML string rendering adapter remains. The demo annotation controller lives in `src/state/studioController.ts` and passes strict TypeScript checks, while pure analytics are implemented in `src/domain/analytics.ts`. `ScreenHost` coordinates typed controller snapshots with React. This is a frontend migration, not a replacement for production authentication or shared storage.
 
 The frontend is still a local-storage-only demo, not a secure multiuser production application.
 
@@ -38,6 +38,25 @@ npm test
 npm run build
 npm run preview
 ```
+
+### Screenshot comparison against the original design
+
+The `Sponsor Studio visual regression` GitHub Actions workflow launches both the
+original static frontend (commit `054d63efdf8e3304716a5a4f1645fb7a7c684d0e`)
+and the migrated React frontend. Six Playwright/Chromium screenshot scenarios
+cover desktop login, dashboard, Annotation Studio, and Insights plus mobile login
+and Annotation Studio. Each records reference, React, and diff PNGs; the test
+checks major content position and pixel differences and uploads the diff images
+as a workflow artifact.
+
+Locally, to reproduce, serve the original checkout on port 4174 and run the
+React dev server on port 4173, install Playwright Chromium with
+`npx playwright install chromium`, and run `npm run test:visual`.
+
+Screenshot checks are design regression safeguards, not a guarantee of perfect
+pixel identity or complete behavior. The `npm test` command runs strict
+TypeScript checks and the annotation interaction suite without requiring a
+browser; GitHub Actions runs the visual comparison separately.
 
 ### Interactive demo credentials
 
