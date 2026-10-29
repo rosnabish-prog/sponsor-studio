@@ -25,6 +25,7 @@ const assert=require('node:assert/strict');
   await page.click('.event-chip');
   await page.click('#skipForward');
   await page.click('.event-chip');
+  console.log('DEBUG EVENT TIME',await page.$eval('#vidtime',e=>e.textContent),'LOGS',await page.$eval('#logBody',e=>e.textContent),'CHIPS',await page.$eval('.event-chip',xs=>xs.slice(0,2).map(x=>({name:x.textContent,pressed:x.getAttribute('aria-pressed')}))));
   assert.ok((await page.$eval('#logBody',e=>e.textContent)).includes('00:20'));
   await page.click('.camera-chip');
   await page.click('#skipForward');
