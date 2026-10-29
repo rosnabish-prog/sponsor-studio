@@ -7,7 +7,7 @@ virtualConsole.on('jsdomError',e=>errors.push(String(e)));
 const html=fs.readFileSync('index.html','utf8');
 const dom=new JSDOM(html,{url:'http://localhost/',runScripts:'dangerously',virtualConsole,
  beforeParse(window){
-  window.confirm=()=>true;
+  window.confirm=()=>{throw new Error('Native browser confirmation must not be used')};
   window.fetch=async()=>({ok:false,status:404});
   window.scrollTo=()=>{};
   window.HTMLMediaElement.prototype.play=()=>Promise.resolve();
@@ -107,6 +107,56 @@ function expect(expr,message){assert.ok(expr,message)}
  window.navigate('attributes');
  expect(document.querySelectorAll('.groupitems .sponsor-mini').length>0,'attributes library opens');
  assert.equal(document.querySelectorAll('.groupitems .sponsor-mini .tag').length,0,'redundant range badges removed');
+
+ // In-app confirmation replaces native window.confirm for destructive actions.
+ const attrItemsBefore=document.querySelectorAll('.groupitems .sponsor-mini').length;
+ const attrName=document.querySelector('.groupitems .sponsor-mini')?.textContent||'';
+ document.querySelector('.groupitems .sponsor-mini button').click();
+ expect(document.querySelector('#modal'),'attribute removal uses internal modal');
+ assert.equal(document.querySelectorAll('.groupitems .sponsor-mini').length,attrItemsBefore,'nothing deleted before confirmation');
+ document.querySelector('#modal .modalfoot .button.ghost').click();
+ expect(!document.querySelector('#modal'),'cancel closes confirmation');
+ assert.equal(document.querySelectorAll('.groupitems .sponsor-mini').length,attrItemsBefore,'cancel preserves attributes');
+ document.querySelector('.groupitems .sponsor-mini button').click();
+ window.acceptInAppConfirm();
+ assert.equal(document.querySelectorAll('.groupitems .sponsor-mini').length,attrItemsBefore-1,'accepted removal updates attributes');
+ // Admin can create an analyst and assign one user to both streams in demo mode.
+ window.navigate('users');
+ window.userModal();
+ document.querySelector('#uname').value='Demo Workforce Analyst';
+ document.querySelector('#uemail').value='tester@club.example';
+ document.querySelector('#upass').value='DemoPass123';
+ window.saveUser('');
+ const testUser=db().users.find(u=>u.email==='tester@club.example');
+ expect(testUser&&testUser.role==='analyst','admin created a new analyst');
+ window.navigate('tasks');
+ window.createTaskModal();
+ document.querySelector('#taskname').value='Test Sponsor Match';
+ document.querySelector('#tasknumber').value='TEST-M99';
+ document.querySelector('#tsponsor').value=testUser.id;
+ document.querySelector('#tcontext').value=testUser.id;
+ window.saveTask('');
+ const assigned=db().tasks.find(t=>t.number==='TEST-M99');
+ expect(assigned,'task creation works');
+ assert.equal(assigned.sponsorAnalystId,testUser.id);
+ assert.equal(assigned.contextAnalystId,testUser.id);
+ // Insights are derived from annotations and support sponsor filtering.
+ window.openTask('task_demo1');
+ window.seekVideo(12);
+ document.querySelector('.rail-brand').click();
+ window.seekVideo(18);
+ document.querySelector('.rail-brand').click();
+ window.showReport('task_demo1');
+ expect(document.querySelector('.insights-dashboard'),'insights dashboard rendered');
+ assert.equal(document.querySelectorAll('.insight-stat').length,4,'four match overview KPIs');
+ expect(document.querySelector('.insight-table'),'brand ranking present');
+ expect(document.querySelectorAll('.insight-tick').length===12,'60-minute match has twelve 5-minute buckets');
+ expect(document.querySelector('.insight-events-list'),'match event association rendered');
+ expect(document.querySelector('.insight-pair')||document.querySelector('.insight-coverage-note'),'co-visibility or coverage report present');
+ document.querySelector('#insightSponsorFilter').value='s_gatorade';
+ window.selectInsightSponsor('s_gatorade');
+ assert.equal(document.querySelector('#insightSponsorFilter').value,'s_gatorade','brand filter updates');
+
  window.openTask('task_demo1');
  document.querySelector('.focusbrand.brand-home').click();
  expect(document.querySelector('.ops-nav'),'logo navigates to dashboard');
