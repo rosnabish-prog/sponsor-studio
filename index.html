@@ -651,29 +651,59 @@ function refreshStudio(){
  const camera=document.getElementById('activeCamera');if(camera){const current=t.cameras.find(c=>c.end==null);camera.textContent=current?labelFor(t,'cameras',current.cameraId):'CAMERA NOT SELECTED'}
  updateClock();
 }
-window.tagSponsor=id=>{let t=currentTask();if(!t||!canEdit(t,'sponsors'))return;let o=t.sponsors.find(x=>x.sponsorId===id&&x.end==null),at=seconds(t);if(o){if(at<=o.start)return notify('Move forward in the video to end the current exposure.');o.end=at}else{t.sponsors.push({id:uid(),sponsorId:id,start:at,end:null,createdBy:logged,createdAt:tstamp()})}save();refreshStudio()};
+// Actions tagged at the same video timestamp are corrections, not zero-duration annotations.
+const SAME_TIME_TOLERANCE=0.2;
+const sameVideoTimestamp=(a,b)=>Math.abs(Number(a)-Number(b))<=SAME_TIME_TOLERANCE;
+window.tagSponsor=id=>{
+ const t=currentTask();if(!t||!canEdit(t,'sponsors'))return;
+ const at=seconds(t),active=t.sponsors.find(x=>x.sponsorId===id&&x.end==null);
+ if(active){
+  if(sameVideoTimestamp(at,active.start)){
+   t.sponsors=t.sponsors.filter(x=>x.id!==active.id);
+   save();refreshStudio();notify('Sponsor event removed — same timestamp');return;
+  }
+  if(at<active.start)return notify('End time cannot precede start time');
+  active.end=at;
+ }else{
+  t.sponsors.push({id:uid(),sponsorId:id,start:at,end:null,createdBy:logged,createdAt:tstamp()});
+ }
+ save();refreshStudio();
+};
 window.tagEvent=id=>{
  const t=currentTask();if(!t||!canEdit(t,'context'))return;
- if(!eventsFor(t).some(e=>e.id===id))return;
- const now=seconds(t),active=t.events.find(e=>e.eventId===id&&e.end==null);
+ if(!eventsFor(t).some(x=>x.id===id))return;
+ const at=seconds(t),active=t.events.find(x=>x.eventId===id&&x.end==null);
  if(active){
-  if(now<=active.start)return notify('Advance video time before ending this event.');
-  active.end=now;
+  if(sameVideoTimestamp(at,active.start)){
+   t.events=t.events.filter(x=>x.id!==active.id);
+   save();refreshStudio();notify('Key event removed — same timestamp');return;
+  }
+  if(at<active.start)return notify('End time cannot precede start time');
+  active.end=at;
  }else{
-  t.events.push({id:uid(),eventId:id,kind:'range',start:now,end:null,createdBy:logged,createdAt:tstamp()});
+  t.events.push({id:uid(),eventId:id,kind:'range',start:at,end:null,createdBy:logged,createdAt:tstamp()});
  }
  save();refreshStudio();
 };
 window.tagCamera=id=>{
  const t=currentTask();if(!t||!canEdit(t,'context'))return;
- if(!camerasFor(t).some(c=>c.id===id))return;
- const now=seconds(t),active=t.cameras.find(c=>c.end==null);
+ if(!camerasFor(t).some(x=>x.id===id))return;
+ const at=seconds(t),active=t.cameras.find(x=>x.end==null);
  if(active){
-  if(now<=active.start)return notify('Advance video time before ending or switching the camera.');
-  active.end=now;
+  if(sameVideoTimestamp(at,active.start)){
+   if(active.cameraId===id){
+    t.cameras=t.cameras.filter(x=>x.id!==active.id);
+    save();refreshStudio();notify('Camera event removed — same timestamp');return;
+   }
+   // Replacing the angle at the same time prevents a zero-duration camera segment.
+   active.cameraId=id;
+   save();refreshStudio();notify('Camera angle replaced at same timestamp');return;
+  }
+  if(at<active.start)return notify('Camera end time cannot precede start time');
+  active.end=at;
   if(active.cameraId===id){save();refreshStudio();return}
  }
- t.cameras.push({id:uid(),cameraId:id,start:now,end:null,createdBy:logged,createdAt:tstamp()});
+ t.cameras.push({id:uid(),cameraId:id,start:at,end:null,createdBy:logged,createdAt:tstamp()});
  save();refreshStudio();
 };
 window.deleteLog=(key,id)=>{let t=currentTask(),kind=key==='sponsors'?'sponsors':'context';if(!t||!canEdit(t,kind))return;if(!confirm('Remove this annotation?'))return;t[key]=t[key].filter(x=>x.id!==id);save();refreshStudio()};
