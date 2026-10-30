@@ -119,7 +119,7 @@ function SponsorModal({ group, sponsor }: Extract<DialogModel, { type: 'sponsor'
       <Field full title="Sponsor name"><input id="sname" defaultValue={sponsor?.name || ''} placeholder="Brand name" required /></Field>
       <Field title="UPLOAD ORIGINAL PNG LOGO"><input type="file" id="simage" accept="image/png,.png" onChange={handleImage} />
         <div id="logo-preview" className="logo-preview">{preview ? <img src={preview} alt="Sponsor logo preview" /> : 'SELECT AN IMAGE — THIS WILL APPEAR ON THE ANALYST TAGGING CARD'}</div>
-        <small>PNG only, maximum 300 KB. The original PNG is stored unchanged—no cropping, resizing, conversion or recompression. Transparent margins remain part of the image.</small>
+        <small>PNG only, maximum 2 MB. The original PNG is stored unchanged—no cropping, resizing, conversion or recompression. Transparent margins remain part of the image.</small>
       </Field>
       <Field title="Fallback brand color"><input type="color" id="scolor" defaultValue={sponsor?.color || '#7059c4'} style={{ padding: 5, height: 45 }} /></Field>
       <HotkeyField id="shotkey" initial={sponsor?.hotkey} />

@@ -32,7 +32,7 @@ export class SaveCatalogDto {
   version!: number;
 }
 
-function validateCatalog(input: unknown): Prisma.InputJsonValue {
+export function validateCatalog(input: unknown): Prisma.InputJsonValue {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new BadRequestException('Invalid catalog');
   const data = input as Record<string, unknown>;
   const groups: Record<string, unknown[]> = {};
@@ -77,7 +77,7 @@ function validateCatalog(input: unknown): Prisma.InputJsonValue {
     });
   }
   const json = JSON.stringify(groups);
-  if (json.length > 500_000) throw new BadRequestException('Catalog is too large');
+  if (Buffer.byteLength(json, 'utf8') > 8 * 1024 * 1024) throw new BadRequestException('Catalog exceeds the 8 MB limit');
   return groups as Prisma.InputJsonValue;
 }
 

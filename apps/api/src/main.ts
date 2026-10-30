@@ -13,10 +13,10 @@ async function bootstrap() {
   }
   // Sponsor catalogs currently contain original small PNG data URLs. Nest's
   // default 100 KB JSON parser rejects an entire catalog even for a 2 KB logo.
-  // Keep a bounded body parser consistent with the catalog's 500 KB limit.
+  // Keep a bounded body parser consistent with the catalog's 8 MB limit.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
-  app.useBodyParser('json', { limit: '768kb' });
-  app.useBodyParser('urlencoded', { limit: '768kb', extended: true });
+  app.useBodyParser('json', { limit: '12mb' });
+  app.useBodyParser('urlencoded', { limit: '12mb', extended: true });
   app.use(cookieParser());
   app.enableCors({ origin, credentials: true, methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));

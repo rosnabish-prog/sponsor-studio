@@ -12,6 +12,7 @@ import { readStudioRoute, writeStudioRoute, type ProductView } from './routes';
 import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
 import { easternMatchDate, hasFinalResult, mergeTodayFixtureUpdates } from '../domain/fixtures';
 import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
+import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } from '../domain/catalogEditing';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -153,6 +154,7 @@ const save=()=>{if(workspaceId){syncDirty=true;void syncLive()}};
 let logged='';
 async function loadWorkspace(id:string) {
  const [catalog,members,tasks]=await Promise.all([api.catalog(id),api.members(id),api.tasks(id)]);
+ catalogClipboard=null;
  const definitions=catalog.payload;
  db={
   users:members.map(m=>({id:m.user.id,name:m.user.name,email:m.user.email,role:m.role==='OWNER'||m.role==='ADMIN'?'admin':m.role==='VIEWER'?'viewer':'analyst',password:''})),
@@ -234,7 +236,7 @@ window.login=async e=>{
  try{const result=await api.login({email,password:pwd});remoteUser=result.user;await loadLiveSession()}catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Sign in failed';}
 };
 window.selectWorkspace=id=>{if(liveWorkspaces.some(w=>w.workspace.id===id)){view='dashboard';selectedTaskId='';writeStudioRoute(view);void loadWorkspace(id).catch(error=>notify('Workspace load failed: '+error.message))}};
-window.logout=()=>{void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];selectedTaskId='';view='dashboard';writeStudioRoute(view,'',true);if(videoEl){videoEl.pause()}clearLocalVideos();render()};
+window.logout=()=>{void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];catalogClipboard=null;selectedTaskId='';view='dashboard';writeStudioRoute(view,'',true);if(videoEl){videoEl.pause()}clearLocalVideos();render()};
 window.showWorkspaceSwitcher=()=>{workspaceId='';render()};
 window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';editingInterval=null;writeStudioRoute(view);render();window.scrollTo(0,0)};
 function restoreRoute(){const route=readStudioRoute();view=route.view;selectedTaskId=view==='studio'?route.taskId:'';reportTaskId=view==='reports'?route.taskId:reportTaskId;if(videoEl)videoEl.pause();if(workspaceId)render();window.scrollTo(0,0)}
@@ -569,6 +571,75 @@ window.saveGroup=(kind,id)=>{
  }
  save();window.closeModal?.();render();notify('Attribute list saved');
 };
+let catalogClipboard:{kind:CatalogKind;groupId:string;itemId:string}|null=null;
+const catalogGroupItems=(kind:CatalogKind,groupId:string)=>kind==='sponsor'
+ ?db.sponsorGroups.find(group=>group.id===groupId)?.sponsors
+ :(kind==='event'?db.eventGroups:db.cameraGroups).find(group=>group.id===groupId)?.items;
+const catalogFits=()=>new TextEncoder().encode(JSON.stringify({sponsorGroups:db.sponsorGroups,eventGroups:db.eventGroups,cameraGroups:db.cameraGroups})).byteLength<=MAX_CATALOG_BYTES;
+window.copyCatalogItem=(kind,gid,id)=>{
+ if(me()?.role!=='admin')return;
+ const item=catalogGroupItems(kind,gid)?.find(row=>row.id===id);
+ if(!item)return notify('This catalog item is no longer available.');
+ catalogClipboard={kind,groupId:gid,itemId:id};notify(`${item.name} copied. Use Paste in a list, or drag its handle into another list.`);
+};
+function duplicateCatalogItem(kind:CatalogKind,sourceGroupId:string,sourceItemId:string,targetGroupId:string,targetId='',placement:DropPlacement='after'){
+ if(kind==='sponsor'){
+  const source=db.sponsorGroups.find(group=>group.id===sourceGroupId)?.sponsors.find(item=>item.id===sourceItemId);
+  const dest=db.sponsorGroups.find(group=>group.id===targetGroupId)?.sponsors;
+  if(!source||!dest)return notify('Sponsor or destination list no longer exists.');
+  if(dest.length>=300)return notify('A sponsor list can contain at most 300 entries.');
+  const clone=copyCatalogEntry(source,uid(),sourceGroupId===targetGroupId);
+  const target=dest.findIndex(item=>item.id===targetId);
+  dest.splice(target<0?dest.length:target+(placement==='after'?1:0),0,clone);
+  if(!catalogFits()){dest.splice(dest.findIndex(item=>item.id===clone.id),1);return notify('Sponsor catalog is over the 8 MB limit. Remove some logos before copying.');}
+  save();render();notify(`${source.name} copied to the destination list. Its shortcut was cleared.`);
+ }else{
+  const source=(kind==='event'?db.eventGroups:db.cameraGroups).find(group=>group.id===sourceGroupId)?.items.find(item=>item.id===sourceItemId);
+  const dest=(kind==='event'?db.eventGroups:db.cameraGroups).find(group=>group.id===targetGroupId)?.items;
+  if(!source||!dest)return notify('Attribute or destination list no longer exists.');
+  if(dest.length>=300)return notify('An attribute list can contain at most 300 entries.');
+  const clone=copyCatalogEntry(source,uid(),sourceGroupId===targetGroupId);
+  const target=dest.findIndex(item=>item.id===targetId);
+  dest.splice(target<0?dest.length:target+(placement==='after'?1:0),0,clone);
+  if(!catalogFits()){dest.splice(dest.findIndex(item=>item.id===clone.id),1);return notify('Catalog is over the 8 MB limit.');}
+  save();render();notify(`${source.name} copied. Its shortcut was cleared.`);
+ }
+}
+window.pasteCatalogItem=(kind,gid)=>{
+ if(me()?.role!=='admin')return;
+ if(!catalogClipboard)return notify('Select Copy on a sponsor or attribute first.');
+ if(catalogClipboard.kind!==kind)return notify('Paste into a list of the same type (sponsor, event or camera).');
+ duplicateCatalogItem(kind,catalogClipboard.groupId,catalogClipboard.itemId,gid);
+};
+window.moveCatalogItem=(kind,sourceGroupId,itemId,targetGroupId,targetId='',placement='before')=>{
+ if(me()?.role!=='admin')return;
+ if(sourceGroupId!==targetGroupId){duplicateCatalogItem(kind,sourceGroupId,itemId,targetGroupId,targetId,placement);return;}
+ if(!targetId)return;
+ if(kind==='sponsor'){
+  const group=db.sponsorGroups.find(row=>row.id===sourceGroupId);if(!group)return;
+  const next=reorderById(group.sponsors,itemId,targetId,placement);if(next===group.sponsors)return;
+  group.sponsors=next;
+ }else{
+  const group=(kind==='event'?db.eventGroups:db.cameraGroups).find(row=>row.id===sourceGroupId);if(!group)return;
+  const next=reorderById(group.items,itemId,targetId,placement);if(next===group.items)return;
+  group.items=next;
+ }
+ save();render();
+};
+window.moveCatalogGroup=(kind,id,targetId,placement='before')=>{
+ if(me()?.role!=='admin')return;
+ if(kind==='sponsor'){
+  const next=reorderById(db.sponsorGroups,id,targetId,placement);if(next===db.sponsorGroups)return;
+  db.sponsorGroups=next;
+ }else if(kind==='event'){
+  const next=reorderById(db.eventGroups,id,targetId,placement);if(next===db.eventGroups)return;
+  db.eventGroups=next;
+ }else{
+  const next=reorderById(db.cameraGroups,id,targetId,placement);if(next===db.cameraGroups)return;
+  db.cameraGroups=next;
+ }
+ save();render();
+};
 window.addSponsorToCurrentTask=()=>{const task=currentTask();if(!task||me()?.role!=='admin')return;const group=db.sponsorGroups.find(row=>task.sponsorGroupIds.includes(row.id));if(!group){notify('Assign a sponsor list to the task first.');return}window.sponsorModal?.(group.id)};
 window.sponsorModal=(gid,sid='')=>{const group=db.sponsorGroups.find(g=>g.id===gid);if(!group)return;openDialog({type:'sponsor',group,sponsor:group.sponsors.find(s=>s.id===sid)});};
 window.saveSponsor=async(gid,sid)=>{
@@ -585,11 +656,10 @@ window.saveSponsor=async(gid,sid)=>{
  if(!sponsor){sponsor={id:uid(),name};group.sponsors.push(sponsor)}
  sponsor.name=name;sponsor.color=formVal('scolor');sponsor.hotkey=shortcut;
  if(logoData){sponsor.logo=logoData;sponsor.logoTrimmed=false;}
- const payload={sponsorGroups:db.sponsorGroups,eventGroups:db.eventGroups,cameraGroups:db.cameraGroups};
- if(new TextEncoder().encode(JSON.stringify(payload)).byteLength>MAX_CATALOG_BYTES){
+ if(!catalogFits()){
   if(before){const index=group.sponsors.findIndex(item=>item.id===sponsor!.id);if(index>=0)group.sponsors[index]=before;}
   else group.sponsors=group.sponsors.filter(item=>item.id!==sponsor!.id);
-  return notify('Sponsor catalog exceeds the 500 KB storage limit. Remove oversized existing logos before adding more.');
+  return notify('Sponsor catalog exceeds the 8 MB storage limit. Remove oversized existing logos before adding more.');
  }
  save();window.closeModal?.();render();notify('Sponsor saved');
 };

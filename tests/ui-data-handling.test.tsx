@@ -21,6 +21,8 @@ import { displayHotkey, hotkeyFromKeyboard, normalizeHotkey } from '../src/domai
 import { hasFinalResult, mergeTodayFixtureUpdates } from '../src/domain/fixtures';
 import { StudioModal } from '../src/components/StudioModals';
 import { readOriginalPng, MAX_ORIGINAL_PNG_BYTES } from '../src/domain/logoUpload';
+import { copyCatalogEntry, reorderById } from '../src/domain/catalogEditing';
+import { AttributesScreen, SponsorLibraryScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
 import type { StudioScreenModel } from '../src/types/screen';
@@ -320,7 +322,7 @@ test('PNG uploads preserve the original bytes without canvas resizing or format 
   try {
     const result=await readOriginalPng(file);
     assert.equal(result,`data:image/png;base64,${Buffer.from(original).toString('base64')}`);
-    assert.equal(MAX_ORIGINAL_PNG_BYTES,300*1024);
+    assert.equal(MAX_ORIGINAL_PNG_BYTES,2*1024*1024);
     const fake=new dom.window.File([new Uint8Array([1,2,3,4,5,6,7,8])],'fake.png',{type:'image/png'});
     Object.defineProperty(fake,'slice',{value:()=>({arrayBuffer:async()=>new Uint8Array([1,2,3,4,5,6,7,8]).buffer})});
     await assert.rejects(()=>readOriginalPng(fake),/valid PNG/);
@@ -332,6 +334,44 @@ test('PNG uploads preserve the original bytes without canvas resizing or format 
     (globalThis as unknown as {FileReader:typeof FileReader}).FileReader=oldReader;
     dom.window.close();
   }
+});
+
+test('catalog reordering persists array order and changes studio button order',()=>{
+  const sponsors=[{id:'alpha',name:'Alpha'},{id:'beta',name:'Beta'},{id:'gamma',name:'Gamma'}];
+  const moved=reorderById(sponsors,'gamma','alpha','before');
+  assert.deepEqual(moved.map(item=>item.id),['gamma','alpha','beta']);
+  assert.deepEqual(sponsors.map(item=>item.id),['alpha','beta','gamma']);
+  assert.deepEqual(reorderById(moved,'gamma','beta','after').map(item=>item.id),['alpha','beta','gamma']);
+  assert.strictEqual(reorderById(sponsors,'alpha','alpha'),sponsors);
+  const orderedModel={...studio,sponsors:moved};
+  const markup=renderToStaticMarkup(<StudioRail model={orderedModel}/>);
+  assert.ok(markup.indexOf('Gamma')<markup.indexOf('Alpha'));
+  assert.ok(markup.indexOf('Alpha')<markup.indexOf('Beta'));
+});
+
+test('copied sponsors keep original PNG/color but receive unique IDs and no conflicting hotkeys',()=>{
+  const original={id:'first',name:'Roshan',logo:'data:image/png;base64,iVBORw0KGgo=',color:'#ff7722',hotkey:'ctrl+1'};
+  const copied=copyCatalogEntry(original,'new-id',false);
+  assert.equal(copied.logo,original.logo);
+  assert.equal(copied.color,original.color);
+  assert.equal(copied.name,original.name);
+  assert.equal(copied.id,'new-id');
+  assert.equal(copied.hotkey,'');
+  assert.equal(original.hotkey,'ctrl+1');
+  assert.equal(copyCatalogEntry(original,'same-list',true).name,'Roshan (copy)');
+});
+
+test('sponsor and attribute lists show drag, copy/paste and keyboard-accessible ordering controls',()=>{
+  const richer={...data,sponsorGroups:[...data.sponsorGroups,{id:'g2',name:'Other list',sponsors:[]}],
+    eventGroups:[...data.eventGroups,{id:'e2',name:'Other events',items:[]}]};
+  const sponsorHtml=renderToStaticMarkup(<SponsorLibraryScreen data={richer}/>);
+  assert.match(sponsorHtml,/Drag to reorder/);
+  assert.match(sponsorHtml,/Copy/);
+  assert.match(sponsorHtml,/Paste here/);
+  assert.match(sponsorHtml,/Move .* list down/);
+  const attrHtml=renderToStaticMarkup(<AttributesScreen data={richer}/>);
+  assert.match(attrHtml,/Paste here/);
+  assert.match(attrHtml,/Drag Goal to reorder/);
 });
 
 test('timeline segment carries sponsor configured color and offers confirmed edge editing',()=>{
