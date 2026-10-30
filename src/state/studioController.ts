@@ -302,7 +302,7 @@ window.editRecordedAnnotation=(key,id)=>{
  const name=labelFor(task,key,key==='sponsors'?(row as SponsorAnnotation).sponsorId:key==='events'?(row as EventAnnotation).eventId:(row as CameraAnnotation).cameraId);
  confirmInApp('Edit recorded interval',`You are about to change the saved ${name} interval (${fmt(row.start)}–${fmt(row.end!)}). Continue to the editor?`,()=>{
   editingInterval={key,id,start:row.start,end:row.end!};
-  studioTab='all';refreshStudio();notify('Drag either edge of the highlighted timeline segment, then Save.');
+  refreshStudio();notify('Drag either edge of the highlighted timeline segment, then Save.');
  },{actionLabel:'CONTINUE TO EDIT',danger:false});
 };
 window.cancelTimelineEdit=()=>{editingInterval=null;refreshStudio()};

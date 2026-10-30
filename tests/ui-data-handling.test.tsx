@@ -391,6 +391,16 @@ test('recorded annotations are visible at the playhead, and admin task deletion 
   assert.match(studioHtml,/REOPEN TASK/);
 });
 
+test('interval editing keeps the selected sponsor category active', () => {
+  const editing={...studio,selectedTab:'sponsors' as const,editingInterval:{key:'sponsors' as const,id:'one',start:2,end:30}};
+  const html=renderToStaticMarkup(<AnnotationStudioScreen model={editing} isAdmin/>);
+  const sponsorTab=html.match(/<button[^>]*data-studio-tab="sponsors"[^>]*>/)?.[0]||'';
+  assert.match(sponsorTab,/aria-pressed="true"/);
+  assert.match(html,/EDIT INTERVAL/);
+  assert.match(html,/Save interval/);
+  assert.match(html,/Select sponsor logos from the right-hand SPONSORS panel/);
+});
+
 test('sponsor and tag shortcuts accept letters, digits, Ctrl and Alt with stable normalized keys',()=>{
   assert.equal(normalizeHotkey(' Ctrl + Q '),'ctrl+q');
   assert.equal(normalizeHotkey('Alt + 8'),'alt+8');
