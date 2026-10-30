@@ -25,3 +25,35 @@ export function selectCameraAngle(
   next.push({ id: makeId(), cameraId, start: at, end: null, createdBy: author, createdAt });
   return { rows: next, action: active.length ? 'switched' : 'started' };
 }
+
+/** True when restarting a camera at this time would overwrite recorded footage. */
+export function hasRecordedCameraAfter(rows: CameraAnnotation[], at: number): boolean {
+  return rows.some(row => row.end !== null && row.end > at);
+}
+
+/**
+ * Re-tag camera footage from a historical playhead, after explicit confirmation.
+ * Retain complete history before the playhead, truncate the interval crossing it,
+ * and remove future camera intervals so the new live tag never overlaps old ones.
+ * Existing saved rows are never reopened (the API correctly forbids that).
+ */
+export function resumeCameraFromTimestamp(
+  rows: CameraAnnotation[], cameraId: string, at: number,
+  author: string, createdAt: string, makeId: () => string,
+): { rows: CameraAnnotation[]; removed: number; trimmed: number } {
+  let removed = 0;
+  let trimmed = 0;
+  const next: CameraAnnotation[] = [];
+  for (const row of rows) {
+    if (row.end !== null && row.end <= at) {
+      next.push(row);
+    } else if (row.start < at - SAME_TIME_TOLERANCE) {
+      next.push({ ...row, end: at });
+      trimmed++;
+    } else {
+      removed++;
+    }
+  }
+  next.push({ id: makeId(), cameraId, start: at, end: null, createdBy: author, createdAt });
+  return { rows: next, removed, trimmed };
+}

@@ -18,10 +18,11 @@ export function BrandLogo({ sponsor, className = 'tinylogo' }: { sponsor: Sponso
 }
 
 function EventChip({ item, active, recorded, disabled, camera }: { item: TagAttribute; active: boolean; recorded: boolean; disabled: boolean; camera: boolean }) {
+  const recordedAction = camera ? 'SAVED at this time, tap to resume LIVE with confirmation' : 'SAVED at this time, tap to edit with confirmation';
   return <button type="button" className={`event-chip tagged-state-chip ${camera ? 'camera-chip' : ''} ${active ? 'active' : ''} ${recorded ? 'recorded' : ''}`}
     onClick={() => camera ? window.tagCamera?.(item.id) : window.tagEvent?.(item.id)} disabled={disabled}
-    aria-pressed={active || recorded} aria-label={`${item.name}${item.hotkey ? `, ${displayHotkey(item.hotkey)}` : ''} · ${active ? 'LIVE, tap to end' : recorded ? 'SAVED at this time, tap to edit with confirmation' : 'OFF, tap to start'}`}
-    title={`${item.name}${item.hotkey ? ` · ${displayHotkey(item.hotkey)}` : ''} · ${active ? 'LIVE' : recorded ? 'SAVED — click to edit' : 'OFF'}`}>
+    aria-pressed={active || recorded} aria-label={`${item.name}${item.hotkey ? `, ${displayHotkey(item.hotkey)}` : ''} · ${active ? 'LIVE, tap to end' : recorded ? recordedAction : 'OFF, tap to start'}`}
+    title={`${item.name}${item.hotkey ? ` · ${displayHotkey(item.hotkey)}` : ''} · ${active ? 'LIVE' : recorded ? camera ? 'SAVED — click to resume LIVE' : 'SAVED — click to edit' : 'OFF'}`}>
     <span className="chip-symbol">{camera ? '◎' : '↔'}</span><span className="chip-label">{item.name}</span>
     {item.hotkey && <kbd className="hotkey-hint">{displayHotkey(item.hotkey)}</kbd>}
     <span className={`tag-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>

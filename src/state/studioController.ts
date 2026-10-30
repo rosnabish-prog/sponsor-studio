@@ -13,7 +13,7 @@ import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
 import { easternMatchDate, hasFinalResult, mergeTodayFixtureUpdates } from '../domain/fixtures';
 import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
 import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } from '../domain/catalogEditing';
-import { selectCameraAngle } from '../domain/cameraSwitch';
+import { hasRecordedCameraAfter, resumeCameraFromTimestamp, selectCameraAngle } from '../domain/cameraSwitch';
 import { captureStudioSpacebar } from '../domain/studioKeyboard';
 
 export function initializeStudioController(mount: StudioMount) {
@@ -350,9 +350,17 @@ window.tagCamera=id=>{
  const t=currentTask();if(!t||!canEdit(t,'context'))return;
  if(!camerasFor(t).some(x=>x.id===id))return;
  const at=seconds(t),active=t.cameras.find(x=>x.cameraId===id&&x.end==null);
- if(!active){
-  const recorded=recordedAt(t.cameras,at);
-  if(recorded)return window.editRecordedAnnotation?.('cameras',recorded.id);
+ if(!active&&hasRecordedCameraAfter(t.cameras,at)){
+  const affected=t.cameras.filter(row=>row.end!==null&&row.end>at).length;
+  videoEl?.pause();
+  confirmInApp('Resume camera tagging',`Start LIVE camera tagging from ${fmt(at)}? This keeps all earlier camera history, but replaces ${affected} saved camera interval${affected===1?'':'s'} at or after this time.`,()=>{
+   const current=currentTask();
+   if(!current||!canEdit(current,'context'))return;
+   current.cameras=resumeCameraFromTimestamp(current.cameras,id,at,logged,tstamp(),uid).rows;
+   editingInterval=null;
+   save();refreshStudio();notify(`Camera LIVE from ${fmt(at)}. Future camera intervals replaced.`);
+  },{actionLabel:'RE-TAG FROM HERE',danger:true});
+  return;
  }
  const result=selectCameraAngle(t.cameras,id,at,logged,tstamp(),uid);
  t.cameras=result.rows;
