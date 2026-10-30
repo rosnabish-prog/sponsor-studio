@@ -83,10 +83,11 @@ test('Space pauses video without activating the focused sponsor button or deleti
     button.focus();
     assert.equal(dom.window.document.activeElement,button);
     assert.equal(button.dispatchEvent(space('keydown')),false,'keydown is canceled before native button activation');
-    assert.notEqual(dom.window.document.activeElement,button,'focused sponsor button is blurred');
+    assert.equal(dom.window.document.activeElement,button,'Space leaves the sponsor button focused');
     assert.equal(button.dispatchEvent(space('keyup')),false,'keyup cannot synthesize a button click');
     assert.equal(playbackToggles,1);
     assert.equal(annotationToggles,0);
+    assert.equal(dom.window.document.activeElement,button,'button remains focused after Space is released');
     assert.equal(dom.window.document.body.dispatchEvent(space('keydown')),false);
     assert.equal(dom.window.document.body.dispatchEvent(space('keydown',true)),false,'held Space does not repeat playback');
     assert.equal(dom.window.document.body.dispatchEvent(space('keyup')),false);

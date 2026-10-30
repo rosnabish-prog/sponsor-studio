@@ -11,12 +11,6 @@ export function captureStudioSpacebar(event: KeyboardEvent, enabled: boolean, to
   event.preventDefault();
   event.stopPropagation();
   if (event.type === 'keydown' && !event.repeat) {
-    // A mouse click leaves the sponsor/event/camera button focused. Remove that
-    // focus before keyup so the browser cannot dispatch a synthetic button click.
-    if (target instanceof Element) {
-      const focusedButton = target.closest<HTMLElement>('button,summary,[role="button"]');
-      if (focusedButton && focusedButton === document.activeElement) focusedButton.blur();
-    }
     togglePlayback();
   }
   return true;
