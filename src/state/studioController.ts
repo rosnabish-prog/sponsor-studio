@@ -11,6 +11,7 @@ import { persistStudio } from '../api/sync';
 import { readStudioRoute, writeStudioRoute, type ProductView } from './routes';
 import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
 import { easternMatchDate, hasFinalResult, mergeTodayFixtureUpdates } from '../domain/fixtures';
+import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -570,60 +571,6 @@ window.saveGroup=(kind,id)=>{
 };
 window.addSponsorToCurrentTask=()=>{const task=currentTask();if(!task||me()?.role!=='admin')return;const group=db.sponsorGroups.find(row=>task.sponsorGroupIds.includes(row.id));if(!group){notify('Assign a sponsor list to the task first.');return}window.sponsorModal?.(group.id)};
 window.sponsorModal=(gid,sid='')=>{const group=db.sponsorGroups.find(g=>g.id===gid);if(!group)return;openDialog({type:'sponsor',group,sponsor:group.sponsors.find(s=>s.id===sid)});};
-// Trim transparent image margins before thumbnailing. A fixed 220 × 140
-// thumbnail with transparent padding makes horizontal brand marks appear tiny.
-function logoAlphaBounds(pixels:Uint8ClampedArray,width:number,height:number){
- let left=width,top=height,right=-1,bottom=-1;
- for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-  if(pixels[(y*width+x)*4+3]<=12)continue;
-  left=Math.min(left,x);top=Math.min(top,y);
-  right=Math.max(right,x);bottom=Math.max(bottom,y);
- }
- if(right<left)return {x:0,y:0,width,height};
- const pad=Math.max(1,Math.ceil(Math.min(width,height)*.012));
- left=Math.max(0,left-pad);top=Math.max(0,top-pad);
- right=Math.min(width-1,right+pad);bottom=Math.min(height-1,bottom+pad);
- return {x:left,y:top,width:right-left+1,height:bottom-top+1};
-}
-function cropLogoDataUrl(source:string):Promise<string>{
- return new Promise<string>((resolve,reject)=>{
-  const img=new Image();
-  img.onerror=()=>reject(new Error('Could not decode sponsor image'));
-  img.onload=()=>{
-   try{
-    const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
-    if(!iw||!ih)throw new Error('Image has no dimensions');
-    const scanScale=Math.min(1,1400/Math.max(iw,ih));
-    const sw=Math.max(1,Math.round(iw*scanScale)),sh=Math.max(1,Math.round(ih*scanScale));
-    const sourceCanvas=document.createElement('canvas');sourceCanvas.width=sw;sourceCanvas.height=sh;
-    const sourceContext=sourceCanvas.getContext('2d',{willReadFrequently:true});
-    if(!sourceContext)throw new Error('Image processor is not available');
-    sourceContext.clearRect(0,0,sw,sh);
-    sourceContext.drawImage(img,0,0,sw,sh);
-    const rgba=sourceContext.getImageData(0,0,sw,sh).data;
-    const bounds=logoAlphaBounds(rgba,sw,sh);
-    const scale=Math.min(1,560/bounds.width,260/bounds.height);
-    const ow=Math.max(1,Math.round(bounds.width*scale));
-    const oh=Math.max(1,Math.round(bounds.height*scale));
-    const output=document.createElement('canvas');output.width=ow;output.height=oh;
-    const ctx=output.getContext('2d');
-    if(!ctx)throw new Error('Image processor is not available');
-    ctx.clearRect(0,0,ow,oh);
-    ctx.drawImage(sourceCanvas,bounds.x,bounds.y,bounds.width,bounds.height,0,0,ow,oh);
-    resolve(output.toDataURL('image/png'));
-   }catch(err){reject(err)}
-  };
-  img.src=source;
- });
-}
-function thumbnail(file:File):Promise<string>{
- return new Promise<string>((resolve,reject)=>{
-  const reader=new FileReader();
-  reader.onerror=()=>reject(new Error('Unable to read logo'));
-  reader.onload=()=>cropLogoDataUrl(String(reader.result)).then(resolve,reject);
-  reader.readAsDataURL(file);
- });
-}
 window.saveSponsor=async(gid,sid)=>{
  if(me()?.role!=='admin')return;
  const group=db.sponsorGroups.find(row=>row.id===gid),name=formVal('sname').trim();
@@ -631,13 +578,19 @@ window.saveSponsor=async(gid,sid)=>{
  if(!group||!name)return notify('Sponsor name required');
  const shortcut=normalizeHotkey(formVal('shotkey'));
  if(shortcut&&shortcutTaken(shortcut,sid))return notify('This shortcut is already assigned to another sponsor, event, or camera.');
- if(file&&file.size>6*1024*1024)return notify('Sponsor image must be under 6 MB');
  let logoData:string|undefined;
- try{if(file)logoData=await thumbnail(file)}catch{return notify('Could not read this logo image.')}
+ try{if(file)logoData=await readOriginalPng(file)}catch(error){return notify(error instanceof Error?error.message:'Could not read this PNG image.');}
  let sponsor=group.sponsors.find(row=>row.id===sid);
+ const before=sponsor?{...sponsor}:null;
  if(!sponsor){sponsor={id:uid(),name};group.sponsors.push(sponsor)}
  sponsor.name=name;sponsor.color=formVal('scolor');sponsor.hotkey=shortcut;
- if(logoData){sponsor.logo=logoData;sponsor.logoTrimmed=true;}
+ if(logoData){sponsor.logo=logoData;sponsor.logoTrimmed=false;}
+ const payload={sponsorGroups:db.sponsorGroups,eventGroups:db.eventGroups,cameraGroups:db.cameraGroups};
+ if(new TextEncoder().encode(JSON.stringify(payload)).byteLength>MAX_CATALOG_BYTES){
+  if(before){const index=group.sponsors.findIndex(item=>item.id===sponsor!.id);if(index>=0)group.sponsors[index]=before;}
+  else group.sponsors=group.sponsors.filter(item=>item.id!==sponsor!.id);
+  return notify('Sponsor catalog exceeds the 500 KB storage limit. Remove oversized existing logos before adding more.');
+ }
  save();window.closeModal?.();render();notify('Sponsor saved');
 };
 window.deleteSponsor=(gid,sid)=>{let g=db.sponsorGroups.find(x=>x.id===gid);if(!g)return;let used=db.tasks.some(t=>t.sponsors.some(v=>v.sponsorId===sid));if(used)return notify('This brand has recorded annotations. Preserve the history; create a new list instead.');const sponsor=g.sponsors.find(x=>x.id===sid);confirmInApp('Delete sponsor',`Delete ${sponsor?.name||'this sponsor'} and its uploaded brand image from the list?`,()=>{g.sponsors=g.sponsors.filter(x=>x.id!==sid);save();render();notify('Sponsor removed')},{actionLabel:'DELETE SPONSOR'})};

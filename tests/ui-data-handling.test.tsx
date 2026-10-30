@@ -20,6 +20,7 @@ import { LabelingStatusScreen } from '../src/components/LabelingStatusScreen';
 import { displayHotkey, hotkeyFromKeyboard, normalizeHotkey } from '../src/domain/hotkeys';
 import { hasFinalResult, mergeTodayFixtureUpdates } from '../src/domain/fixtures';
 import { StudioModal } from '../src/components/StudioModals';
+import { readOriginalPng, MAX_ORIGINAL_PNG_BYTES } from '../src/domain/logoUpload';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
 import type { StudioScreenModel } from '../src/types/screen';
@@ -307,6 +308,30 @@ test('sponsor and tag shortcuts accept letters, digits, Ctrl and Alt with stable
   const attrHtml=renderToStaticMarkup(<StudioModal model={{type:'item',kind:'camera',groupId:'cg',item:{id:'camera',name:'Wide',hotkey:'ctrl+1'}}}/>);
   assert.match(attrHtml,/id="ihotkey"/);
   assert.match(attrHtml,/value="ctrl\+1"/);
+});
+
+test('PNG uploads preserve the original bytes without canvas resizing or format conversion',async()=>{
+  const dom=new JSDOM('',{url:'http://localhost/'});
+  const oldReader=globalThis.FileReader;
+  (globalThis as unknown as {FileReader:typeof FileReader}).FileReader=dom.window.FileReader;
+  const original=new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0,73,72,68,82]);
+  const file=new dom.window.File([original],'original.png',{type:'image/png'});
+  Object.defineProperty(file,'slice',{value:(_start:number,_end:number)=>({arrayBuffer:async()=>original.slice(0,8).buffer})});
+  try {
+    const result=await readOriginalPng(file);
+    assert.equal(result,`data:image/png;base64,${Buffer.from(original).toString('base64')}`);
+    assert.equal(MAX_ORIGINAL_PNG_BYTES,300*1024);
+    const fake=new dom.window.File([new Uint8Array([1,2,3,4,5,6,7,8])],'fake.png',{type:'image/png'});
+    Object.defineProperty(fake,'slice',{value:()=>({arrayBuffer:async()=>new Uint8Array([1,2,3,4,5,6,7,8]).buffer})});
+    await assert.rejects(()=>readOriginalPng(fake),/valid PNG/);
+    const modal=renderToStaticMarkup(<StudioModal model={{type:'sponsor',group:{id:'g',name:'Sponsors',sponsors:[]}}}/>);
+    assert.match(modal,/accept="image\/png,\.png"/);
+    assert.match(modal,/original PNG is stored unchanged/);
+    assert.doesNotMatch(modal,/trimmed automatically/);
+  }finally{
+    (globalThis as unknown as {FileReader:typeof FileReader}).FileReader=oldReader;
+    dom.window.close();
+  }
 });
 
 test('timeline segment carries sponsor configured color and offers confirmed edge editing',()=>{

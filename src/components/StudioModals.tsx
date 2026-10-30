@@ -111,15 +111,15 @@ function SponsorModal({ group, sponsor }: Extract<DialogModel, { type: 'sponsor'
   const [preview, setPreview] = useState(sponsor?.logo || '');
   const handleImage = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !file.type.startsWith('image/')) { setPreview(''); return; }
+    if (!file || (file.type !== 'image/png' && !file.name.toLowerCase().endsWith('.png'))) { setPreview(''); return; }
     const reader = new FileReader(); reader.onload = () => setPreview(String(reader.result || '')); reader.readAsDataURL(file);
   };
   return <form onSubmit={event => { event.preventDefault(); window.saveSponsor?.(group.id, sponsor?.id || ''); }}>
     <div className="modalbody"><div className="formgrid">
       <Field full title="Sponsor name"><input id="sname" defaultValue={sponsor?.name || ''} placeholder="Brand name" required /></Field>
-      <Field title="UPLOAD SPONSOR LOGO / FULL BRAND IMAGE"><input type="file" id="simage" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={handleImage} />
+      <Field title="UPLOAD ORIGINAL PNG LOGO"><input type="file" id="simage" accept="image/png,.png" onChange={handleImage} />
         <div id="logo-preview" className="logo-preview">{preview ? <img src={preview} alt="Sponsor logo preview" /> : 'SELECT AN IMAGE — THIS WILL APPEAR ON THE ANALYST TAGGING CARD'}</div>
-        <small>Transparent margins are trimmed automatically so the brand fills the card. Existing white JPEG backgrounds require re-uploading the original transparent PNG.</small>
+        <small>PNG only, maximum 300 KB. The original PNG is stored unchanged—no cropping, resizing, conversion or recompression. Transparent margins remain part of the image.</small>
       </Field>
       <Field title="Fallback brand color"><input type="color" id="scolor" defaultValue={sponsor?.color || '#7059c4'} style={{ padding: 5, height: 45 }} /></Field>
       <HotkeyField id="shotkey" initial={sponsor?.hotkey} />

@@ -66,7 +66,8 @@ function validateCatalog(input: unknown): Prisma.InputJsonValue {
             id: item.id, name: item.name,
             hotkey,
             ...(key === 'sponsorGroups' ? {
-              logo: typeof item.logo === 'string' && /^(https:\/\/|data:image\/(png|jpeg|webp);base64,)/.test(item.logo) ? item.logo.slice(0, 100_000) : '',
+              // Never truncate a Base64 image: even one character missing corrupts the PNG.
+              logo: typeof item.logo === 'string' && /^(https:\/\/|data:image\/(png|jpeg|webp);base64,)/.test(item.logo) ? item.logo : '',
               color: typeof item.color === 'string' && /^#[\da-f]{6}$/i.test(item.color) ? item.color : '#888888',
               logoTrimmed: item.logoTrimmed === true,
             } : { kind: item.kind === 'point' ? 'point' : 'range', highValue: item.highValue === true }),

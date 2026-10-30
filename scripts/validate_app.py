@@ -33,7 +33,7 @@ for component in ['StudioWidgets', 'StudioModals', 'ReportWidgets']:
 for removed_view in ['loginView', 'dashboard', 'tasksView', 'studio', 'sponsorsView',
                      'attrsView', 'usersView', 'reportsView']:
     assert f'function {removed_view}(' not in controller, f'Obsolete HTML screen remains: {removed_view}'
-for token in ['UPLOAD SPONSOR LOGO', 'chooseFixtureDay', 'app-focus',
+for token in ['UPLOAD ORIGINAL PNG LOGO', 'chooseFixtureDay', 'app-focus',
               'deleteSponsor', 'dashboard-banner',
               'match-tile-grid', 'identity-lockup']:
     assert token in controller or token in styles or token in native_screens, f'Missing application feature: {token}'
