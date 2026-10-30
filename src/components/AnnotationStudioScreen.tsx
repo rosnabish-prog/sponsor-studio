@@ -38,13 +38,13 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
 
 function VideoPanel({ model }: { model: StudioScreenModel }) {
   const { videoSrc, videoName, videoType, isLocalVideo } = model;
-  const sourceState = isLocalVideo ? 'LOCAL VIDEO' : videoType === 's3' ? 'PRIVATE VIDEO · CLOUDFRONT' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : 'NO VIDEO ATTACHED';
+  const sourceState = isLocalVideo ? 'LOCAL VIDEO' : videoType === 's3' ? 'PRIVATE VIDEO · CLOUDFRONT' : videoType === 'buildup' ? 'BUILDUP VIDEO' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : 'NO VIDEO ATTACHED';
   const sourceNote = model.videoError || (isLocalVideo ? `${videoName || 'Video'} · Available in this browser session only. Select it again after refreshing.` : videoSrc ? `${videoName || 'Video'}${model.videoDimensions ? ` · ${model.videoDimensions}` : ''}` : 'Open a local video or configure a direct HTTPS source.');
   return <div className="video-box">
     <div className="video-header"><span>LIVE TAGGING CONSOLE</span><span id="videoSourceState">{sourceState}</span></div>
     <div id="videoFileStatus" className="video-source-note" role="status" aria-live="polite">{sourceNote}</div>
     <div className={`vidframe ${videoSrc ? 'video-native-frame' : ''}`}>
-      {videoSrc ? <video id="matchVideo" preload="metadata" playsInline aria-label="Match video · original proportions" src={videoSrc} /> :
+      {videoSrc ? <video id="matchVideo" preload="metadata" playsInline crossOrigin={videoType === 'buildup' ? 'use-credentials' : undefined} aria-label="Match video · original proportions" src={videoSrc} /> :
         <div className="fakepitch">
           <div className="field" /><div className="video-stamp">MESSI CUP · {model.number}</div>
           <strong>Ready for kickoff.</strong>

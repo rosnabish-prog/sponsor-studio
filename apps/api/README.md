@@ -45,8 +45,15 @@ Routes below are prefixed with `/api`. Most require a valid session cookie.
 | POST | `/workspaces/:workspaceId/tasks/:taskId/videos/:assetId/complete` | Finalize multipart upload |
 | POST | `/workspaces/:workspaceId/tasks/:taskId/videos/:assetId/abort` | Abort failed multipart upload |
 | GET | `/workspaces/:workspaceId/tasks/:taskId/videos/:assetId/playback` | Short-lived private CloudFront URL |
+| GET | `/workspaces/:workspaceId/tasks/:taskId/videos/buildup/stream` | Authorized BuildUp video stream with byte-range support |
 
 For annotation creation, send `{"kind":"SPONSOR","labelId":"s_adidas","start":12.5}`. A subsequent `PATCH` with `{"end":17.8}` closes it. `EVENT` and `CAMERA` are also supported. The writer must be an assigned analyst or workspace admin; submitted streams are immutable until an admin reopens them. All task and annotation lookups are scoped to the workspace.
+
+## BuildUp match video
+
+Set `BUILDUP_API_TOKEN` in the API environment (`apps/api/.env` for local development, or the root `.env` for Docker Compose) and restart the API. Keep this token server-side. In the match editor, select **BuildUp match video** and enter the numeric BuildUp match ID. Authorized users can then open the match in Annotation Studio. The API obtains and caches a temporary BuildUp CDN link, refreshes it before expiry or after a 403, and streams byte ranges to the browser without storing the file. The CDN URL is restricted to the expected BuildUp host and match path.
+
+The deployment server must be permitted by BuildUp/CDN to request the video. Playback and seeking also require the CDN to honor range requests and the browser to support the video's codecs. Proxy bandwidth is consumed while viewing; the API does not transcode the video. For cross-origin API deployments, session cookies and credentialed CORS must be configured for the frontend origin.
 
 ## Private video prerequisites (AWS)
 

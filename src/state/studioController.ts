@@ -5,7 +5,8 @@ import { computeInsights } from '../domain/analytics';
 import { annotatedEndpoint } from '../domain/labelingProgress';
 import { PLACEMENT_TYPES, VISIBILITY_QUALITIES } from '../domain/classifications';
 import { formatTimestamp as fmt, clampNumber as clamp, mergeIntervals as merged, intervalOverlap as overlap } from '../domain/intervals';
-import { api, fromApiTask, type ApiMembership, type ApiUser } from '../api/client';
+import { api, buildupVideoUrl, fromApiTask, type ApiMembership, type ApiUser } from '../api/client';
+import { recoverVideo } from './videoRecovery';
 import { persistStudio } from '../api/sync';
 import { readStudioRoute, writeStudioRoute, type ProductView } from './routes';
 import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
@@ -247,6 +248,7 @@ document.addEventListener('pointerdown',dismissActionMenu);
 window.openTask=id=>{
  if(me()?.role==='viewer')return notify('Viewers may access Insights and JSON exports only.');
  if(!visibleTasks().some(task=>task.id===id))return notify('This task is not available in your workspace.');
+ videoRecovery?.dispose();videoRecovery=null;videoError='';
  selectedTaskId=id;view='studio';tick=0;studioTab='all';editingInterval=null;writeStudioRoute(view,id);render();window.scrollTo(0,0);
  const asset=db.tasks.find(t=>t.id===id)?.videoAssetId;
   if(asset&&!localVideos[id]){void api.playback(workspaceId,id,asset).then(result=>{
@@ -366,22 +368,27 @@ window.deleteLog=(key,id)=>{const t=currentTask(),kind=key==='sponsors'?'sponsor
   else t.cameras=t.cameras.filter(x=>x.id!==id);
   save();refreshStudio();notify('Annotation removed');
  },{actionLabel:'REMOVE ANNOTATION'});};
-window.seekVideo=val=>{const t=currentTask();if(!t)return;const next=clamp(Number(val)||0,0,videoDuration(t));if(next<tick-0.2)cancelOpenAnnotationsOnRewind(t);tick=next;if(videoEl&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();refreshStudio();};
-window.skipVideo=(n:number)=>window.seekVideo?.((videoEl&&Number.isFinite(videoEl.currentTime)?videoEl.currentTime:tick)+n);
+window.seekVideo=val=>{const t=currentTask();if(!t)return;const next=clamp(Number(val)||0,0,videoDuration(t));if(next<tick-0.2)cancelOpenAnnotationsOnRewind(t);tick=next;videoRecovery?.seek(tick);if(videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();refreshStudio();};
+window.skipVideo=(n:number)=>window.seekVideo?.((videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.currentTime)?videoEl.currentTime:tick)+n);
 window.skipByStep=direction=>window.skipVideo?.((Number(direction)||0)*seekStep);
 window.setSeekStep=value=>{seekStep=value===10?10:5;refreshStudio();};
-window.togglePlay=()=>{if(!videoEl)return notify('Attach a video to play. You can still scrub timestamps to test tagging.');if(videoEl.paused){videoEl.play().catch(()=>notify('Video playback unavailable for this source.'))}else videoEl.pause()};
+ window.togglePlay=()=>{if(!videoEl)return notify('Attach a video to play. You can still scrub timestamps to test tagging.');if(videoRecovery){videoRecovery.toggle();refreshStudio();return;}if(videoEl.paused){videoEl.play().catch(()=>notify('Video playback unavailable for this source.'))}else videoEl.pause()};
 window.cycleRate=()=>{const values=[1,1.25,1.5,2];const next=values[(values.indexOf(playbackRate)+1)%values.length];playbackRate=next;if(videoEl)videoEl.playbackRate=next;refreshStudio();};
-let playbackRate=1,videoDimensions='',videoError='';
+ let playbackRate=1,videoDimensions='',videoError='';
+ let videoRecovery:ReturnType<typeof recoverVideo>|null=null;
 function recordTick(){const t=currentTask();if(t)t.observedTime=Math.max(t.observedTime||0,tick);}
 function attachVideo(){
  const el=document.getElementById('matchVideo') as HTMLVideoElement|null;
- if(!el){videoEl=null;return;}
+  if(!el){videoRecovery?.dispose();videoRecovery=null;videoEl=null;return;}
+  const t=currentTask();
+  const needsRecovery=t?.videoType==='buildup'&&!localVideos[t.id];
+  if(videoEl!==el||!needsRecovery){videoRecovery?.dispose();videoRecovery=null;}
+  if(needsRecovery&&!videoRecovery)videoRecovery=recoverVideo(el,{position:()=>tick,status:message=>{videoError=message;refreshStudio();}});
   if(videoEl===el)return;
   videoEl=el;
   el.playbackRate=playbackRate;
   el.addEventListener('ratechange',()=>{if(videoEl!==el)return;playbackRate=el.playbackRate;refreshStudio()});
- el.addEventListener('timeupdate',()=>{if(videoEl!==el)return;const t=currentTask();if(t&&el.currentTime<tick-0.2)cancelOpenAnnotationsOnRewind(t);tick=el.currentTime;recordTick();refreshStudio();});
+ el.addEventListener('timeupdate',()=>{if(videoEl!==el||videoRecovery?.isRecovering())return;const t=currentTask();if(t&&el.currentTime<tick-0.2)cancelOpenAnnotationsOnRewind(t);tick=el.currentTime;recordTick();refreshStudio();});
  el.addEventListener('play',refreshStudio);
  el.addEventListener('pause',refreshStudio);
  el.addEventListener('loadedmetadata',()=>{
@@ -396,7 +403,8 @@ function attachVideo(){
    recordTick();refreshStudio();
   }
  });
- el.addEventListener('error',()=>{
+  el.addEventListener('error',()=>{
+   if(videoEl!==el||videoRecovery)return;
   const msg='This browser could not decode the video. Try H.264 MP4 or WebM, or check the HTTPS source.';
   videoError=msg;refreshStudio();
   notify(msg);
@@ -524,15 +532,17 @@ window.saveTask=id=>{
  const firstEnd=Number(firstVal),secondStart=Number(secondVal);
  if(firstVal!==''&&(!Number.isFinite(firstEnd)||!Number.isFinite(secondStart)||firstEnd<=0||secondStart<firstEnd||secondStart>=minutes))return notify('Period mapping must satisfy 0 < first-half end ≤ second-half start < video duration.');
  const videoType=formVal('taskvideosrc') as TaskSummary['videoType'];
- const videoUrl=formVal('taskurl').trim();
+  const videoUrl=formVal('taskurl').trim();
+  const buildupMatchId=formVal('taskbuildupid').trim();
  if(task?.videoAssetId&&videoType!=='s3')return notify('Private S3 videos cannot be detached without a server-side delete operation.');
  if(videoType==='https'&&videoUrl&&!/^https:\/\//i.test(videoUrl))return notify('Direct video links must start with https://');
- if(videoType==='ftp'&&videoUrl&&!/^(ftp|sftp):\/\//i.test(videoUrl))return notify('FTP links must start with ftp:// or sftp://');
+  if(videoType==='ftp'&&videoUrl&&!/^(ftp|sftp):\/\//i.test(videoUrl))return notify('FTP links must start with ftp:// or sftp://');
+  if(videoType==='buildup'&&!/^[1-9]\d{0,14}$/.test(buildupMatchId))return notify('Enter a valid BuildUp match ID.');
  const fixtureId=formVal('taskfixture')||task?.fixtureId||'';
  if(!task&&fixtureId&&taskForFixture(fixtureId))return notify('This fixture already has a task. Open its existing entry in the Match Catalog.');
  const data={name,number,date:formVal('taskdate'),duration:Math.round(minutes*60*100)/100,
   periods:firstVal!==''?{firstEnd,secondStart}:null,sponsorGroupIds:checks('sgroups'),eventGroupIds:checks('egroups'),cameraGroupIds:checks('cgroups'),
-  sponsorAnalystId:formVal('tsponsor'),contextAnalystId:formVal('tcontext'),videoType,videoUrl:videoType==='none'?'':videoUrl,fixtureId};
+   sponsorAnalystId:formVal('tsponsor'),contextAnalystId:formVal('tcontext'),videoType,videoUrl:videoType==='none'||videoType==='buildup'?'':videoUrl,buildupMatchId:videoType==='buildup'?buildupMatchId:'',fixtureId};
  if(task&&formVal('taskremovevideo')==='yes'){
   const local=localVideos[task.id];if(local){URL.revokeObjectURL(local.url);delete localVideos[task.id];}
   delete videoDurations[task.id];videoDimensions='';videoError='';
@@ -718,7 +728,8 @@ function insightExport(d:ReturnType<typeof insightData>){
 }
 function exportObject(t:TaskSummary){let spo=sponsorFor(t),evt=eventsFor(t),cam=camerasFor(t),d=insightData(t);return {schema:'seebot.sponsor_visibility.v1',exportedAt:tstamp(),task:{id:t.id,number:t.number,name:t.name,date:t.date,videoDurationSeconds:t.duration,videoSourceType:t.videoType,videoSourceUrl:me()?.role==='viewer'?null:t.videoUrl||null,videoFileName:t.videoName||null,matchPeriods:t.periods||null},assignment:{sponsorAnalyst:{id:t.sponsorAnalystId,name:nameUser(t.sponsorAnalystId)},eventAndCameraAnalyst:{id:t.contextAnalystId,name:nameUser(t.contextAnalystId)}},status:{label:taskStatus(t),...t.submitted},definition:{visibility:'Sponsor is visible anywhere in frame; simultaneous placements of the same sponsor are counted once.',timebase:'Seconds from beginning of video',eventOverlap:'Sponsors and event intervals are matched by positive duration overlap. Legacy point annotations (if present) are checked at their original timestamps.'},attributes:{sponsors:spo.map(s=>({id:s.id,name:s.name,list:s.groupName})),keyEvents:evt,cameraAngles:cam},annotations:{sponsorVisibility:t.sponsors.map(x=>({...x,durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null})),keyEvents:t.events.map(x=>({...x,name:labelFor(t,'events',x.eventId),durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null})),cameraAngles:t.cameras.map(x=>({...x,name:labelFor(t,'cameras',x.cameraId),durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null}))},analytics:{uniqueSponsorsSeen:d.active.length,combinedBrandExposureSeconds:d.sumSeconds,sponsors:d.active.map(s=>({id:s.id,name:s.name,exposureSeconds:s.seconds,percentageOfVideo:Math.round(10000*s.seconds/t.duration)/100,visibilityIntervals:s.entries,keyEventOverlaps:s.eventHits})),eventSponsorAssociations:t.events.map(e=>({eventId:e.id,tag:e.eventId,startSeconds:e.start,endSeconds:e.end,durationSeconds:e.end==null?null:e.end-e.start,sponsorIds:spo.filter(s=>d.active.some(b=>b.id===s.id&&d.eventRows.some(event=>event.id===e.id&&event.brands.some(match=>match.id===s.id)))).map(s=>s.id)})),advanced:insightExport(d)}}}
 window.exportTask=id=>{let t=db.tasks.find(x=>x.id===id);if(!t||!visibleTasks().some(x=>x.id===id))return;let s=JSON.stringify(exportObject(t),null,2),a=document.createElement('a'),url=URL.createObjectURL(new Blob([s],{type:'application/json'}));a.href=url;a.download=(t.number||'match')+'_sponsor_annotations.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('JSON exported — '+t.number)};
-function render(){
+ function render(){
+ if(view!=='studio'||!workspaceId||!logged){videoRecovery?.dispose();videoRecovery=null;}
  if(sessionPending){mount('loading',{});return}
  const user=me();
  if(passwordChangeRequired){
@@ -735,7 +746,7 @@ function render(){
  if(view==='studio'&&!visibleTasks().some(task=>task.id===selectedTaskId)){view='tasks';selectedTaskId='';writeStudioRoute(view,'',true)}
  const t=view==='studio'?currentTask():null;
  const localVideo=t?localVideos[t.id]:undefined;
- const videoSrc=localVideo?.url||(t&&((t.videoType==='https'||t.videoType==='s3')&&t.videoUrl)?t.videoUrl:null);
+ const videoSrc=localVideo?.url||(t?.videoType==='buildup'&&workspaceId?buildupVideoUrl(workspaceId,t.id):t&&((t.videoType==='https'||t.videoType==='s3')&&t.videoUrl)?t.videoUrl:null);
  const heading=t?studioSidebarHeading():null;
  const currentCamera=t?.cameras.find(x=>x.end==null);
  const studioModel=t?{
@@ -748,7 +759,7 @@ function render(){
   cameraLabel:currentCamera?labelFor(t,'cameras',currentCamera.cameraId):'CAMERA NOT SELECTED',
   railTitle:heading!.title,railHint:heading!.hint,submitted:t.submitted||{sponsors:false,context:false},
   task:t,sponsors:sponsorFor(t),events:eventsFor(t),cameras:camerasFor(t),editingInterval:editingInterval||undefined,
-  seekStep,playbackRate,videoDimensions,videoError,playing:!!videoEl&&!videoEl.paused
+  seekStep,playbackRate,videoDimensions,videoError,playing:videoRecovery?videoRecovery.isPlaying():!!videoEl&&!videoEl.paused
  }:undefined;
  const reportsTasks=view==='reports'?visibleTasks():[];
  const selectedReport=reportsTasks.find(x=>x.id===reportTaskId)||reportsTasks[0];
@@ -760,14 +771,15 @@ function render(){
   data:db,focusId:insightFocusId,fixtures:OFFICIAL_FIXTURES,badges:BADGES,visibleTasks:reportsTasks
  }:undefined;
  mount(view,{user:{name:user.name,role:user.role},taskId:selectedTaskId,data:db,viewerId:logged,fixtures:OFFICIAL_FIXTURES,badges:BADGES,fixtureSyncLabel,fixtureRefreshing,fixtureDay,taskFilter,studio:studioModel,reports:reportsModel,workspaceName:liveWorkspaces.find(x=>x.workspace.id===workspaceId)?.workspace.name,workspaces:liveWorkspaces.map(x=>x.workspace)},()=>{
-  if(view==='studio')attachVideo();
+  if(view==='studio')attachVideo();else{videoRecovery?.dispose();videoRecovery=null;videoEl=null;}
  });
 }
 refreshFixtureFeed();
 const fixtureRefreshId=setInterval(refreshFixtureFeed,5*60*1000);
 render();
 void loadLiveSession().catch(()=>{logged='';remoteUser=null;passwordChangeRequired=false;sessionPending=false;render()});
-return ()=>{
+ return ()=>{
+  videoRecovery?.dispose();videoRecovery=null;
  clearInterval(fixtureRefreshId);
  document.removeEventListener('keydown',runShortcut,true);
  document.removeEventListener('keydown',runKeydown);

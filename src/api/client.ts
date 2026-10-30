@@ -2,6 +2,7 @@ import type { StudioData, TaskSummary, Fixture } from '../types/models';
 
 const runtimeEnv = import.meta.env || {};
 const baseUrl = (runtimeEnv.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+export const buildupVideoUrl = (w:string,t:string) => `${baseUrl}/workspaces/${encodeURIComponent(w)}/tasks/${encodeURIComponent(t)}/videos/buildup/stream`;
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -80,7 +81,8 @@ export function fromApiTask(t:ApiTask):TaskSummary {
     sponsorGroupIds:list(m.sponsorGroupIds),eventGroupIds:list(m.eventGroupIds),cameraGroupIds:list(m.cameraGroupIds),
     sponsorAnalystId:t.sponsorAnalystId||'',contextAnalystId:t.contextAnalystId||'',
     submitted:{sponsors:!!t.sponsorsSubmittedAt,context:!!t.contextSubmittedAt},
-    videoType:(t.videos?.length?'s3':m.videoType==='https'||m.videoType==='ftp'||m.videoType==='s3'?m.videoType:'none') as TaskSummary['videoType'],
+    videoType:(t.videos?.length?'s3':m.videoType==='https'||m.videoType==='ftp'||m.videoType==='s3'||m.videoType==='buildup'?m.videoType:'none') as TaskSummary['videoType'],
+    buildupMatchId:typeof m.buildupMatchId==='string'?m.buildupMatchId:'',
     videoUrl:typeof m.videoUrl==='string'?m.videoUrl:'',
     videoName:t.videos?.[0]?.filename,
     videoAssetId:t.videos?.[0]?.id,
@@ -94,5 +96,6 @@ export function fromApiTask(t:ApiTask):TaskSummary {
 
 export function toApiMetadata(task:TaskSummary) {
   return { sponsorGroupIds:task.sponsorGroupIds,eventGroupIds:task.eventGroupIds,cameraGroupIds:task.cameraGroupIds,
-    periods:task.periods||null,videoType:task.videoType||'none',videoUrl:task.videoType==='s3'?'':task.videoUrl||'' };
+    periods:task.periods||null,videoType:task.videoType||'none',videoUrl:task.videoType==='s3'||task.videoType==='buildup'?'':task.videoUrl||'',
+    buildupMatchId:task.videoType==='buildup'?task.buildupMatchId||'':'' };
 }

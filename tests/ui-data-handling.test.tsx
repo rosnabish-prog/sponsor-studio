@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { readStudioRoute, writeStudioRoute } from '../src/state/routes';
 import { annotatedEndpoint, labelingProgress, measuredCoverage } from '../src/domain/labelingProgress';
+import { recoverVideo } from '../src/state/videoRecovery';
 import { computeInsights } from '../src/domain/analytics';
 import { ExposureReport } from '../src/components/ReportWidgets';
 import { ExposureTrend } from '../src/components/ExposureTrend';
@@ -37,6 +38,40 @@ const data:StudioData = {
   cameraGroups:[{id:'c1',name:'Cameras',items:[{id:'camera',name:'Wide'}]}],
   tasks:[task],
 };
+
+class FakeVideo extends EventTarget {
+  currentTime=4200; duration=7800; readyState=0; paused=false; error:MediaError|null=null;
+  loads=0; plays=0;
+  load(){this.loads++;this.currentTime=0;this.readyState=0;}
+  play(){this.plays++;this.paused=false;return Promise.resolve();}
+  pause(){this.paused=true;}
+}
+
+test('interrupted video reconnects at the tagging time and resumes only after seeking', () => {
+  const video=new FakeVideo(), messages:string[]=[];
+  const recovery=recoverVideo(video as unknown as HTMLVideoElement,{position:()=>4200,status:message=>messages.push(message)});
+  video.dispatchEvent(new Event('error'));
+  assert.equal(video.loads,1); assert.equal(recovery.isRecovering(),true);
+  video.readyState=1;video.dispatchEvent(new Event('loadedmetadata'));
+  assert.equal(video.currentTime,4200); assert.equal(video.plays,0);
+  video.dispatchEvent(new Event('seeked'));
+  assert.equal(recovery.isRecovering(),false); assert.equal(video.plays,1);assert.equal(messages.at(-1),'');
+  recovery.dispose();
+});
+
+test('recovery respects a user pause and seek, limits retries, and allows manual retry', () => {
+  const video=new FakeVideo(), messages:string[]=[];
+  const recovery=recoverVideo(video as unknown as HTMLVideoElement,{position:()=>4200,status:message=>messages.push(message)});
+  video.dispatchEvent(new Event('error')); recovery.toggle(); recovery.seek(4300);
+  video.readyState=1;video.dispatchEvent(new Event('loadedmetadata'));
+  assert.equal(video.currentTime,4300);
+  video.dispatchEvent(new Event('seeked'));assert.equal(video.plays,0);
+  video.dispatchEvent(new Event('error'));video.dispatchEvent(new Event('error'));video.dispatchEvent(new Event('error'));
+  assert.equal(video.loads,3);assert.match(messages.at(-1)!,/press play to retry/i);
+  assert.equal(recovery.isRecovering(),true);video.dispatchEvent(new Event('error'));assert.equal(video.loads,3);
+  recovery.toggle();assert.equal(video.loads,4);
+  recovery.dispose();video.dispatchEvent(new Event('error'));assert.equal(video.loads,4);
+});
 
 test('URL route survives refreshes, differentiates pages, and encodes task identifiers', () => {
   let hash = '#/matches';
