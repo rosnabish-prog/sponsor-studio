@@ -35,8 +35,11 @@ html,body {
 body { accent-color:var(--orange); }
 button,input,textarea,select { font-family:'Manrope',system-ui,sans-serif!important; }
 button { transition:background .16s ease,border-color .16s ease,box-shadow .16s ease,transform .16s ease,color .16s ease; }
-button:focus-visible,a:focus-visible,summary:focus-visible,select:focus-visible,input:focus-visible {
- outline:2px solid var(--orange)!important;outline-offset:3px!important;
+button:focus,button:focus-visible,a:focus,a:focus-visible,
+summary:focus,summary:focus-visible,input:focus,input:focus-visible,
+select:focus,select:focus-visible,textarea:focus,textarea:focus-visible,
+[tabindex]:focus,[tabindex]:focus-visible {
+ outline:none!important;outline-offset:0!important;
 }
 button:disabled {opacity:.47!important;cursor:not-allowed!important;transform:none!important;}
 h1,h2,h3,h4,.pagehead h1,.studio-head h1,.insight-head h2 {
@@ -213,7 +216,7 @@ input:not([type='checkbox']):not([type='radio']):not([type='range']),textarea,se
  padding:11px 13px;
 }
 input::placeholder,textarea::placeholder{color:#74747b!important;}
-input:focus,select:focus,textarea:focus {border-color:var(--orange)!important;box-shadow:0 0 0 2px #ff9b3625!important;}
+input:focus,select:focus,textarea:focus {border-color:#404044!important;box-shadow:none!important;}
 input[type='range'] {accent-color:var(--orange)!important;}
 input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important;}
 .field label {font-size:11px!important;color:#c4c4c8!important;}
@@ -744,9 +747,8 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
  }
  .app-focus .studio-media-column:focus-visible,
  .app-focus .sponsor-rail:focus-visible {
-   outline:2px solid #ff9b36!important;
-   outline-offset:-2px!important;
-   border-radius:12px!important;
+   outline:none!important;
+   outline-offset:0!important;
  }
 }
 /* Compact/mobile: restore normal page scrolling, while leaving the

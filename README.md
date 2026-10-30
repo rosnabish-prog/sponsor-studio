@@ -126,6 +126,8 @@ Note: this is still a browser-local functional demo. It does not synchronize use
 
 **Workspace owner → Team → Remove** can remove any other admin or analyst. The owner cannot remove themselves, and the action requires an in-app confirmation. Removing a member unassigns both kinds of match streams where relevant, but preserves all existing annotations and task history. Changing an analyst into an admin also clears their analyst assignments. An admin has no removal control and direct calls to the removal action are rejected by the demo's UI-layer role check.
 
+The Team table displays the protected **Owner** role explicitly. The interface suppresses visible focus outlines and glows without disabling browser focus or text input. In the annotation studio, **Spacebar controls video play/pause only**, even after clicking a sponsor, event, or camera button; it does not activate the last focused control. Spacebar continues to work normally while typing in forms or interacting with a dialog.
+
 Task status is automatically derived, not manually changed:
 
 - **Ready**: no sponsor, event or camera annotations, and neither stream submitted (assignment alone does not start it).

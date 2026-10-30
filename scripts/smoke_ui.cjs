@@ -49,6 +49,9 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(document.querySelector('link[href^="assets/workspace-theme.css?v="]'),'complete style system loaded');
  assert.ok(fs.existsSync('assets/workspace-theme.css'),'reference-inspired theme file committed');
  const selectTheme=fs.readFileSync('assets/workspace-theme.css','utf8');
+ assert.ok(selectTheme.includes('button:focus,button:focus-visible')&&selectTheme.includes('outline:none!important'),'interactive elements no longer show focus outlines');
+ assert.ok(selectTheme.includes('input:focus,select:focus,textarea:focus {border-color:#404044!important;box-shadow:none!important;}'),'form fields do not show focused glows');
+ assert.ok(selectTheme.includes('.app-focus .studio-media-column:focus-visible')&&selectTheme.includes('.app-focus .sponsor-rail:focus-visible'),'focus outline removed from scroll panes');
  assert.ok(selectTheme.includes('select:not([multiple])')&&selectTheme.includes('appearance:none!important'),'all single-choice selects use consistent custom arrows');
  assert.ok(selectTheme.includes('background-position:right 18px center!important'),'desktop dropdown chevrons are inset 18px from right edge');
  assert.ok(selectTheme.includes('padding-right:46px!important'),'dropdown option labels have room before chevron');
@@ -104,6 +107,16 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(document.querySelectorAll('.event-chip:not(.camera-chip)').length>=3,'compact event chips present');
  expect(document.querySelectorAll('.camera-chip').length>=2,'camera chips present');
  let sponsor=document.querySelector('.rail-brand');
+ sponsor.focus();
+ const spaceDown=new window.KeyboardEvent('keydown',{key:' ',code:'Space',bubbles:true,cancelable:true});
+ sponsor.dispatchEvent(spaceDown);
+ const spaceUp=new window.KeyboardEvent('keyup',{key:' ',code:'Space',bubbles:true,cancelable:true});
+ sponsor.dispatchEvent(spaceUp);
+ assert.ok(spaceDown.defaultPrevented&&spaceUp.defaultPrevented,'Spacebar is intercepted before focused buttons can activate');
+ assert.equal(db().tasks.find(t=>t.id==='task_demo1').sponsors.length,0,'Spacebar never starts sponsor tagging');
+ assert.ok(document.getElementById('toast').textContent.includes('Attach a video'),'Spacebar routes to video playback');
+ sponsor.dispatchEvent(new window.Event('pointerup',{bubbles:true}));
+ assert.notEqual(document.activeElement,sponsor,'pointer controls are blurred to avoid retaining click focus');
  assert.equal(sponsor.querySelector('.rail-live-pill.off')?.textContent.trim(),'● OFF','sponsor initially shows red OFF');
  sponsor.click();
  assert.equal(document.querySelector('.rail-brand .rail-live-pill.on')?.textContent.trim(),'● LIVE','tapping starts green LIVE');
@@ -222,6 +235,7 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.equal(document.querySelectorAll('.groupitems .sponsor-mini').length,attrItemsBefore-1,'accepted removal updates attributes');
  // Owner can create analysts and admins, and assign analysts to both streams.
  window.navigate('users');
+ assert.deepEqual([...document.querySelectorAll('.table tbody tr')].map(r=>r.cells[1].textContent.trim()),['Owner','Analyst','Analyst'],'Team table displays Owner prominently as a role');
  assert.equal(document.querySelectorAll('button[aria-label^="Remove "]').length,2,'owner can remove analysts but not self');
  assert.ok(document.querySelector('.tag').textContent || document.querySelector('.ops-user').textContent.includes('OWNER'),'owner role shown in the team UI');
  window.userModal();
