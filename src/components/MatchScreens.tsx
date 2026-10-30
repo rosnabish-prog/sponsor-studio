@@ -202,7 +202,8 @@ export function MatchesScreen({ context }: { context: ScreenContext }) {
   return <>
     <div className="pagehead">
       <div><div className="eyebrow">PRODUCTION / ALL MATCHES</div><h1>Match assignments</h1><p className="sub">Only matches assigned to your account are visible to you.</p></div>
-      {context.user?.role === 'admin' && <button className="button primary" onClick={() => window.createTaskModal?.()}><Icon name="plus" /> New task</button>}
+      <div className="row wrap"><button className="button ghost" onClick={()=>window.navigate?.('labeling')}>Labeling status <Icon name="arrow" /></button>
+      {context.user?.role === 'admin' && <button className="button primary" onClick={() => window.createTaskModal?.()}><Icon name="plus" /> New task</button>}</div>
     </div>
     <div className="filterbar">
       {filters.map(([key, label]) => <button key={key} className={`chip ${context.taskFilter === key ? 'active' : ''}`} onClick={() => window.setFilter?.(key)}>{label}</button>)}

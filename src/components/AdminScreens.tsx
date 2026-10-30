@@ -125,7 +125,7 @@ export function TeamScreen({ data }: { data: StudioData }) {
                   <td><span className={`tag ${user.role === 'admin' ? 'pink' : ''}`}>{user.role}</span></td>
                   <td>{user.email}</td>
                   <td>{data.tasks.filter(task => task.sponsorAnalystId === user.id || task.contextAnalystId === user.id).length}</td>
-                  <td>{user.role === 'analyst' && <button className="button ghost tiny" onClick={() => window.resetMemberPassword?.(user.id)}>Reset password</button>}</td>
+                  <td>{user.role !== 'admin' && <button className="button ghost tiny" onClick={() => window.resetMemberPassword?.(user.id)}>Reset password</button>}</td>
                 </tr>
               ))}
             </tbody>

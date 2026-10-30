@@ -21,7 +21,7 @@ export async function apiRequest<T>(path: string, method = 'GET', data?: unknown
 }
 
 export interface ApiUser { id: string; name: string; email: string; passwordChangeRequired?: boolean }
-export interface ApiMembership { role: 'OWNER'|'ADMIN'|'ANALYST'|'REVIEWER'; workspace: { id:string;name:string;slug:string } }
+export interface ApiMembership { role: 'OWNER'|'ADMIN'|'ANALYST'|'REVIEWER'|'VIEWER'; workspace: { id:string;name:string;slug:string } }
 export interface ApiTeamMembership { role: ApiMembership['role']; user: ApiUser }
 export interface ApiProvisionResult { user: ApiUser; temporaryPassword: string | null; membership: { id:string;role:ApiMembership['role'] } }
 export interface ApiCatalog { version: number; payload: Pick<StudioData,'sponsorGroups'|'eventGroups'|'cameraGroups'> }
@@ -46,7 +46,7 @@ export const api = {
   createWorkspace: (name:string) => apiRequest<{id:string;name:string;slug:string}>('/workspaces','POST',{name}),
   members: (w:string) => apiRequest<ApiTeamMembership[]>(`/workspaces/${w}/members`),
   addMember: (w:string,email:string,role:ApiMembership['role']) => apiRequest<ApiTeamMembership>(`/workspaces/${w}/members`,'POST',{email,role}),
-  provisionMember:(w:string,body:{name:string;email:string;role:'ANALYST'|'REVIEWER'|'ADMIN'})=>
+  provisionMember:(w:string,body:{name:string;email:string;role:'ANALYST'|'REVIEWER'|'ADMIN'|'VIEWER'})=>
     apiRequest<ApiProvisionResult>(`/workspaces/${w}/members/provision`,'POST',body),
   resetMemberPassword:(w:string,id:string)=>
     apiRequest<{user:ApiUser;temporaryPassword:string}>(`/workspaces/${w}/members/${id}/reset-password`,'POST'),
@@ -55,6 +55,7 @@ export const api = {
   tasks: (w:string) => apiRequest<ApiTask[]>(`/workspaces/${w}/tasks`),
   createTask: (w:string,body:Record<string,unknown>) => apiRequest<ApiTask>(`/workspaces/${w}/tasks`,'POST',body),
   updateTask: (w:string,id:string,body:Record<string,unknown>) => apiRequest<ApiTask>(`/workspaces/${w}/tasks/${id}`,'PATCH',body),
+  deleteTask: (w:string,id:string) => apiRequest<{ok:boolean}>(`/workspaces/${w}/tasks/${id}`,'DELETE'),
   submit: (w:string,id:string,stream:'sponsors'|'context') => apiRequest<{ok:boolean}>(`/workspaces/${w}/tasks/${id}/submit`,'POST',{stream}),
   reopen: (w:string,id:string,stream:'sponsors'|'context') => apiRequest<{ok:boolean}>(`/workspaces/${w}/tasks/${id}/reopen`,'POST',{stream}),
   addAnnotation: (w:string,id:string,body:Record<string,unknown>) => apiRequest<ApiAnnotation>(`/workspaces/${w}/tasks/${id}/annotations`,'POST',body),

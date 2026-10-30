@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 import { readStudioRoute, writeStudioRoute } from '../src/state/routes';
+import { annotatedEndpoint, labelingProgress, measuredCoverage } from '../src/domain/labelingProgress';
 import { computeInsights } from '../src/domain/analytics';
 import { ExposureReport } from '../src/components/ReportWidgets';
 import { ExposureTrend } from '../src/components/ExposureTrend';
@@ -14,6 +15,7 @@ import { attachVideoAlignmentPause } from '../src/components/videoAlignmentScrol
 import { AppShell } from '../src/components/AppShell';
 import { StudioControls, StudioRail, StudioTimeline } from '../src/components/StudioWidgets';
 import { WorkspaceScreen } from '../src/components/WorkspaceScreen';
+import { LabelingStatusScreen } from '../src/components/LabelingStatusScreen';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
 import type { StudioScreenModel } from '../src/types/screen';
@@ -211,4 +213,52 @@ test('fixture cards are fully keyboard-accessible and team names use equal halve
   assert.match(html,/class="fixture-card fixture-task-done" role="button" tabindex="0"/);
   assert.match(html,/fixture-mini-team home/);
   assert.match(html,/fixture-mini-team away/);
+});
+
+test('coverage counts short gaps, excludes long missing windows and ignores playback position', () => {
+  const base={...task,duration:600,sponsors:[{...task.sponsors[0],start:0,end:60},{...task.sponsors[0],id:'next',start:360,end:420}],cameras:[],events:[],observedTime:600};
+  const complete={...base,sponsorGroupIds:['g1'],cameraGroupIds:[],eventGroupIds:['e1']};
+  assert.equal(measuredCoverage(base.sponsors,600),120,'five-minute missing window is not covered');
+  assert.equal(labelingProgress(complete).percent,20);
+  const gap={...base,sponsors:[{...task.sponsors[0],start:0,end:60},{...task.sponsors[0],id:'next',start:180,end:200}]};
+  assert.equal(measuredCoverage(gap.sponsors,600),200,'two-minute gap bridges two recorded intervals');
+  const empty={...complete,sponsors:[],events:[{id:'goal',eventId:'goal',kind:'point' as const,start:480,end:481,createdBy:'a1',createdAt:'now'}]};
+  assert.equal(labelingProgress(empty).percent,0,'a played video and a sparse match moment do not imply coverage');
+  assert.equal(labelingProgress(empty).eventCount,1);
+  assert.equal(annotatedEndpoint(empty),481);
+  const rendered=renderToStaticMarkup(<LabelingStatusScreen data={{...data,tasks:[empty]}} viewerId="a1" admin />);
+  assert.match(rendered,/Labeling status/);
+  assert.match(rendered,/0.0%/);
+  assert.match(rendered,/1 recorded/);
+});
+
+test('timeline ends near annotations and allows control-scroll zoom', () => {
+  const sample={...studio,duration:8100,task:{...studio.task,duration:8100,sponsors:[{...task.sponsors[0],start:0,end:60}]}};
+  const markup=renderToStaticMarkup(<StudioTimeline model={sample}/>);
+  assert.match(markup,/timeline through 01:00/);
+  assert.match(markup,/Ctrl \+ scroll to zoom/);
+  assert.match(markup,/00:15/);
+  assert.doesNotMatch(markup,/02:15:00/);
+  assert.match(markup,/Reset zoom/);
+});
+
+test('recorded annotations are visible at the playhead, and admin task deletion is gated', () => {
+  const at={...studio,tick:20,task:{...studio.task,sponsors:[{...task.sponsors[0],start:2,end:30}],cameras:[{id:'c',cameraId:'camera',start:10,end:40,createdBy:'a1',createdAt:'now'}]}};
+  const rail=renderToStaticMarkup(<StudioRail model={at}/>);
+  assert.match(rail,/RECORDED at this time, click to edit/);
+  assert.match(renderToStaticMarkup(<StudioControls model={at}/>),/RECORDED at this time, tap to edit/);
+  const studioHtml=renderToStaticMarkup(<AnnotationStudioScreen model={at} isAdmin/>);
+  assert.match(studioHtml,/DELETE TASK/);
+  assert.match(studioHtml,/REOPEN TASK/);
+});
+
+test('viewer sees only Insights and export, with no studio or management actions', () => {
+  const viewer={user:{name:'Report viewer',role:'viewer' as const}};
+  const reports={tasks:[{id:task.id,number:task.number,name:task.name}],selectedId:task.id,selectedTask:task,data,focusId:'',fixtures:[],badges:{},visibleTasks:[task]};
+  const shell=renderToStaticMarkup(<AppShell screen="reports" context={viewer}><span>Reports</span></AppShell>);
+  assert.match(shell,/Insights/);
+  assert.doesNotMatch(shell,/>Overview<|>Matches<|>Team<|>Sponsors</);
+  const page=renderToStaticMarkup(<Screen id="reports" context={{...viewer,reports}}/>);
+  assert.match(page,/Export JSON/);
+  assert.doesNotMatch(page,/Open studio/);
 });

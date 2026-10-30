@@ -1,7 +1,8 @@
 import {
   BadRequestException, Body, ConflictException, Controller, ForbiddenException,
-  Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards,
+  Delete, Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Req, ServiceUnavailableException, UseGuards,
 } from '@nestjs/common';
+import { AbortMultipartUploadCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { IsDateString, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 import { AuthRequest, SessionGuard } from './auth';
 import type { Prisma } from '../generated/prisma/client';
@@ -49,6 +50,12 @@ function validateMetadata(value: unknown): Prisma.InputJsonValue | undefined {
   return safe as Prisma.InputJsonValue;
 }
 
+function withoutVideoAccess<T extends {metadata:Prisma.JsonValue|null}>(task:T):T {
+  const metadata=task.metadata;
+  if(!metadata||typeof metadata!=='object'||Array.isArray(metadata))return task;
+  return {...task,metadata:{...metadata,videoUrl:''}};
+}
+
 export class TaskStreamDto {
   @IsIn(['sponsors', 'context']) stream!: 'sponsors' | 'context';
 }
@@ -59,12 +66,13 @@ export class TaskService {
 
   async listed(workspaceId: string, userId: string) {
     const member = await this.workspaces.access(workspaceId, userId);
-    const where = member.role === 'OWNER' || member.role === 'ADMIN' || member.role === 'REVIEWER'
+    const where = member.role === 'OWNER' || member.role === 'ADMIN' || member.role === 'REVIEWER' || member.role === 'VIEWER'
       ? { workspaceId }
       : { workspaceId, OR: [{ sponsorAnalystId: userId }, { contextAnalystId: userId }] };
-    return this.db.task.findMany({ where, include: { annotations: true, videos: {
+    const tasks=await this.db.task.findMany({ where, include: { annotations: true, videos: {
       where: { status: 'READY' }, select: { id: true, filename: true, mimeType: true }, orderBy: { createdAt: 'desc' }, take: 1,
     } }, orderBy: { createdAt: 'desc' } });
+    return member.role==='VIEWER'?tasks.map(task=>({...withoutVideoAccess(task),videos:[]})):tasks;
   }
 
   async find(workspaceId: string, taskId: string, userId: string) {
@@ -73,14 +81,14 @@ export class TaskService {
     if (!task || !canAccessTask(member.role, userId, task.sponsorAnalystId, task.contextAnalystId)) {
       throw new NotFoundException('Task not found');
     }
-    return { task, role: member.role };
+    return { task: member.role==='VIEWER'?withoutVideoAccess(task):task, role: member.role };
   }
 
   async checkAssignments(workspaceId: string, ids: (string | undefined)[]) {
     const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
     if (!unique.length) return;
-    const count = await this.db.membership.count({ where: { workspaceId, userId: { in: unique } } });
-    if (count !== unique.length) throw new BadRequestException('Assigned analysts must belong to this workspace');
+    const count = await this.db.membership.count({ where: { workspaceId, userId: { in: unique }, role: 'ANALYST' } });
+    if (count !== unique.length) throw new BadRequestException('Assigned users must be analysts in this workspace');
   }
 
   async create(workspaceId: string, actorId: string, input: CreateTaskDto) {
@@ -124,6 +132,7 @@ export class TaskService {
 
   async submit(workspaceId: string, taskId: string, actorId: string, stream: 'sponsors' | 'context') {
     const { task, role } = await this.find(workspaceId, taskId, actorId);
+    if (role === 'VIEWER' || role === 'REVIEWER') throw new ForbiddenException('This role cannot submit annotations');
     const assigned = stream === 'sponsors' ? task.sponsorAnalystId : task.contextAnalystId;
     if (role !== 'OWNER' && role !== 'ADMIN' && assigned !== actorId) throw new ForbiddenException('Not assigned to this stream');
     const field = stream === 'sponsors' ? 'sponsorsSubmittedAt' : 'contextSubmittedAt';
@@ -152,6 +161,34 @@ export class TaskService {
       return { ok: true };
     });
   }
+
+  async remove(workspaceId: string, taskId: string, actorId: string) {
+    const { task, role } = await this.find(workspaceId, taskId, actorId);
+    mustManage(role);
+    const assets = await this.db.videoAsset.findMany({ where: { taskId: task.id }, select: {
+      objectKey: true, uploadId: true, status: true,
+    } });
+    if (assets.length) {
+      const region=process.env.AWS_REGION,bucket=process.env.S3_VIDEO_BUCKET;
+      if(!region||!bucket)throw new ServiceUnavailableException('Video storage must be configured before this task can be deleted');
+      const storage=new S3Client({region});
+      try {
+        // Purge stored media first. If AWS rejects any operation, preserve the
+        // task and its annotation records rather than leaving known orphan files.
+        for(const asset of assets) {
+          if(asset.status==='UPLOADING'&&asset.uploadId)await storage.send(new AbortMultipartUploadCommand({Bucket:bucket,Key:asset.objectKey,UploadId:asset.uploadId}));
+          else await storage.send(new DeleteObjectCommand({Bucket:bucket,Key:asset.objectKey}));
+        }
+      } finally { storage.destroy(); }
+    }
+    return this.db.$transaction(async tx => {
+      // The public fixture catalog is separate and is never modified here.
+      await tx.task.delete({ where: { id: task.id } });
+      await tx.auditLog.create({ data: { workspaceId, actorId, action: 'TASK_DELETED', subjectId: task.id,
+        details: { number: task.number, fixtureId: task.fixtureId } } });
+      return { ok: true };
+    });
+  }
 }
 
 @Controller('workspaces/:workspaceId/tasks')
@@ -172,6 +209,11 @@ export class TaskController {
   @Get(':taskId')
   async get(@Req() req: AuthRequest, @Param('workspaceId', ParseUUIDPipe) workspaceId: string, @Param('taskId', ParseUUIDPipe) taskId: string) {
     return (await this.tasks.find(workspaceId, taskId, req.userId)).task;
+  }
+
+  @Delete(':taskId')
+  remove(@Req() req: AuthRequest, @Param('workspaceId', ParseUUIDPipe) workspaceId: string, @Param('taskId', ParseUUIDPipe) taskId: string) {
+    return this.tasks.remove(workspaceId, taskId, req.userId);
   }
 
   @Patch(':taskId')

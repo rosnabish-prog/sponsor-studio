@@ -54,6 +54,7 @@ export class VideoService {
 
   private async canUpload(workspaceId:string,taskId:string,userId:string) {
     const {task,role}=await this.tasks.find(workspaceId,taskId,userId);
+    if(role==='VIEWER'||role==='REVIEWER')throw new ForbiddenException('Viewers and reviewers cannot upload video');
     if (role!=='OWNER'&&role!=='ADMIN'&&task.sponsorAnalystId!==userId&&task.contextAnalystId!==userId) {
       throw new ForbiddenException('Only assigned workers or administrators can upload video');
     }
@@ -129,7 +130,8 @@ export class VideoService {
   }
 
   async playback(workspaceId:string,taskId:string,assetId:string,userId:string) {
-    await this.tasks.find(workspaceId,taskId,userId);
+    const {role}=await this.tasks.find(workspaceId,taskId,userId);
+    if(role==='VIEWER')throw new ForbiddenException('Viewers may access insights and JSON exports only');
     const asset=await this.db.videoAsset.findFirst({where:{id:assetId,workspaceId,taskId,status:'READY'}});
     if(!asset)throw new NotFoundException('Video not found');
     const domain=process.env.CLOUDFRONT_VIDEO_DOMAIN;

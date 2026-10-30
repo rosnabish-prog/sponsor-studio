@@ -30,7 +30,7 @@ export interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'analyst';
+  role: 'admin' | 'analyst' | 'viewer';
   password: string;
 }
 

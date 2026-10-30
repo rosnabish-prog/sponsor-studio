@@ -1,9 +1,9 @@
 import type { StudioData, Fixture, Sponsor, TagAttribute, TaskSummary } from './models';
 
-export type ScreenId = 'loading' | 'login' | 'workspace' | 'dashboard' | 'tasks' | 'studio' | 'sponsors' | 'attributes' | 'users' | 'reports';
+export type ScreenId = 'loading' | 'login' | 'workspace' | 'dashboard' | 'tasks' | 'labeling' | 'studio' | 'sponsors' | 'attributes' | 'users' | 'reports';
 
 export interface ScreenContext {
-  user?: { name: string; role: 'admin' | 'analyst' };
+  user?: { name: string; role: 'admin' | 'analyst' | 'viewer' };
   taskId?: string;
   changeRequired?: boolean;
   workspaces?: {id:string;name:string;slug:string}[];

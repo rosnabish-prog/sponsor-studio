@@ -37,6 +37,10 @@ export async function persistStudio(
     version=response.version;
   }
 
+  for (const previous of before.tasks) {
+    if (!after.tasks.some(task => task.id === previous.id)) await api.deleteTask(workspaceId, previous.id);
+  }
+
   for (const task of after.tasks) {
     let previous=before.tasks.find(t=>t.id===task.id);
     if (!previous) {
@@ -61,10 +65,10 @@ export async function persistStudio(
     for (const current of newAnnotations) {
       const old=oldAnnotations.find(row=>row.item.id===current.item.id);
       if (!old) continue;
-      const changed=JSON.stringify({labelId:old.labelId,...attributes(old.item)})!==
-        JSON.stringify({labelId:current.labelId,...attributes(current.item)});
+      const changed=JSON.stringify({labelId:old.labelId,start:old.item.start,...attributes(old.item)})!==
+        JSON.stringify({labelId:current.labelId,start:current.item.start,...attributes(current.item)});
       if (changed) await api.updateAnnotation(workspaceId,task.id,current.item.id,{
-        end:current.item.end,
+        start:current.item.start,end:current.item.end,
         ...(current.kind==='CAMERA'?{labelId:current.labelId}:{}),
         ...(current.kind==='SPONSOR'?attributes(current.item):{}),
       });

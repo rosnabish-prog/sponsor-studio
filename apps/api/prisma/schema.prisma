@@ -13,6 +13,7 @@ enum WorkspaceRole {
   ADMIN
   ANALYST
   REVIEWER
+  VIEWER
 }
 
 enum AnnotationKind {

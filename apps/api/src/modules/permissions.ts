@@ -11,7 +11,7 @@ export function canAccessTask(
   sponsorAnalystId: string | null,
   contextAnalystId: string | null,
 ): boolean {
-  return role === 'OWNER' || role === 'ADMIN' || role === 'REVIEWER' ||
+  return role === 'OWNER' || role === 'ADMIN' || role === 'REVIEWER' || role === 'VIEWER' ||
     sponsorAnalystId === userId || contextAnalystId === userId;
 }
 
@@ -21,7 +21,7 @@ export function mayEditStream(
   analystId: string | null,
   submittedAt: Date | null,
 ): boolean {
-  return submittedAt === null && (role === 'OWNER' || role === 'ADMIN' || analystId === userId);
+  return submittedAt === null && (role === 'OWNER' || role === 'ADMIN' || (role === 'ANALYST' && analystId === userId));
 }
 
 export function checkAnnotationTimes(start: number, end: number | null, duration: number): void {

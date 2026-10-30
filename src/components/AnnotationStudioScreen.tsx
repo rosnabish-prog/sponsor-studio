@@ -27,6 +27,7 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
           <StudioAction onClick={() => window.assignTaskModal?.(model.id)}><Icon name="users" /> ASSIGN TASK</StudioAction>
           <StudioAction onClick={() => window.addSponsorToCurrentTask?.()}><Icon name="plus" /> ADD SPONSOR / LOGO</StudioAction>
           <StudioAction onClick={() => window.createTaskModal?.(model.id)}><Icon name="settings" /> EDIT TASK</StudioAction>
+          <StudioAction className="task-menu-delete" onClick={()=>window.deleteTask?.(model.id)}><Icon name="close" /> DELETE TASK</StudioAction>
         </>}
         <div className="task-menu-separator" />
         <StudioAction onClick={() => window.navigate?.('tasks')}>← ALL TASKS</StudioAction>
@@ -133,6 +134,7 @@ declare global {
     togglePlay?: () => void;
     skipByStep?: (direction: number) => void;
     seekVideo?: (seconds: string | number) => void;
+    deleteTask?: (id:string)=>void;
     setSeekStep?: (step: number) => void;
     cycleRate?: () => void;
     setStudioTab?: (tab: StudioScreenModel['selectedTab']) => void;

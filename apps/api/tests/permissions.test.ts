@@ -7,13 +7,15 @@ test('tenants: analysts see assigned tasks only', () => {
   assert.equal(canAccessTask('ANALYST', 'alice', 'alice', 'charlie'), true);
   assert.equal(canAccessTask('REVIEWER', 'reviewer', 'bob', 'charlie'), true);
   assert.equal(canAccessTask('ADMIN', 'admin', null, null), true);
+  assert.equal(canAccessTask('VIEWER', 'viewer', null, null), true);
 });
 
 test('submitted streams cannot be edited, even by admins', () => {
   assert.equal(mayEditStream('OWNER', 'owner', null, new Date()), false);
   assert.equal(mayEditStream('ANALYST', 'alice', 'alice', null), true);
   assert.equal(mayEditStream('ANALYST', 'alice', 'bob', null), false);
-  assert.equal(mayEditStream('REVIEWER', 'reviewer', 'reviewer', null), true);
+  assert.equal(mayEditStream('REVIEWER', 'reviewer', 'reviewer', null), false);
+  assert.equal(mayEditStream('VIEWER', 'viewer', 'viewer', null), false);
 });
 
 test('annotation bounds reject invalid or zero-length intervals', () => {

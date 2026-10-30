@@ -3,6 +3,7 @@ import type { Fixture, Sponsor, SponsorGroup, StudioData, TagGroup, TaskSummary,
 
 export type DialogModel =
   | { type: 'confirm'; title: string; message: string; actionLabel: string; danger: boolean }
+  | { type: 'annotation-edit'; key: 'sponsors' | 'events' | 'cameras'; id: string; name: string; start: number; end: number; duration: number }
   | { type: 'assign'; task: TaskSummary; users: TeamMember[] }
   | { type: 'task'; task?: TaskSummary; data: StudioData; fixtures: Fixture[]; localVideoName?: string }
   | { type: 'group'; kind: 'sponsor' | 'event' | 'camera'; group?: SponsorGroup | TagGroup }
@@ -121,15 +122,26 @@ function UserModal({ user }: Extract<DialogModel, { type: 'user' }>) {
   return <form onSubmit={event => { event.preventDefault(); window.saveUser?.(user?.id || ''); }}><div className="modalbody"><div className="formgrid">
     <Field title="Full name"><input id="uname" defaultValue={user?.name || ''} /></Field>
     <Field title="Work email"><input id="uemail" type="email" defaultValue={user?.email || ''} /></Field>
-    <Field title="Role"><select id="urole" defaultValue="ANALYST"><option value="ANALYST">Analyst</option><option value="ADMIN">Administrator (workspace owner only)</option></select></Field>
+    <Field title="Role"><select id="urole" defaultValue="ANALYST"><option value="ANALYST">Analyst</option><option value="VIEWER">Viewer · Insights & JSON export only</option><option value="ADMIN">Administrator (workspace owner only)</option></select></Field>
     <p className="field full">A new worker receives a secure, temporary password that is shown once to you. Share it privately. Existing accounts keep their current password.</p>
   </div></div><Footer><Cancel /><Save>Add team member</Save></Footer></form>;
+}
+
+function AnnotationEditModal({ model }: {model: Extract<DialogModel,{type:'annotation-edit'}>}) {
+  return <form onSubmit={event=>{event.preventDefault();window.saveAnnotationEdit?.(model.key,model.id);}}>
+    <div className="modalbody"><div className="assignment-summary"><strong>{model.name}</strong><p>Adjust the saved interval in video seconds. This changes the recorded annotation, not the underlying video.</p></div>
+      <div className="formgrid">
+        <Field title="Start (seconds)"><input id="annotationStart" type="number" min="0" max={model.duration} step="0.01" required defaultValue={model.start} /></Field>
+        <Field title="End (seconds)"><input id="annotationEnd" type="number" min="0" max={model.duration} step="0.01" required defaultValue={model.end} /></Field>
+      </div><p className="infohint">Original interval: {model.start.toFixed(2)}–{model.end.toFixed(2)} s · Video: {model.duration.toFixed(2)} s</p>
+    </div><Footer><Cancel /><Save>Save edited interval</Save></Footer>
+  </form>;
 }
 
 export function StudioModal({ model }: { model: DialogModel }) {
   const submitConfirm = (event: FormEvent) => { event.preventDefault(); window.acceptInAppConfirm?.(); };
   const titles: Record<DialogModel['type'], string> = {
-    confirm: model.type === 'confirm' ? model.title : '', assign: 'Assign task', task: model.type === 'task' && model.task ? 'Edit match task' : 'Create new task',
+    confirm: model.type === 'confirm' ? model.title : '', 'annotation-edit':'Edit annotation', assign: 'Assign task', task: model.type === 'task' && model.task ? 'Edit match task' : 'Create new task',
     group: model.type === 'group' && model.group ? 'Edit attribute list' : 'New attribute list', sponsor: model.type === 'sponsor' && model.sponsor ? 'Edit sponsor' : 'Add a sponsor',
     item: model.type === 'item' && model.kind === 'event' ? 'Add match event' : 'Add camera angle', user: 'Add team member',
     credentials: model.type === 'credentials' ? (model.purpose === 'reset' ? 'Temporary password reset' : 'Worker account ready') : '',
@@ -138,6 +150,7 @@ export function StudioModal({ model }: { model: DialogModel }) {
     <div className={`modal ${model.type === 'task' ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={titles[model.type]}>
       <div className="modalhead"><div><div className="eyebrow">SPONSOR INTELLIGENCE</div><h2>{titles[model.type]}</h2></div><button type="button" className="button ghost icononly" onClick={() => window.closeModal?.()} aria-label="Close dialog"><Icon name="close" /></button></div>
       {model.type === 'confirm' && <form onSubmit={submitConfirm}><div className="modalbody"><p className="confirm-message">{model.message}</p></div><Footer><Cancel /><button type="submit" className={`button ${model.danger ? 'confirm-danger' : 'primary'}`}>{model.actionLabel}</button></Footer></form>}
+      {model.type === 'annotation-edit' && <AnnotationEditModal model={model} />}
       {model.type === 'assign' && <AssignModal {...model} />}
       {model.type === 'task' && <TaskModal {...model} />}
       {model.type === 'group' && <GroupModal {...model} />}
@@ -162,6 +175,7 @@ declare global {
   interface Window {
     closeModal?: () => void;
     acceptInAppConfirm?: () => void;
+    saveAnnotationEdit?: (key:'sponsors'|'events'|'cameras',id:string)=>void;
     saveTaskAssignment?: (id: string) => void;
     saveTask?: (id: string) => void;
     selectFixture?: (id: string) => void;

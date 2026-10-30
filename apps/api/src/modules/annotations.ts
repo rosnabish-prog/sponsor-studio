@@ -19,6 +19,7 @@ export class CreateAnnotationDto {
 }
 
 export class UpdateAnnotationDto {
+  @IsOptional() @IsNumber({ allowNaN: false, allowInfinity: false }) @Min(0) start?: number;
   @IsOptional() @IsString() @Length(1, 100) labelId?: string;
   @IsOptional() @IsNumber({ allowNaN: false, allowInfinity: false }) end?: number | null;
   @IsOptional() @IsString() @Length(1, 100) placement?: string | null;
@@ -64,9 +65,13 @@ export class AnnotationService {
       if (input.end == null) {
         const active = await tx.annotation.findFirst({ where: {
           taskId, end: null,
-          ...(input.kind === 'CAMERA' ? { kind: 'CAMERA' as const } : { kind: input.kind, labelId: input.labelId }),
+          kind: input.kind, labelId: input.labelId,
         } });
-        if (active) throw new ConflictException('An annotation is already active for this label or camera stream');
+        if (active) throw new ConflictException('An annotation is already active for this label');
+        if (input.kind === 'CAMERA') {
+          const count = await tx.annotation.count({ where: { taskId, kind: 'CAMERA', end: null } });
+          if (count >= 2) throw new ConflictException('No more than two camera angles can be live simultaneously');
+        }
       }
       const annotation = await tx.annotation.create({ data: {
         taskId, kind: input.kind, labelId: input.labelId.trim(), start: input.start,
@@ -86,7 +91,7 @@ export class AnnotationService {
     if (!current) throw new NotFoundException('Annotation not found');
     const task = await this.requireStreamEdit(workspaceId, taskId, userId, current.kind);
     if (input.end === null && current.end !== null) throw new BadRequestException('A closed annotation cannot be reopened');
-    try { checkAnnotationTimes(current.start, input.end === undefined ? current.end : input.end, task.durationSeconds); }
+    try { checkAnnotationTimes(input.start ?? current.start, input.end === undefined ? current.end : input.end, task.durationSeconds); }
     catch (error) { throw new BadRequestException((error as Error).message); }
     if (current.kind !== 'SPONSOR' && (input.placement !== undefined || input.quality !== undefined)) {
       throw new BadRequestException('Placement and quality apply only to sponsor annotations');

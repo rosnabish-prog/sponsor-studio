@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from
 import type { StudioScreenModel } from '../types/screen';
 import type { AnnotationBase, CameraAnnotation, EventAnnotation, Sponsor, SponsorAnnotation, TagAttribute } from '../types/models';
 import { formatTimestamp as fmt } from '../domain/intervals';
+import { annotatedEndpoint } from '../domain/labelingProgress';
 import { PLACEMENT_TYPES, VISIBILITY_QUALITIES } from '../domain/classifications';
 
 type StudioProps = { model: StudioScreenModel };
@@ -15,30 +16,35 @@ export function BrandLogo({ sponsor, className = 'tinylogo' }: { sponsor: Sponso
   return <div className={className} style={style}>{sponsor.logo ? <img src={sponsor.logo} alt="" /> : initials}</div>;
 }
 
-function EventChip({ item, active, disabled, camera }: { item: TagAttribute; active: boolean; disabled: boolean; camera: boolean }) {
-  return <button type="button" className={`event-chip tagged-state-chip ${camera ? 'camera-chip' : ''} ${active ? 'active' : ''}`}
+function EventChip({ item, active, recorded, disabled, camera }: { item: TagAttribute; active: boolean; recorded: boolean; disabled: boolean; camera: boolean }) {
+  return <button type="button" className={`event-chip tagged-state-chip ${camera ? 'camera-chip' : ''} ${active ? 'active' : ''} ${recorded ? 'recorded' : ''}`}
     onClick={() => camera ? window.tagCamera?.(item.id) : window.tagEvent?.(item.id)} disabled={disabled}
-    aria-pressed={active} aria-label={`${item.name} · ${active ? 'LIVE, tap to end' : camera ? 'OFF, tap to start or switch' : 'OFF, tap to start'}`}
-    title={`${item.name} · ${active ? 'LIVE' : 'OFF'}`}>
+    aria-pressed={active || recorded} aria-label={`${item.name} · ${active ? 'LIVE, tap to end' : recorded ? 'RECORDED at this time, tap to edit with confirmation' : 'OFF, tap to start'}`}
+    title={`${item.name} · ${active ? 'LIVE' : recorded ? 'RECORDED — click to edit' : 'OFF'}`}>
     <span className="chip-symbol">{camera ? '◎' : '↔'}</span><span className="chip-label">{item.name}</span>
-    <span className={`tag-live-pill ${active ? 'on' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : 'OFF'}</span>
+    <span className={`tag-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'RECORDED' : 'OFF'}</span>
   </button>;
 }
 
 function EventButtons({ model, camera }: StudioProps & { camera: boolean }) {
   const items = camera ? model.cameras : model.events;
   const active = camera ? model.task.cameras : model.task.events;
-  return <>{items.map(item => <EventChip key={item.id} item={item} camera={camera} disabled={!model.canContext}
-    active={active.some(annotation => (camera ? (annotation as CameraAnnotation).cameraId : (annotation as EventAnnotation).eventId) === item.id && annotation.end == null)} />)}</>;
+  return <>{items.map(item => {
+    const matching=active.filter(annotation=>(camera?(annotation as CameraAnnotation).cameraId:(annotation as EventAnnotation).eventId)===item.id);
+    const live=matching.some(row=>row.end==null&&row.start<=model.tick);
+    return <EventChip key={item.id} item={item} camera={camera} disabled={!model.canContext}
+      active={live}
+      recorded={!live&&matching.some(row=>row.end!==null&&(row.start<=model.tick&&model.tick<row.end||('kind' in row&&row.kind==='point'&&Math.abs(row.start-model.tick)<.5)))} />;
+  })}</>;
 }
 
 export function StudioControls({ model }: StudioProps) {
-  if (model.selectedTab === 'events') return <section className="studio-chip-group studio-secondary-controls"><div className="chip-group-title"><span>CAMERA ANGLES</span><small>CAMERA SWITCHES END THE PREVIOUS VIEW</small></div><div className="event-chip-row">{model.cameras.length ? <EventButtons model={model} camera /> : <span className="studio-layer-hint">No camera angles assigned to this match.</span>}</div></section>;
+  if (model.selectedTab === 'events') return <section className="studio-chip-group studio-secondary-controls"><div className="chip-group-title"><span>CAMERA ANGLES</span><small>UP TO TWO LIVE ANGLES · TAP AGAIN TO END</small></div><div className="event-chip-row">{model.cameras.length ? <EventButtons model={model} camera /> : <span className="studio-layer-hint">No camera angles assigned to this match.</span>}</div></section>;
   if (model.selectedTab === 'cameras') return <section className="studio-chip-group studio-secondary-controls"><div className="chip-group-title"><span>KEY MATCH EVENTS</span><small>TAP TO START · TAP AGAIN TO END</small></div><div className="event-chip-row">{model.events.length ? <EventButtons model={model} camera={false} /> : <span className="studio-layer-hint">No key match events assigned to this match.</span>}</div></section>;
   if (model.selectedTab === 'sponsors') return <div className="studio-layer-hint">Select sponsor logos from the right-hand SPONSORS panel. The timeline below shows sponsor visibility only.</div>;
   return <>
     <section className="studio-chip-group"><div className="chip-group-title"><span>KEY MATCH EVENTS</span><small>TAP TO START · TAP AGAIN TO END</small></div><div className="event-chip-row"><EventButtons model={model} camera={false} /></div></section>
-    <section className="studio-chip-group"><div className="chip-group-title"><span>CAMERA ANGLES</span><small>TAP AGAIN TO END · SWITCH TO CLOSE PREVIOUS</small></div><div className="event-chip-row"><EventButtons model={model} camera /></div></section>
+    <section className="studio-chip-group"><div className="chip-group-title"><span>CAMERA ANGLES</span><small>UP TO TWO LIVE ANGLES · TAP AGAIN TO END</small></div><div className="event-chip-row"><EventButtons model={model} camera /></div></section>
   </>;
 }
 
@@ -50,20 +56,20 @@ export function StudioRail({ model }: StudioProps) {
   }
   if (!model.sponsors.length) return <div className="rail-empty">No sponsors assigned to this match.</div>;
   return <div className="rail-cards">{model.sponsors.map(sponsor => {
-    const active = model.task.sponsors.some(row => row.sponsorId === sponsor.id && row.end == null);
-    return <button key={sponsor.id} className={`rail-brand ${active ? 'isactive' : ''}`} type="button"
+    const active = model.task.sponsors.some(row => row.sponsorId === sponsor.id && row.end == null && row.start <= model.tick);
+    const recorded = !active&&model.task.sponsors.some(row=>row.sponsorId===sponsor.id&&row.end!==null&&row.start<=model.tick&&model.tick<row.end);
+    return <button key={sponsor.id} className={`rail-brand ${active ? 'isactive' : ''} ${recorded?'isrecorded':''}`} type="button"
       onClick={() => window.tagSponsor?.(sponsor.id)} disabled={!model.canSponsor}
-      aria-label={`${sponsor.name} · ${active ? 'LIVE, click to stop' : 'OFF, click to start'}`} aria-pressed={active}
-      title={`${sponsor.name} · ${active ? 'LIVE' : 'OFF'}`}>
+      aria-label={`${sponsor.name} · ${active ? 'LIVE, click to stop' : recorded ? 'RECORDED at this time, click to edit' : 'OFF, click to start'}`} aria-pressed={active||recorded}
+      title={`${sponsor.name} · ${active ? 'LIVE' : recorded ? 'RECORDED — click to edit' : 'OFF'}`}>
       <span className="rail-logo"><BrandLogo sponsor={sponsor} /></span>
-      <span className={`rail-live-pill ${active ? 'on' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : 'OFF'}</span>
+      <span className={`rail-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'RECORDED' : 'OFF'}</span>
     </button>;
   })}</div>;
 }
 
 type TimelineDelete = { key: 'sponsors'|'events'|'cameras'; id: string; name: string; x: number; y: number };
-function TimelineTrack({ name, items, kind, model, onContextMenu }: { name: string; items: AnnotationBase[]; kind: TrackKind; model: StudioScreenModel; onContextMenu: (next: TimelineDelete) => void }) {
-  const duration = model.duration || 3600;
+function TimelineTrack({ name, items, kind, model, duration, onContextMenu }: { name: string; items: AnnotationBase[]; kind: TrackKind; model: StudioScreenModel; duration: number; onContextMenu: (next: TimelineDelete) => void }) {
   const canDelete = kind === 'sponsor' ? model.canSponsor : model.canContext;
   return <div className="trackrow" data-timeline-kind={kind}><span className="trackname" title={name}>{name}</span>
     <div className="track" onClick={event => {
@@ -80,6 +86,7 @@ function TimelineTrack({ name, items, kind, model, onContextMenu }: { name: stri
             event.preventDefault();event.stopPropagation();
             onContextMenu({key:kind==='sponsor'?'sponsors':kind==='event'?'events':'cameras',id:item.id,name,x:event.clientX,y:event.clientY});
           }}
+          onClick={event=>{event.stopPropagation();window.seekVideo?.(item.start);}}
           className={`block ${kind} ${item.end == null ? 'open' : ''} ${point ? 'dotpoint' : ''}`}
           style={{ left: `${100 * start / duration}%`, width: `${point ? .15 : Math.max(.15, 100 * (end - start) / duration)}%` }} />;
       })}
@@ -90,7 +97,19 @@ function TimelineTrack({ name, items, kind, model, onContextMenu }: { name: stri
 export function StudioTimeline({ model }: StudioProps) {
   const [filter, setFilter] = useState<'all'|'sponsors'|'events'|'cameras'>('all');
   const [menu, setMenu] = useState<TimelineDelete | null>(null);
+  const [zoom, setZoom] = useState(1);
   const menuRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  useEffect(()=>{
+    const el=timelineRef.current;if(!el)return;
+    const wheel=(event:WheelEvent)=>{
+      if(!event.ctrlKey)return;
+      event.preventDefault();
+      setZoom(value=>Math.max(1,Math.min(8,Math.round((value+(event.deltaY<0?0.5:-0.5))*2)/2)));
+    };
+    el.addEventListener('wheel',wheel,{passive:false});
+    return ()=>el.removeEventListener('wheel',wheel);
+  },[]);
   useEffect(() => {
     if (!menu) return;
     const closeOutside = (event: PointerEvent) => { if (!menuRef.current?.contains(event.target as Node)) setMenu(null); };
@@ -103,20 +122,22 @@ export function StudioTimeline({ model }: StudioProps) {
   const lines: { name: string; items: AnnotationBase[]; kind: TrackKind }[] = [];
   const measurable = (row:AnnotationBase) => row.end == null || row.end > row.start;
   if (show('sponsor')) model.sponsors.forEach(item => {const items=model.task.sponsors.filter(row => row.sponsorId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'sponsor'});});
-  if (show('event')) model.events.forEach(item => {const items=model.task.events.filter(row => row.eventId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'event'});});
+  if (show('event')) model.events.forEach(item => {const items=model.task.events.filter(row => row.eventId === item.id && (measurable(row)||row.kind==='point'));if(items.length)lines.push({name:item.name,items,kind:'event'});});
   if (show('camera')) model.cameras.forEach(item => {const items=model.task.cameras.filter(row => row.cameraId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'camera'});});
+  const endpoint=annotatedEndpoint(model.task,model.tick);
+  const duration=Math.min(model.duration||3600,Math.max(60,Math.ceil(endpoint/60)*60));
   return <div className="timeline-content">
     <div className="timeline-filter"><label htmlFor="timelineLayerFilter">SHOW TRACKS</label><select id="timelineLayerFilter" value={filter} onChange={event => {setFilter(event.target.value as typeof filter);setMenu(null);}}>
       <option value="all">All annotations</option><option value="sponsors">Sponsors</option><option value="events">Events</option><option value="cameras">Cameras</option>
-    </select><span>{lines.length} recorded tracks · right-click a segment to remove it</span></div>
-    {lines.length ? <><div className="track-top">{[0, .25, .5, .75, 1].map(share => <span key={share}>{fmt(model.duration * share)}</span>)}</div>
+    </select><span>{lines.length} recorded tracks · timeline through {fmt(endpoint)} · Ctrl + scroll to zoom{model.tick>duration?' · playhead is beyond recorded range':''}</span><span className="timeline-zoom-label">{zoom}×</span><button type="button" className="button ghost tiny" onClick={()=>setZoom(1)}>Reset zoom</button></div>
+    {lines.length ? <div className="timeline-viewport" ref={timelineRef} aria-label="Zoomable annotated timeline"><div className="timeline-scaled" style={{width:`${zoom*100}%`}}><div className="track-top">{[0, .25, .5, .75, 1].map(share => <span key={share}>{fmt(duration * share)}</span>)}</div>
       <div className="timeline-track-stack">
-        {lines.map((line, index) => <TimelineTrack key={`${line.kind}:${index}`} {...line} model={model} onContextMenu={setMenu} />)}
-        <div className="timeline-global-playhead-area" aria-hidden="true"><span className="timeline-global-playhead" style={{left:`${100 * Math.max(0,Math.min(1,model.tick/(model.duration||3600)))}%`}} /></div>
-      </div></>
+        {lines.map((line, index) => <TimelineTrack key={`${line.kind}:${index}`} {...line} duration={duration} model={model} onContextMenu={setMenu} />)}
+        <div className="timeline-global-playhead-area" aria-hidden="true">{model.tick<=duration&&<span className="timeline-global-playhead" style={{left:`${100 * Math.max(0,Math.min(1,model.tick/duration))}%`}} />}</div>
+      </div></div></div>
       : <div className="timeline-empty">No {filter === 'all' ? '' : `${filter} `}intervals recorded yet. Use the tagging controls to begin an annotation.</div>}
-    {menu && <div ref={menuRef} className="timeline-context-menu" role="menu" style={{left:Math.max(8,Math.min(menu.x,window.innerWidth-215)),top:Math.max(8,Math.min(menu.y,window.innerHeight-65))}}>
-      <span>{menu.name}</span><button type="button" role="menuitem" onClick={() => {const target=menu;setMenu(null);window.deleteLog?.(target.key,target.id);}}>Delete annotation</button>
+    {menu && <div ref={menuRef} className="timeline-context-menu" role="menu" style={{left:Math.max(8,Math.min(menu.x,window.innerWidth-215)),top:Math.max(8,Math.min(menu.y,window.innerHeight-128))}}>
+      <span>{menu.name}</span><button type="button" role="menuitem" onClick={()=>{const target=menu;setMenu(null);window.editRecordedAnnotation?.(target.key,target.id);}}>Edit interval</button><button type="button" role="menuitem" onClick={() => {const target=menu;setMenu(null);window.deleteLog?.(target.key,target.id);}}>Delete annotation</button>
     </div>}
   </div>;
 }
@@ -163,5 +184,6 @@ declare global {
     tagCamera?: (id: string) => void;
     setExposureAttribute?: (id: string, field: 'placement' | 'quality', value: string) => void;
     deleteLog?: (key: 'sponsors' | 'events' | 'cameras', id: string) => void;
+    editRecordedAnnotation?: (key: 'sponsors'|'events'|'cameras', id:string)=>void;
   }
 }

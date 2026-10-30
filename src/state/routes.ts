@@ -1,8 +1,8 @@
 /** Durable client-side routes. Hash paths also survive refreshes on static hosts. */
-export type ProductView = 'dashboard' | 'tasks' | 'studio' | 'sponsors' | 'attributes' | 'users' | 'reports';
+export type ProductView = 'dashboard' | 'tasks' | 'labeling' | 'studio' | 'sponsors' | 'attributes' | 'users' | 'reports';
 
 const slugs: Record<ProductView, string> = {
-  dashboard: 'overview', tasks: 'matches', studio: 'studio', sponsors: 'sponsors',
+  dashboard: 'overview', tasks: 'matches', labeling: 'labeling-status', studio: 'studio', sponsors: 'sponsors',
   attributes: 'attributes', users: 'team', reports: 'insights',
 };
 

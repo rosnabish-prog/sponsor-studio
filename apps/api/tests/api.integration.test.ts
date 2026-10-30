@@ -69,6 +69,14 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
     assert.equal((await run(path + '/reopen', 'POST', { stream: 'sponsors' }, bob.cookie)).status, 403);
     assert.equal((await run(path + '/reopen', 'POST', { stream: 'sponsors' }, alice.cookie)).status, 201);
     assert.equal((await run(path + `/annotations/${annotation.json.id}`, 'PATCH', { quality: 'clear' }, bob.cookie)).status, 200);
+    // The server enforces two concurrent camera angles per match.
+    const firstCamera=await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'wide',start:10},alice.cookie);
+    const secondCamera=await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'close',start:11},alice.cookie);
+    assert.equal(firstCamera.status,201,JSON.stringify(firstCamera.json));
+    assert.equal(secondCamera.status,201,JSON.stringify(secondCamera.json));
+    assert.equal((await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'bench',start:12},alice.cookie)).status,409);
+    assert.equal((await run(path+`/annotations/${firstCamera.json.id}`,'PATCH',{end:20},alice.cookie)).status,200);
+    assert.equal((await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'bench',start:21},alice.cookie)).status,201);
     assert.equal((await run('/auth/logout', 'POST', undefined, bob.cookie)).status, 201);
     assert.equal((await run('/auth/me', 'GET', undefined, bob.cookie)).status, 401);
 
@@ -107,6 +115,27 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
     assert.equal((await run('/auth/login','POST',{email:managedEmail,password:'managed-strong-password-123'})).status,401);
     const afterReset=await run('/auth/login','POST',{email:managedEmail,password:reset.json.temporaryPassword});
     assert.equal(afterReset.json.user.passwordChangeRequired,true);
+    // Viewer may inspect reports and export source data, but cannot edit or play media.
+    const viewerEmail=`viewer-${suffix}@example.org`;
+    const viewer=await run(`/workspaces/${workspaceId}/members/provision`,'POST',{
+      name:'Report Viewer',email:viewerEmail,role:'VIEWER',
+    },alice.cookie);
+    assert.equal(viewer.status,201,JSON.stringify(viewer.json));
+    const firstViewerLogin=await run('/auth/login','POST',{email:viewerEmail,password:viewer.json.temporaryPassword});
+    assert.equal((await run('/auth/change-password','POST',{
+      currentPassword:viewer.json.temporaryPassword,password:'viewer-strong-password-123',
+    },firstViewerLogin.cookie)).status,201);
+    const viewerLogin=await run('/auth/login','POST',{email:viewerEmail,password:'viewer-strong-password-123'});
+    assert.equal((await run(`/workspaces/${workspaceId}/tasks`,'GET',undefined,viewerLogin.cookie)).status,200);
+    assert.equal((await run(path,'GET',undefined,viewerLogin.cookie)).status,200);
+    assert.equal((await run(path+'/annotations','GET',undefined,viewerLogin.cookie)).status,200);
+    assert.equal((await run(path+'/annotations','POST',{kind:'SPONSOR',labelId:'s_test',start:51,end:52},viewerLogin.cookie)).status,403);
+    assert.equal((await run(path+'/videos/'+task.json.id+'/playback','GET',undefined,viewerLogin.cookie)).status,403);
+    assert.equal((await run(path,'DELETE',undefined,viewerLogin.cookie)).status,403);
+    const removed=await run(path,'DELETE',undefined,alice.cookie);
+    assert.equal(removed.status,200,JSON.stringify(removed.json));
+    assert.equal((await run(path,'GET',undefined,alice.cookie)).status,404);
+    assert.equal((await run(`/workspaces/${workspaceId}/catalog`,'GET',undefined,alice.cookie)).status,200,'Catalog survives task deletion');
   } finally {
     await app.close();
   }
