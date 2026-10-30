@@ -24,6 +24,7 @@ import { readOriginalPng, MAX_ORIGINAL_PNG_BYTES } from '../src/domain/logoUploa
 import { copyCatalogEntry, reorderById } from '../src/domain/catalogEditing';
 import { hasRecordedCameraAfter, resumeCameraFromTimestamp, selectCameraAngle } from '../src/domain/cameraSwitch';
 import { captureStudioSpacebar } from '../src/domain/studioKeyboard';
+import { VIDEO_PLAYBACK_RATES, supportedPlaybackRate } from '../src/domain/videoPlayback';
 import { AttributesScreen, SponsorLibraryScreen, TeamScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
@@ -187,6 +188,20 @@ const studio:StudioScreenModel={
     submitted:task.submitted,task,sponsors:data.sponsorGroups[0].sponsors,events:data.eventGroups[0].items,
     cameras:data.cameraGroups[0].items,isLocalVideo:false,
 };
+
+test('Studio offers direct playback speeds from quarter-speed through double-speed', () => {
+  assert.deepEqual(VIDEO_PLAYBACK_RATES, [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]);
+  assert.equal(supportedPlaybackRate(0.25), true);
+  assert.equal(supportedPlaybackRate(0.5), true);
+  assert.equal(supportedPlaybackRate(0.75), true);
+  assert.equal(supportedPlaybackRate(3), false);
+  const html=renderToStaticMarkup(<AnnotationStudioScreen model={studio} isAdmin={false}/>);
+  const speedControl=html.match(/<select[^>]*id="rateButton"[^>]*>.*?<\/select>/)?.[0];
+  assert.ok(speedControl,'playback speed is a selectable control');
+  assert.match(speedControl,/aria-label="Video playback speed"/);
+  for(const rate of VIDEO_PLAYBACK_RATES)assert.match(speedControl,new RegExp(`<option value="${rate}"`));
+  assert.match(speedControl,/<option value="1" selected="">1×<\/option>/,'normal speed stays selected by default');
+});
 
 test('timelines contain only annotated tracks, one shared cursor, and a layer filter', () => {
   const html=renderToStaticMarkup(<StudioTimeline model={studio} />);

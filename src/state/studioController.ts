@@ -15,6 +15,7 @@ import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
 import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } from '../domain/catalogEditing';
 import { hasRecordedCameraAfter, resumeCameraFromTimestamp, selectCameraAngle } from '../domain/cameraSwitch';
 import { captureStudioSpacebar } from '../domain/studioKeyboard';
+import { supportedPlaybackRate } from '../domain/videoPlayback';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -380,7 +381,7 @@ window.skipVideo=(n:number)=>window.seekVideo?.((videoEl&&!videoRecovery?.isReco
 window.skipByStep=direction=>window.skipVideo?.((Number(direction)||0)*seekStep);
 window.setSeekStep=value=>{seekStep=value===10?10:5;refreshStudio();};
  window.togglePlay=()=>{if(!videoEl)return notify('Attach a video to play. You can still scrub timestamps to test tagging.');if(videoRecovery){videoRecovery.toggle();refreshStudio();return;}if(videoEl.paused){videoEl.play().catch(()=>notify('Video playback unavailable for this source.'))}else videoEl.pause()};
-window.cycleRate=()=>{const values=[1,1.25,1.5,2];const next=values[(values.indexOf(playbackRate)+1)%values.length];playbackRate=next;if(videoEl)videoEl.playbackRate=next;refreshStudio();};
+window.setPlaybackRate=value=>{if(!supportedPlaybackRate(value))return;playbackRate=value;if(videoEl)videoEl.playbackRate=value;refreshStudio();};
  let playbackRate=1,videoDimensions='',videoError='';
  let videoRecovery:ReturnType<typeof recoverVideo>|null=null;
 function recordTick(){const t=currentTask();if(t)t.observedTime=Math.max(t.observedTime||0,tick);}

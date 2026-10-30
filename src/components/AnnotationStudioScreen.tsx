@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { StudioScreenModel } from '../types/screen';
 import { formatTimestamp } from '../domain/intervals';
+import { VIDEO_PLAYBACK_RATES } from '../domain/videoPlayback';
 import { StudioControls, StudioLogs, StudioRail, StudioTimeline } from './StudioWidgets';
 import { attachVideoAlignmentPause } from './videoAlignmentScroll';
 
@@ -62,7 +63,9 @@ function VideoPanel({ model }: { model: StudioScreenModel }) {
         <span>STEP</span><button className={model.seekStep === 5 ? 'active' : ''} id="seekstep-5" onClick={() => window.setSeekStep?.(5)} aria-pressed={model.seekStep === 5}>5 SEC</button>
         <button className={model.seekStep === 10 ? 'active' : ''} id="seekstep-10" onClick={() => window.setSeekStep?.(10)} aria-pressed={model.seekStep === 10}>10 SEC</button>
       </div>
-      <button className="rate" onClick={() => window.cycleRate?.()} id="rateButton">{model.playbackRate}×</button>
+      <select className="rate rate-select" id="rateButton" aria-label="Video playback speed" title="Video playback speed" value={model.playbackRate} onChange={event => window.setPlaybackRate?.(Number(event.currentTarget.value))}>
+        {VIDEO_PLAYBACK_RATES.map(rate => <option value={rate} key={rate}>{rate}×</option>)}
+      </select>
     </div>
   </div>;
 }
@@ -136,7 +139,7 @@ declare global {
     seekVideo?: (seconds: string | number) => void;
     deleteTask?: (id:string)=>void;
     setSeekStep?: (step: number) => void;
-    cycleRate?: () => void;
+    setPlaybackRate?: (rate: number) => void;
     setStudioTab?: (tab: StudioScreenModel['selectedTab']) => void;
   }
 }
