@@ -1,0 +1,60 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://sponsor:sponsor_local_only@postgres:5432/sponsor_studio?schema=public
+      APP_ORIGIN: http://127.0.0.1:8080
+      API_PORT: 3001
+      NODE_ENV: development
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_VIDEO_BUCKET: ${S3_VIDEO_BUCKET:-}
+      CLOUDFRONT_VIDEO_DOMAIN: ${CLOUDFRONT_VIDEO_DOMAIN:-}
+      CLOUDFRONT_KEY_PAIR_ID: ${CLOUDFRONT_KEY_PAIR_ID:-}
+      CLOUDFRONT_PRIVATE_KEY: ${CLOUDFRONT_PRIVATE_KEY:-}
+      BUILDUP_API_TOKEN: ${BUILDUP_API_TOKEN:-}
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  migrations:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrations
+    environment:
+      DATABASE_URL: postgresql://sponsor:sponsor_local_only@postgres:5432/sponsor_studio?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sponsor
+      POSTGRES_PASSWORD: sponsor_local_only
+      POSTGRES_DB: sponsor_studio
+    volumes:
+      - sponsor_studio_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sponsor -d sponsor_studio"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  sponsor_studio_pg:

@@ -1,0 +1,31 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+  api:
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: https://sponsor-studio.seebot.ai
+      DATABASE_URL: postgresql://sponsor:${DB_PASSWORD}@postgres:5432/sponsor_studio?schema=public
+
+  migrations:
+    environment:
+      DATABASE_URL: postgresql://sponsor:${DB_PASSWORD}@postgres:5432/sponsor_studio?schema=public
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+volumes:
+  caddy_data:
+  caddy_config:
