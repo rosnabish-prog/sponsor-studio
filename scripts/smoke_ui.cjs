@@ -38,7 +38,8 @@ function expect(expr,message){assert.ok(expr,message)}
  assert.equal((html.match(/src="assets\/seebot-wordmark-orange-20261029.svg"/g)||[]).length,3,'all three headers point to new orange logo');
  window.fillDemo('admin@demo.seebot.ai');
  window.login({preventDefault(){}});
- expect(document.querySelector('.ops-nav'),'admin dashboard');
+ expect(document.querySelector('.ops-nav'),'owner dashboard');
+ assert.equal(db().users.find(u=>u.id==='u_admin').role,'owner','legacy demo admin is the workspace owner');
  expect(document.querySelector('.dashboard-banner'),'workspace has warm orange schedule ribbon');
  assert.equal(document.querySelectorAll('link[rel="preload"][as="font"]').length,2,'primary and metadata fonts preload before first render');
  assert.ok(document.querySelector('link[href^="assets/fonts.css?v="]'),'font faces are local and loaded from assets');
@@ -219,8 +220,10 @@ function expect(expr,message){assert.ok(expr,message)}
  document.querySelector('.groupitems .sponsor-mini button').click();
  window.acceptInAppConfirm();
  assert.equal(document.querySelectorAll('.groupitems .sponsor-mini').length,attrItemsBefore-1,'accepted removal updates attributes');
- // Admin can create an analyst and assign one user to both streams in demo mode.
+ // Owner can create analysts and admins, and assign analysts to both streams.
  window.navigate('users');
+ assert.equal(document.querySelectorAll('button[aria-label^="Remove "]').length,2,'owner can remove analysts but not self');
+ assert.ok(document.querySelector('.tag').textContent || document.querySelector('.ops-user').textContent.includes('OWNER'),'owner role shown in the team UI');
  window.userModal();
  document.querySelector('#uname').value='Demo Workforce Analyst';
  document.querySelector('#uemail').value='tester@club.example';
@@ -228,6 +231,15 @@ function expect(expr,message){assert.ok(expr,message)}
  window.saveUser('');
  const testUser=db().users.find(u=>u.email==='tester@club.example');
  expect(testUser&&testUser.role==='analyst','admin created a new analyst');
+ window.userModal();
+ document.querySelector('#uname').value='Secondary Admin';
+ document.querySelector('#uemail').value='teamadmin@club.example';
+ document.querySelector('#upass').value='DemoPass123';
+ document.querySelector('#urole').value='admin';
+ window.saveUser('');
+ const secondaryAdmin=db().users.find(u=>u.email==='teamadmin@club.example');
+ expect(secondaryAdmin&&secondaryAdmin.role==='admin','owner can create another administrator');
+ assert.ok(document.querySelector(`button[onclick="removeWorkspaceUser('${secondaryAdmin.id}')"]`),'owner can remove another admin');
  window.navigate('tasks');
  window.createTaskModal();
  expect(document.querySelector('#modal .modalhead'),'modal header remains separate from scrollable form');
@@ -434,6 +446,59 @@ function expect(expr,message){assert.ok(expr,message)}
  expect(!document.querySelector('.studio-grid'),'dashboard replaces studio');
  assert.ok(theme.includes('.app-focus .studio-media-column')&&theme.includes('.app-focus .sponsor-rail'),'left and right panes have scoped scrolling rules');
  assert.ok(theme.includes('@media(max-width:680px)'),'mobile layout restores natural page scrolling');
+
+ // Team removal is owner-only, requires confirmation, and preserves work history.
+ window.removeWorkspaceUser('u_admin');
+ assert.equal(document.querySelector('#modal'),null,'owner cannot remove their own account');
+ window.logout();
+ document.querySelector('#loginemail').value='teamadmin@club.example';
+ document.querySelector('#loginpass').value='DemoPass123';
+ window.login({preventDefault(){}});
+ window.navigate('users');
+ assert.equal(document.querySelectorAll('button[aria-label^="Remove "]').length,0,'admin has no removal buttons');
+ assert.equal(document.querySelector(`button[onclick="userModal('u_admin')"]`),null,'admin cannot edit owner');
+ window.removeWorkspaceUser('u_analyst');
+ assert.equal(document.querySelector('#modal'),null,'admin cannot remove analyst even through direct action');
+ assert.ok(db().users.find(u=>u.id==='u_analyst'),'forbidden removal did not change users');
+ window.logout();
+ window.fillDemo('admin@demo.seebot.ai');
+ window.login({preventDefault(){}});
+ window.navigate('users');
+ const beforeRemovalAnnotations=JSON.stringify(db().tasks.find(t=>t.id==='task_demo1').events);
+ window.removeWorkspaceUser(secondaryAdmin.id);
+ assert.ok(document.querySelector('#modal .confirm-message').textContent.includes('Secondary Admin'),'owner sees admin removal confirmation');
+ window.closeModal();
+ assert.ok(db().users.find(u=>u.id===secondaryAdmin.id),'cancel keeps admin membership');
+ window.removeWorkspaceUser(secondaryAdmin.id);
+ window.acceptInAppConfirm();
+ assert.equal(db().users.some(u=>u.id===secondaryAdmin.id),false,'owner can remove another admin');
+ window.removeWorkspaceUser(testUser.id);
+ assert.ok(document.querySelector('#modal .confirm-message').textContent.includes('2 match stream assignments'),'confirmation explains orphaned assignments');
+ window.acceptInAppConfirm();
+ assert.equal(db().users.some(u=>u.id===testUser.id),false,'owner can remove an analyst');
+ const orphaned=db().tasks.find(t=>t.id===assigned.id);
+ assert.equal(orphaned.sponsorAnalystId,'','removed analyst is unassigned from sponsor stream');
+ assert.equal(orphaned.contextAnalystId,'','removed analyst is unassigned from context stream');
+ assert.equal(JSON.stringify(db().tasks.find(t=>t.id==='task_demo1').events),beforeRemovalAnnotations,'member removal retains annotation history');
+ assert.ok(db().users.find(u=>u.id==='u_admin'),'owner cannot be removed');
+ window.logout();
+ document.querySelector('#loginemail').value='teamadmin@club.example';
+ document.querySelector('#loginpass').value='DemoPass123';
+ window.login({preventDefault(){}});
+ assert.ok(document.querySelector('#authError').textContent.includes('Incorrect demo email'),'removed admin can no longer log in locally');
+
+ // Existing browser workspaces have an admin, not an owner: upgrade just that role.
+ const legacyData=db();
+ legacyData.users.find(u=>u.id==='u_admin').role='admin';
+ const existingTasks=JSON.stringify(legacyData.tasks);
+ const legacyDom=new JSDOM(html,{url:'http://localhost/',runScripts:'dangerously',beforeParse(w){
+  w.localStorage.setItem('messicup_sponsor_studio_v5',JSON.stringify(legacyData));
+  w.fetch=async()=>({ok:false,status:404});
+  w.scrollTo=()=>{};
+ }});
+ assert.equal(JSON.parse(legacyDom.window.localStorage.getItem('messicup_sponsor_studio_v5')).users.find(u=>u.id==='u_admin').role,'owner','existing admin is migrated into owner');
+ assert.equal(JSON.stringify(JSON.parse(legacyDom.window.localStorage.getItem('messicup_sponsor_studio_v5')).tasks),existingTasks,'migration retains all task history');
+ legacyDom.window.close();
 
  assert.deepEqual(errors,[],'no uncaught DOM errors');
  console.log('PASS real local file playback, video-aspect fit, video metadata status, scroll panes, dialog and annotations');
