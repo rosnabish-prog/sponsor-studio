@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import {
-  Body, Controller, ForbiddenException, Get, Injectable, NotFoundException, Param,
+  Body, Controller, Delete, ForbiddenException, Get, Injectable, NotFoundException, Param,
   ParseUUIDPipe, Post, Req, UseGuards,
 } from '@nestjs/common';
 import { IsEmail, IsEnum, IsInt, IsObject, IsString, Length, Min } from 'class-validator';
@@ -113,10 +113,12 @@ export class WorkspaceService {
     const actor = await this.access(workspaceId, actorId);
     mustManage(actor.role);
     if (input.role === 'OWNER') throw new ForbiddenException('Ownership transfer is not supported by this endpoint');
+    if (input.role === 'ADMIN' && actor.role !== 'OWNER') throw new ForbiddenException('Only owners can assign admins');
     const user = await this.db.user.findUnique({ where: { email: input.email.trim().toLowerCase() }, select: { id: true, name: true, email: true } });
     if (!user) throw new NotFoundException('User must register before being added to a workspace');
     const existing = await this.db.membership.findUnique({ where: { workspaceId_userId: { workspaceId, userId: user.id } } });
     if (existing?.role === 'OWNER') throw new ForbiddenException('Cannot change owner role');
+    if (existing?.role === 'ADMIN' && actor.role !== 'OWNER') throw new ForbiddenException('Only owners can change admins');
     const membership = await this.db.membership.upsert({
       where: { workspaceId_userId: { workspaceId, userId: user.id } },
       update: { role: input.role },
@@ -151,6 +153,7 @@ export class WorkspaceService {
         where: { workspaceId_userId: { workspaceId, userId: user.id } },
       });
       if (existing?.role === 'OWNER') throw new ForbiddenException('Cannot change an owner');
+      if (existing?.role === 'ADMIN' && actor.role !== 'OWNER') throw new ForbiddenException('Only owners can change admins');
       const membership = await tx.membership.upsert({
         where: { workspaceId_userId: { workspaceId, userId: user.id } },
         create: { workspaceId, userId: user.id, role: input.role },
@@ -190,6 +193,31 @@ export class WorkspaceService {
       return updated;
     });
     return { user, temporaryPassword };
+  }
+
+  /** Remove access to this workspace only; keep the person's other workspaces and historical annotations. */
+  async removeMember(workspaceId: string, actorId: string, memberId: string) {
+    return this.db.$transaction(async tx => {
+      const actor = await tx.membership.findUnique({ where: { workspaceId_userId: { workspaceId, userId: actorId } } });
+      if (actor?.role !== 'OWNER') throw new ForbiddenException('Only the workspace owner can remove members');
+      if (actorId === memberId) throw new ForbiddenException('The workspace owner cannot remove themselves');
+      const target = await tx.membership.findUnique({ where: { workspaceId_userId: { workspaceId, userId: memberId } } });
+      if (!target) throw new NotFoundException('Team member not found');
+      if (target.role === 'OWNER') throw new ForbiddenException('Cannot remove a workspace owner');
+
+      const sponsor = await tx.task.updateMany({
+        where: { workspaceId, sponsorAnalystId: memberId }, data: { sponsorAnalystId: null },
+      });
+      const context = await tx.task.updateMany({
+        where: { workspaceId, contextAnalystId: memberId }, data: { contextAnalystId: null },
+      });
+      await tx.membership.delete({ where: { workspaceId_userId: { workspaceId, userId: memberId } } });
+      await tx.auditLog.create({
+        data: { workspaceId, actorId, action: 'MEMBER_REMOVED', subjectId: memberId,
+          details: { previousRole: target.role, unassignedStreams: sponsor.count + context.count } },
+      });
+      return { ok: true, unassignedStreams: sponsor.count + context.count };
+    });
   }
 
   async members(workspaceId: string, userId: string) {
@@ -266,6 +294,15 @@ export class WorkspaceController {
   @Get(':workspaceId/members')
   members(@Req() req: AuthRequest, @Param('workspaceId', ParseUUIDPipe) workspaceId: string) {
     return this.workspaces.members(workspaceId, req.userId);
+  }
+
+  @Delete(':workspaceId/members/:memberId')
+  removeMember(
+    @Req() req: AuthRequest,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+  ) {
+    return this.workspaces.removeMember(workspaceId, req.userId, memberId);
   }
 
   @Get(':workspaceId/catalog')

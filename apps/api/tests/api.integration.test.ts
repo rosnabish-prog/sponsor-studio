@@ -138,6 +138,15 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
     assert.equal(removed.status,200,JSON.stringify(removed.json));
     assert.equal((await run(path,'GET',undefined,alice.cookie)).status,404);
     assert.equal((await run(`/workspaces/${workspaceId}/catalog`,'GET',undefined,alice.cookie)).status,200,'Catalog survives task deletion');
+    // Workspace membership removal is owner-only and does not delete the user's account.
+    const memberPath=`/workspaces/${workspaceId}/members/${viewer.json.user.id}`;
+    assert.equal((await run(memberPath,'DELETE',undefined,viewerLogin.cookie)).status,403,'viewer cannot remove themselves');
+    assert.equal((await run(`/workspaces/${workspaceId}/members/${alice.json.user.id}`,'DELETE',undefined,alice.cookie)).status,403,'owner cannot remove themselves');
+    const removedMember=await run(memberPath,'DELETE',undefined,alice.cookie);
+    assert.equal(removedMember.status,200,JSON.stringify(removedMember.json));
+    assert.equal(removedMember.json.ok,true);
+    assert.equal((await run(`/workspaces/${workspaceId}/members`,'GET',undefined,viewerLogin.cookie)).status,404,'removed member immediately loses workspace API access');
+    assert.equal((await run('/auth/me','GET',undefined,viewerLogin.cookie)).status,200,'removal does not invalidate unrelated user sessions');
   } finally {
     await app.close();
   }

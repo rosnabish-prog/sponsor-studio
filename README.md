@@ -26,7 +26,9 @@ The development server proxies `/api` to the API. For deployment, route `/api` t
 
 ## Getting started
 
-Sign in with an existing administrator account. The workspace owner can create sponsor and attribute lists, add analysts, create matches and assign annotation streams. New analysts receive a temporary password displayed to the administrator once; they must change it at their first sign-in. Administrators can reset analyst passwords from the Team screen.
+Sign in with an existing administrator account. The workspace owner can create sponsor and attribute lists, add analysts, create matches and assign annotation streams. New analysts receive a temporary password displayed to the administrator once; they must change it at their first sign-in.
+
+The **Team & access** screen identifies the workspace **Owner** separately from **Admin**. Only the owner can remove another member, including admins, analysts and viewers. Removal revokes that member's access to the workspace and clears their active task stream assignments without deleting saved annotations or the person's account. The owner cannot remove themselves or another owner. Owners can reset other members' passwords; admins can reset analyst and viewer passwords.
 
 Open a video from your device in Annotation Studio, or configure a direct HTTPS video source on a match. Local video stays in the current browser and must be selected again after refresh; annotations are saved to the workspace.
 

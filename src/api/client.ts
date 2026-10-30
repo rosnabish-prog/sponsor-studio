@@ -47,6 +47,7 @@ export const api = {
   workspaces: () => apiRequest<ApiMembership[]>('/workspaces'),
   createWorkspace: (name:string) => apiRequest<{id:string;name:string;slug:string}>('/workspaces','POST',{name}),
   members: (w:string) => apiRequest<ApiTeamMembership[]>(`/workspaces/${w}/members`),
+  removeMember: (w:string,id:string) => apiRequest<{ok:boolean;unassignedStreams:number}>(`/workspaces/${w}/members/${id}`,'DELETE'),
   addMember: (w:string,email:string,role:ApiMembership['role']) => apiRequest<ApiTeamMembership>(`/workspaces/${w}/members`,'POST',{email,role}),
   provisionMember:(w:string,body:{name:string;email:string;role:'ANALYST'|'REVIEWER'|'ADMIN'|'VIEWER'})=>
     apiRequest<ApiProvisionResult>(`/workspaces/${w}/members/provision`,'POST',body),
