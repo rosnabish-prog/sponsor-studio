@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from 'react';
-import type { Sponsor, SponsorGroup, StudioData, TagGroup } from '../types/models';
+import type { Sponsor, SponsorGroup, StudioData, TagGroup, TeamMember } from '../types/models';
 import { displayHotkey } from '../domain/hotkeys';
 import type { CatalogKind, DropPlacement } from '../domain/catalogEditing';
 
@@ -134,36 +134,40 @@ export function AttributesScreen({ data }: { data: StudioData }) {
   );
 }
 
-export function TeamScreen({ data }: { data: StudioData }) {
+export function TeamScreen({ data, viewerRole }: { data: StudioData; viewerRole?: TeamMember['role'] }) {
   return (
     <>
       <div className="pagehead">
         <div>
           <div className="eyebrow">WORKSPACE / PEOPLE</div>
-          <h1>Analysts &amp; access</h1>
-          <p className="sub">Assign either one analyst to both streams or two analysts to split tagging responsibilities.</p>
+          <h1>Team &amp; access</h1>
+          <p className="sub">Only the workspace owner can remove admins, analysts, and viewers. Existing match annotations are kept.</p>
         </div>
         <button className="button primary" onClick={() => window.userModal?.()}><Icon name="plus" /> Add team member</button>
       </div>
       <div className="card cardpad">
         <div className="tablewrap">
           <table className="table">
-            <thead><tr><th>Team member</th><th>Role</th><th>Email</th><th>Active assignments</th><th /></tr></thead>
+            <thead><tr><th>Team member</th><th>Role</th><th>Email</th><th>Active assignments</th><th>Actions</th></tr></thead>
             <tbody>
               {data.users.map(user => (
                 <tr key={user.id}>
                   <td><div className="row"><div className="avatar">{user.name.slice(0, 2).toUpperCase()}</div><b>{user.name}</b></div></td>
-                  <td><span className={`tag ${user.role === 'admin' ? 'pink' : ''}`}>{user.role}</span></td>
+                  <td><span className={`tag ${user.role === 'owner'||user.role === 'admin' ? 'pink' : ''}`}>{user.role === 'owner' ? 'Owner' : user.role === 'admin' ? 'Admin' : user.role === 'viewer' ? 'Viewer' : 'Analyst'}</span></td>
                   <td>{user.email}</td>
                   <td>{data.tasks.filter(task => task.sponsorAnalystId === user.id || task.contextAnalystId === user.id).length}</td>
-                  <td>{user.role !== 'admin' && <button className="button ghost tiny" onClick={() => window.resetMemberPassword?.(user.id)}>Reset password</button>}</td>
+                  <td><div className="row">
+                    {user.role !== 'owner' && (viewerRole === 'owner' || user.role !== 'admin') && <button className="button ghost tiny" onClick={() => window.resetMemberPassword?.(user.id)}>Reset password</button>}
+                    {viewerRole === 'owner' && user.role !== 'owner' && <button className="button warn tiny" onClick={() => window.removeWorkspaceMember?.(user.id)} aria-label={`Remove ${user.name}`}>Remove</button>}
+                    {user.role === 'owner' && <span className="tag">Protected</span>}
+                  </div></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-      <div className="infohint">Accounts are managed by administrators. New temporary passwords are shown only once and must be changed on first sign-in. Sponsor Studio sends no emails.</div>
+      <div className="infohint">Removed members lose access to this workspace, while their annotations and other workspace memberships remain intact. New temporary passwords are shown only once. Sponsor Studio sends no emails.</div>
     </>
   );
 }
@@ -181,5 +185,6 @@ declare global {
     removeItem?: (kind: 'event' | 'camera', groupId: string, id: string) => void;
     userModal?: (id?: string) => void;
     resetMemberPassword?: (id: string) => void;
+    removeWorkspaceMember?: (id: string) => void;
   }
 }

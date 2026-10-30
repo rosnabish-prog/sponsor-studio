@@ -55,7 +55,7 @@ function nameUser(data: StudioData, id: string): string {
 function VisibleTasks({ context }: { context: ScreenContext }): TaskSummary[] {
   const { data, user, viewerId } = context;
   if (!data) return [];
-  return user?.role === 'admin' ? data.tasks : data.tasks.filter(task => task.sponsorAnalystId === viewerId || task.contextAnalystId === viewerId);
+  return (user?.role === 'admin' || user?.role === 'owner') ? data.tasks : data.tasks.filter(task => task.sponsorAnalystId === viewerId || task.contextAnalystId === viewerId);
 }
 
 function TaskTable({ tasks, data, fixtures, badges }: { tasks: TaskSummary[]; data: StudioData; fixtures: Fixture[]; badges: Record<string, string> }) {
@@ -173,7 +173,7 @@ export function DashboardScreen({ context }: { context: ScreenContext }) {
     </div>
     <div className="pagehead">
       <div><div className="eyebrow">TOURNAMENT / ANALYST WORKSPACE</div><h1>Workspace<span style={{ color: 'var(--orange)' }}>.</span></h1><p className="sub">Track broadcast visibility, match moments, and sponsor intelligence.</p></div>
-      {context.user?.role === 'admin' && <button className="button primary" onClick={() => window.createTaskModal?.()}><Icon name="plus" /> Create a match</button>}
+      {(context.user?.role === 'admin' || context.user?.role === 'owner') && <button className="button primary" onClick={() => window.createTaskModal?.()}><Icon name="plus" /> Create a match</button>}
     </div>
     <div className="stats">
       {stats.map(([icon, count, label]) => <div className="card statcard" key={label}><div className="statghost" /><div className="staticon"><Icon name={icon} /></div><div className="svalue">{count}</div><div className="slabel">{label}</div></div>)}
@@ -204,13 +204,13 @@ export function MatchesScreen({ context }: { context: ScreenContext }) {
     <div className="pagehead">
       <div><div className="eyebrow">PRODUCTION / ALL MATCHES</div><h1>Match assignments</h1><p className="sub">Only matches assigned to your account are visible to you.</p></div>
       <div className="row wrap"><button className="button ghost" onClick={()=>window.refreshTodayMatches?.()} disabled={context.fixtureRefreshing}>{context.fixtureRefreshing?'Checking today…':'↻ Refresh today'}</button><button className="button ghost" onClick={()=>window.navigate?.('labeling')}>Labeling status <Icon name="arrow" /></button>
-      {context.user?.role === 'admin' && <button className="button primary" onClick={() => window.createTaskModal?.()}><Icon name="plus" /> New task</button>}</div>
+      {(context.user?.role === 'admin' || context.user?.role === 'owner') && <button className="button primary" onClick={() => window.createTaskModal?.()}><Icon name="plus" /> New task</button>}</div>
     </div>
     <div className="filterbar">
       {filters.map(([key, label]) => <button key={key} className={`chip ${context.taskFilter === key ? 'active' : ''}`} onClick={() => window.setFilter?.(key)}>{label}</button>)}
     </div>
     <MatchTiles tasks={tasks} data={context.data} fixtures={context.fixtures || []} badges={context.badges || {}} />
-    {context.user?.role === 'admin' && <FixtureCatalog context={context} />}
+    {(context.user?.role === 'admin' || context.user?.role === 'owner') && <FixtureCatalog context={context} />}
   </>;
 }
 

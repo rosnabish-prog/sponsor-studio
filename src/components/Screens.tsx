@@ -18,11 +18,11 @@ export function Screen({ id, context }: { id: ScreenId; context: ScreenContext }
   switch (id) {
     case 'dashboard': content = <DashboardScreen context={context} />; break;
     case 'tasks': content = <MatchesScreen context={context} />; break;
-    case 'labeling': content = data && <LabelingStatusScreen data={data} viewerId={context.viewerId} admin={context.user?.role==='admin'}/>; break;
-    case 'studio': content = context.studio && <AnnotationStudioScreen model={context.studio} isAdmin={context.user?.role === 'admin'} />; break;
+    case 'labeling': content = data && <LabelingStatusScreen data={data} viewerId={context.viewerId} admin={context.user?.role==='admin'||context.user?.role==='owner'}/>; break;
+    case 'studio': content = context.studio && <AnnotationStudioScreen model={context.studio} isAdmin={context.user?.role === 'admin'||context.user?.role==='owner'} />; break;
     case 'sponsors': content = data && <SponsorLibraryScreen data={data} />; break;
     case 'attributes': content = data && <AttributesScreen data={data} />; break;
-    case 'users': content = data && <TeamScreen data={data} />; break;
+    case 'users': content = data && <TeamScreen data={data} viewerRole={context.user?.role} />; break;
     case 'reports': content = context.reports && <InsightsScreen model={context.reports} viewer={context.user?.role==='viewer'}/>; break;
   }
   return <AppShell screen={id} context={context}>{content}</AppShell>;

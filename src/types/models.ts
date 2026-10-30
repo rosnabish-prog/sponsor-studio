@@ -32,7 +32,7 @@ export interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'analyst' | 'viewer';
+  role: 'owner' | 'admin' | 'analyst' | 'viewer';
   password: string;
 }
 

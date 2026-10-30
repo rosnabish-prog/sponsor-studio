@@ -62,7 +62,7 @@ export function AppShell({ screen, context, children }: {
   }
 
   const nav = user.role === 'viewer' ? basicNav.filter(item => item.id === 'reports')
-    : user.role === 'admin' ? [...basicNav, ...adminNav] : [...basicNav];
+    : user.role === 'admin'||user.role === 'owner' ? [...basicNav, ...adminNav] : [...basicNav];
   return (
     <div className="app">
       <header className="ops-header">

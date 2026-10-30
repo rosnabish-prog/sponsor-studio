@@ -24,7 +24,7 @@ import { readOriginalPng, MAX_ORIGINAL_PNG_BYTES } from '../src/domain/logoUploa
 import { copyCatalogEntry, reorderById } from '../src/domain/catalogEditing';
 import { hasRecordedCameraAfter, resumeCameraFromTimestamp, selectCameraAngle } from '../src/domain/cameraSwitch';
 import { captureStudioSpacebar } from '../src/domain/studioKeyboard';
-import { AttributesScreen, SponsorLibraryScreen } from '../src/components/AdminScreens';
+import { AttributesScreen, SponsorLibraryScreen, TeamScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
 import type { StudioScreenModel } from '../src/types/screen';
@@ -43,6 +43,27 @@ const data:StudioData = {
   cameraGroups:[{id:'c1',name:'Cameras',items:[{id:'camera',name:'Wide'}]}],
   tasks:[task],
 };
+
+test('Team tab distinguishes owners and permits only owners to remove members',()=>{
+  const team:StudioData={...data,users:[
+    {id:'owner',name:'Administrator',email:'admin@seebot.ai',role:'owner',password:''},
+    {id:'admin',name:'Second Admin',email:'second@seebot.ai',role:'admin',password:''},
+    {id:'analyst',name:'Analyst',email:'analyst@seebot.ai',role:'analyst',password:''},
+    {id:'viewer',name:'Viewer',email:'viewer@seebot.ai',role:'viewer',password:''},
+  ]};
+  const owner=renderToStaticMarkup(<TeamScreen data={team} viewerRole="owner"/>);
+  assert.match(owner,/Team &amp; access/);
+  assert.match(owner,/admin@seebot\.ai/);
+  assert.match(owner,/>Owner<\/span>/);
+  assert.equal((owner.match(/aria-label="Remove /g)||[]).length,3,'owner can remove all other roles');
+  assert.doesNotMatch(owner,/aria-label="Remove Administrator"/,'owner account is protected');
+  const admin=renderToStaticMarkup(<TeamScreen data={team} viewerRole="admin"/>);
+  assert.doesNotMatch(admin,/aria-label="Remove /,'admins cannot remove members');
+  assert.doesNotMatch(admin,/Reset password<\/button>.*Reset password<\/button>.*Reset password<\/button>/,'admin cannot reset other admins');
+  const shell=renderToStaticMarkup(<AppShell screen="dashboard" context={{user:{name:'Administrator',role:'owner'}}}><span>Home</span></AppShell>);
+  assert.match(shell,/OWNER/,'owner remains distinct in the header');
+  assert.match(shell,/>Team<\/button>/,'owner retains administrative navigation');
+});
 
 class FakeVideo extends EventTarget {
   currentTime=4200; duration=7800; readyState=0; paused=false; error:MediaError|null=null;

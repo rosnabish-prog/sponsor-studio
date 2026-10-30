@@ -116,7 +116,7 @@ const taskForFixture=(id:string)=>{
 window.openFixtureTask=id=>{
  const existing=taskForFixture(id);
  if(existing){window.openTask?.(existing.id);return}
- if(me()?.role!=='admin')return notify('An administrator must create the task first.');
+ if(!isManager())return notify('An administrator must create the task first.');
  window.createTaskModal?.();
  const sel=document.getElementById('taskfixture') as HTMLSelectElement|null;
  if(sel){sel.value=id;window.selectFixture?.(id)}
@@ -159,7 +159,7 @@ async function loadWorkspace(id:string) {
  catalogClipboard=null;
  const definitions=catalog.payload;
  db={
-  users:members.map(m=>({id:m.user.id,name:m.user.name,email:m.user.email,role:m.role==='OWNER'||m.role==='ADMIN'?'admin':m.role==='VIEWER'?'viewer':'analyst',password:''})),
+  users:members.map(m=>({id:m.user.id,name:m.user.name,email:m.user.email,role:m.role==='OWNER'?'owner':m.role==='ADMIN'?'admin':m.role==='VIEWER'?'viewer':'analyst',password:''})),
   sponsorGroups:definitions.sponsorGroups||[],eventGroups:definitions.eventGroups||[],cameraGroups:definitions.cameraGroups||[],
   tasks:tasks.map(fromApiTask),
  };
@@ -190,10 +190,11 @@ let editingInterval:{key:'sponsors'|'events'|'cameras';id:string;start:number;en
 const localVideos:Record<string,{url:string;name:string}>={};
 const videoDurations:Record<string,number>={};
 function clearLocalVideos(){for(const video of Object.values(localVideos))URL.revokeObjectURL(video.url);for(const id of Object.keys(localVideos))delete localVideos[id];for(const id of Object.keys(videoDurations))delete videoDurations[id];}
-const me=()=>db.users.find(x=>x.id===logged)||(remoteUser&&logged?{...remoteUser,password:'',role:'viewer' as const}:undefined);const currentTask=()=>db.tasks.find(x=>x.id===selectedTaskId);const reportTask=()=>db.tasks.find(x=>x.id===reportTaskId)||db.tasks[0];const visibleTasks=()=>me()?.role==='admin'||me()?.role==='viewer'?db.tasks:db.tasks.filter(t=>t.sponsorAnalystId===logged||t.contextAnalystId===logged);
+const me=()=>db.users.find(x=>x.id===logged)||(remoteUser&&logged?{...remoteUser,password:'',role:'viewer' as const}:undefined);const currentTask=()=>db.tasks.find(x=>x.id===selectedTaskId);const reportTask=()=>db.tasks.find(x=>x.id===reportTaskId)||db.tasks[0];const visibleTasks=()=>isManager()||me()?.role==='viewer'?db.tasks:db.tasks.filter(t=>t.sponsorAnalystId===logged||t.contextAnalystId===logged);
+const isManager=()=>me()?.role==='owner'||me()?.role==='admin';
 const taskStatus=(t:TaskSummary):'ready'|'progress'|'done'=>t.submitted?.sponsors&&t.submitted?.context?'done':t.sponsors.length||t.events.length||t.cameras.length||t.submitted?.sponsors||t.submitted?.context?'progress':'ready';
 const foundUser=(id:string)=>db.users.find(u=>u.id===id);const nameUser=(id:string)=>foundUser(id)?.name||'Unassigned';
-const allowed=(t:TaskSummary,kind:'sponsors'|'context')=>me()?.role==='admin'||(me()?.role==='analyst'&&((kind==='sponsors'?t.sponsorAnalystId:t.contextAnalystId)===logged));
+const allowed=(t:TaskSummary,kind:'sponsors'|'context')=>isManager()||(me()?.role==='analyst'&&((kind==='sponsors'?t.sponsorAnalystId:t.contextAnalystId)===logged));
 const canEdit=(t:TaskSummary,kind:'sponsors'|'context')=>allowed(t,kind)&&!(t.submitted?.[kind]);
 const sponsorFor=(t:TaskSummary)=>db.sponsorGroups.filter(g=>t.sponsorGroupIds.includes(g.id)).flatMap(g=>g.sponsors.map(s=>({...s,groupName:g.name}))).filter((s,i,a)=>a.findIndex(v=>v.id===s.id)===i);
 const eventsFor=(t:TaskSummary)=>db.eventGroups.filter(g=>t.eventGroupIds.includes(g.id)).flatMap(g=>g.items);
@@ -401,7 +402,7 @@ function attachVideo(){
   const t=currentTask();if(!t)return;
   if(Number.isFinite(el.duration)&&el.duration>1){
    videoDurations[t.id]=el.duration;
-   if(me()?.role==='admin'&&Math.round(el.duration)!==Math.round(t.duration)){
+   if(isManager()&&Math.round(el.duration)!==Math.round(t.duration)){
     t.duration=Math.round(el.duration);
     save();refreshStudio();
    }
@@ -480,13 +481,13 @@ window.submitMyTask=()=>{
  },{actionLabel:'SUBMIT',danger:false});
 };
 window.reopenTask=()=>{
- const t=currentTask();if(!t||me()?.role!=='admin')return;
+ const t=currentTask();if(!t||!isManager())return;
  confirmInApp('Reopen annotation streams','Reopen both annotation streams for editing?',()=>{
   t.submitted={sponsors:false,context:false};save();render();notify('Task streams reopened');
  },{actionLabel:'REOPEN STREAMS',danger:false});
 };
 window.assignTaskModal=id=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
  const task=db.tasks.find(x=>x.id===id);
  if(!task)return notify('Match task not found.');
  if(modalOpen)return notify('Close the current dialog before assigning workers.');
@@ -494,7 +495,7 @@ window.assignTaskModal=id=>{
  (document.getElementById('assignSponsorWorker') as HTMLSelectElement|null)?.focus();
 };
 window.saveTaskAssignment=id=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
  const t=db.tasks.find(x=>x.id===id);
  if(!t)return notify('Match task not found.');
  const sponsorId=formVal('assignSponsorWorker');
@@ -511,9 +512,9 @@ window.saveTaskAssignment=id=>{
  notify(previousSponsor===sponsorId&&previousContext===contextId?'Assignments unchanged':'Task assignments saved');
 };
 
-window.createTaskModal=(id='')=>{if(me()?.role!=='admin')return;openDialog({type:'task',task:db.tasks.find(t=>t.id===id),data:db,fixtures:OFFICIAL_FIXTURES,localVideoName:localVideos[id]?.name});};
+window.createTaskModal=(id='')=>{if(!isManager())return;openDialog({type:'task',task:db.tasks.find(t=>t.id===id),data:db,fixtures:OFFICIAL_FIXTURES,localVideoName:localVideos[id]?.name});};
 window.deleteTask=id=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
  const task=db.tasks.find(row=>row.id===id);if(!task)return;
  confirmInApp('Delete task · confirmation 1 of 2',`Delete the created task ${task.number} — ${task.name}? The official match catalog remains unchanged, but its annotations, assignments and stored task videos will be removed.`,()=>{
   confirmInApp('Delete task · final confirmation',`FINAL WARNING: Permanently remove task ${task.number}, ALL recorded annotations, and task video files? This cannot be undone. The fixture remains in Match Catalog.`,()=>{
@@ -531,7 +532,7 @@ window.selectFixture=id=>{
  for(const [key,value] of Object.entries(fields)){const input=document.getElementById(key) as HTMLInputElement|null;if(input)input.value=value;}
 };
 window.saveTask=id=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
  const name=formVal('taskname').trim(),number=formVal('tasknumber').trim(),minutes=Number(formVal('taskduration'));
  if(!name||!number||!Number.isFinite(minutes)||minutes<1)return notify('Add the task name, number and a valid footage duration.');
  if(db.tasks.some(task=>task.number.toLowerCase()===number.toLowerCase()&&task.id!==id))return notify('Task number must be unique.');
@@ -563,7 +564,7 @@ window.saveTask=id=>{
 };
 window.groupModal=(kind,id='')=>{const groups=kind==='sponsor'?db.sponsorGroups:kind==='event'?db.eventGroups:db.cameraGroups;openDialog({type:'group',kind,group:groups.find(g=>g.id===id)});};
 window.saveGroup=(kind,id)=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
  const name=formVal('gname').trim();if(!name)return notify('List name is required.');
  if(kind==='sponsor'){
   const group=db.sponsorGroups.find(row=>row.id===id);
@@ -583,7 +584,7 @@ const catalogGroupItems=(kind:CatalogKind,groupId:string)=>kind==='sponsor'
  :(kind==='event'?db.eventGroups:db.cameraGroups).find(group=>group.id===groupId)?.items;
 const catalogFits=()=>new TextEncoder().encode(JSON.stringify({sponsorGroups:db.sponsorGroups,eventGroups:db.eventGroups,cameraGroups:db.cameraGroups})).byteLength<=MAX_CATALOG_BYTES;
 window.copyCatalogItem=(kind,gid,id)=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
  const item=catalogGroupItems(kind,gid)?.find(row=>row.id===id);
  if(!item)return notify('This catalog item is no longer available.');
  catalogClipboard={kind,groupId:gid,itemId:id};notify(`${item.name} copied. Use Paste in a list, or drag its handle into another list.`);
@@ -612,13 +613,13 @@ function duplicateCatalogItem(kind:CatalogKind,sourceGroupId:string,sourceItemId
  }
 }
 window.pasteCatalogItem=(kind,gid)=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
  if(!catalogClipboard)return notify('Select Copy on a sponsor or attribute first.');
  if(catalogClipboard.kind!==kind)return notify('Paste into a list of the same type (sponsor, event or camera).');
  duplicateCatalogItem(kind,catalogClipboard.groupId,catalogClipboard.itemId,gid);
 };
 window.moveCatalogItem=(kind,sourceGroupId,itemId,targetGroupId,targetId='',placement='before')=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
  if(sourceGroupId!==targetGroupId){duplicateCatalogItem(kind,sourceGroupId,itemId,targetGroupId,targetId,placement);return;}
  if(!targetId)return;
  if(kind==='sponsor'){
@@ -633,7 +634,7 @@ window.moveCatalogItem=(kind,sourceGroupId,itemId,targetGroupId,targetId='',plac
  save();render();
 };
 window.moveCatalogGroup=(kind,id,targetId,placement='before')=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
  if(kind==='sponsor'){
   const next=reorderById(db.sponsorGroups,id,targetId,placement);if(next===db.sponsorGroups)return;
   db.sponsorGroups=next;
@@ -646,10 +647,10 @@ window.moveCatalogGroup=(kind,id,targetId,placement='before')=>{
  }
  save();render();
 };
-window.addSponsorToCurrentTask=()=>{const task=currentTask();if(!task||me()?.role!=='admin')return;const group=db.sponsorGroups.find(row=>task.sponsorGroupIds.includes(row.id));if(!group){notify('Assign a sponsor list to the task first.');return}window.sponsorModal?.(group.id)};
+window.addSponsorToCurrentTask=()=>{const task=currentTask();if(!task||!isManager())return;const group=db.sponsorGroups.find(row=>task.sponsorGroupIds.includes(row.id));if(!group){notify('Assign a sponsor list to the task first.');return}window.sponsorModal?.(group.id)};
 window.sponsorModal=(gid,sid='')=>{const group=db.sponsorGroups.find(g=>g.id===gid);if(!group)return;openDialog({type:'sponsor',group,sponsor:group.sponsors.find(s=>s.id===sid)});};
 window.saveSponsor=async(gid,sid)=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
  const group=db.sponsorGroups.find(row=>row.id===gid),name=formVal('sname').trim();
  const file=(document.getElementById('simage') as HTMLInputElement|null)?.files?.[0];
  if(!group||!name)return notify('Sponsor name required');
@@ -675,12 +676,12 @@ function shortcutTaken(key:string,exceptId=''){
   .some(item=>item.id!==exceptId&&normalizeHotkey(item.hotkey)===key);
 }
 window.attrItemModal=(kind,gid,id='')=>{const group=(kind==='event'?db.eventGroups:db.cameraGroups).find(row=>row.id===gid);if(group)openDialog({type:'item',kind,groupId:gid,item:group.items.find(row=>row.id===id)});};
-window.saveAttrItem=(kind,gid,id='')=>{if(me()?.role!=='admin')return;const gs=kind==='event'?db.eventGroups:db.cameraGroups,g=gs.find(x=>x.id===gid),name=formVal('iname').trim();if(!g||!name)return notify('Attribute name required');const shortcut=normalizeHotkey(formVal('ihotkey'));if(shortcut&&shortcutTaken(shortcut,id))return notify('This shortcut is already assigned to another sponsor, event, or camera.');let item=g.items.find(row=>row.id===id);if(!item){item={id:uid(),name};g.items.push(item)}item.name=name;item.hotkey=shortcut;if(kind==='event'){item.kind='range';item.highValue=!!(document.getElementById('ihigh') as HTMLInputElement|null)?.checked;}save();window.closeModal?.();render();};
+window.saveAttrItem=(kind,gid,id='')=>{if(!isManager())return;const gs=kind==='event'?db.eventGroups:db.cameraGroups,g=gs.find(x=>x.id===gid),name=formVal('iname').trim();if(!g||!name)return notify('Attribute name required');const shortcut=normalizeHotkey(formVal('ihotkey'));if(shortcut&&shortcutTaken(shortcut,id))return notify('This shortcut is already assigned to another sponsor, event, or camera.');let item=g.items.find(row=>row.id===id);if(!item){item={id:uid(),name};g.items.push(item)}item.name=name;item.hotkey=shortcut;if(kind==='event'){item.kind='range';item.highValue=!!(document.getElementById('ihigh') as HTMLInputElement|null)?.checked;}save();window.closeModal?.();render();};
 window.removeItem=(kind,gid,id)=>{let gs=kind==='event'?db.eventGroups:db.cameraGroups,g=gs.find(x=>x.id===gid);if(!g)return;const item=g.items.find(x=>x.id===id);if(!item)return;confirmInApp('Remove attribute',`Remove "${item.name}" from this list? Historical annotations may lose the display label.`,()=>{g.items=g.items.filter(x=>x.id!==id);save();render();notify('Attribute removed')},{actionLabel:'REMOVE ATTRIBUTE'})};
-window.userModal=(id='')=>openDialog({type:'user',user:db.users.find(u=>u.id===id)});
+window.userModal=(id='')=>{if(isManager())openDialog({type:'user',user:db.users.find(u=>u.id===id)});};
 window.resetMemberPassword=id=>{
-  if(me()?.role!=='admin'||!db.users.some(u=>u.id===id&&u.role==='analyst'))return;
- const user=db.users.find(u=>u.id===id)!;
+ const user=db.users.find(u=>u.id===id);
+ if(!isManager()||!user||user.role==='owner'||(user.role==='admin'&&me()?.role!=='owner'))return;
  confirmInApp('Reset worker password',`Reset ${user.name}'s password? Their existing sessions will be revoked. You must share the new temporary password yourself.`,()=>{
   void api.resetMemberPassword(workspaceId,id).then(async result=>{
    await loadWorkspace(workspaceId);
@@ -689,13 +690,26 @@ window.resetMemberPassword=id=>{
   }).catch(error=>notify('Could not reset password: '+error.message));
  },{actionLabel:'RESET PASSWORD'});
 };
+window.removeWorkspaceMember=id=>{
+ const member=db.users.find(u=>u.id===id);
+ if(me()?.role!=='owner'||!member||member.role==='owner'||member.id===logged)return notify('Only the workspace owner can remove other members.');
+ const count=db.tasks.reduce((n,t)=>n+(t.sponsorAnalystId===id?1:0)+(t.contextAnalystId===id?1:0),0);
+ confirmInApp('Remove team member',`Remove ${member.name} (${member.role}) from this workspace?${count?` Their ${count} assigned match stream${count===1?'':'s'} will become unassigned.`:''} Existing annotations and match history will be preserved.`,()=>{
+  if(me()?.role!=='owner')return notify('Only the workspace owner can remove other members.');
+  void api.removeMember(workspaceId,id).then(async result=>{
+   await loadWorkspace(workspaceId);
+   notify(`${member.name} removed from this workspace.${result.unassignedStreams?` ${result.unassignedStreams} match streams unassigned.`:''}`);
+  }).catch(error=>notify('Could not remove member: '+(error instanceof Error?error.message:String(error))));
+ },{actionLabel:'REMOVE MEMBER'});
+};
 window.saveUser=id=>{
- if(me()?.role!=='admin')return;
+ if(!isManager())return;
   if(id)return notify('Member details are managed by the account owner.');
   const name=formVal('uname').trim(),email=formVal('uemail').trim().toLowerCase();
   if(!name||!email)return notify('Name and email are required.');
    const role=formVal('urole');
    if(role!=='ANALYST'&&role!=='ADMIN'&&role!=='VIEWER')return notify('Select a valid role.');
+   if(role==='ADMIN'&&me()?.role!=='owner')return notify('Only the workspace owner can add admins.');
    void api.provisionMember(workspaceId,{name,email,role}).then(async result=>{
    window.closeModal?.();
    await loadWorkspace(workspaceId);
@@ -771,7 +785,7 @@ window.exportTask=id=>{let t=db.tasks.find(x=>x.id===id);if(!t||!visibleTasks().
  }
  if(!workspaceId){mount('workspace',{workspaces:liveWorkspaces.map(x=>x.workspace)});return}
  if(user.role==='viewer'&&view!=='reports'){view='reports';selectedTaskId='';writeStudioRoute(view,'',true)}
- else if(user.role!=='admin'&&['users','sponsors','attributes'].includes(view)){view='dashboard';writeStudioRoute(view,'',true)}
+ else if(!['owner','admin'].includes(user.role)&&['users','sponsors','attributes'].includes(view)){view='dashboard';writeStudioRoute(view,'',true)}
  if(view==='studio'&&!visibleTasks().some(task=>task.id===selectedTaskId)){view='tasks';selectedTaskId='';writeStudioRoute(view,'',true)}
  const t=view==='studio'?currentTask():null;
  const localVideo=t?localVideos[t.id]:undefined;
