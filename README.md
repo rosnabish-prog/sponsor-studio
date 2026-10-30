@@ -30,4 +30,6 @@ Sign in with an existing administrator account. The workspace owner can create s
 
 Open a video from your device in Annotation Studio, or configure a direct HTTPS video source on a match. Local video stays in the current browser and must be selected again after refresh; annotations are saved to the workspace.
 
+For BuildUp videos, configure the server-side `BUILDUP_API_TOKEN`, select **BuildUp match video** in the match editor, and enter the BuildUp match ID. See [BuildUp video setup](apps/api/README.md#buildup-match-video).
+
 Run `npm run build` to typecheck and build the frontend, and `npm run test:api` for the API tests.

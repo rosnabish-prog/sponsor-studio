@@ -39,11 +39,15 @@ function validateMetadata(value: unknown): Prisma.InputJsonValue | undefined {
     }
     return list as string[];
   };
+  if (data.videoType === 'buildup' && (typeof data.buildupMatchId !== 'string' || !/^[1-9]\d{0,14}$/.test(data.buildupMatchId))) {
+    throw new BadRequestException('Invalid BuildUp match ID');
+  }
   const safe = {
     sponsorGroupIds: ids('sponsorGroupIds'), eventGroupIds: ids('eventGroupIds'), cameraGroupIds: ids('cameraGroupIds'),
     periods: data.periods && typeof data.periods === 'object' ? data.periods : null,
-    videoType: ['none','https','ftp','s3'].includes(String(data.videoType)) ? data.videoType : 'none',
+    videoType: ['none','https','ftp','s3','buildup'].includes(String(data.videoType)) ? data.videoType : 'none',
     videoUrl: typeof data.videoUrl === 'string' ? data.videoUrl.slice(0, 2048) : '',
+    buildupMatchId: data.videoType === 'buildup' ? data.buildupMatchId : '',
   };
   if (JSON.stringify(safe).length > 10_000) throw new BadRequestException('Task metadata too large');
   return safe as Prisma.InputJsonValue;

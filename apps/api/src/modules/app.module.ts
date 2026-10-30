@@ -8,13 +8,14 @@ import { WorkspaceController, WorkspaceService } from './workspaces';
 import { TaskController, TaskService } from './tasks';
 import { AnnotationController, AnnotationService } from './annotations';
 import { VideoController, VideoService } from './video';
+import { BuildupController, BuildupService } from './buildup';
 
 @Module({
   imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }])],
-  controllers: [HealthController, AuthController, WorkspaceController, TaskController, AnnotationController, VideoController],
+  controllers: [HealthController, AuthController, WorkspaceController, TaskController, AnnotationController, VideoController, BuildupController],
   providers: [
     DatabaseService, AuthService, SessionGuard,
-    WorkspaceService, TaskService, AnnotationService, VideoService,
+    WorkspaceService, TaskService, AnnotationService, VideoService, BuildupService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

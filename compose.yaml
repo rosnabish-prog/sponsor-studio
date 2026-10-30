@@ -24,6 +24,7 @@ services:
       CLOUDFRONT_VIDEO_DOMAIN: ${CLOUDFRONT_VIDEO_DOMAIN:-}
       CLOUDFRONT_KEY_PAIR_ID: ${CLOUDFRONT_KEY_PAIR_ID:-}
       CLOUDFRONT_PRIVATE_KEY: ${CLOUDFRONT_PRIVATE_KEY:-}
+      BUILDUP_API_TOKEN: ${BUILDUP_API_TOKEN:-}
     depends_on:
       migrations:
         condition: service_completed_successfully

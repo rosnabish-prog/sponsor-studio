@@ -75,7 +75,8 @@ export interface TaskSummary {
   events: EventAnnotation[];
   cameras: CameraAnnotation[];
   submitted: { sponsors: boolean; context: boolean };
-  videoType?: 'none' | 'https' | 'ftp' | 's3';
+  videoType?: 'none' | 'https' | 'ftp' | 's3' | 'buildup';
+  buildupMatchId?: string;
   videoUrl?: string;
   videoName?: string;
   videoSize?: number;
