@@ -78,7 +78,7 @@ function CatalogGroups({ kind, groups }: { kind: CatalogKind; groups: SponsorGro
         </div>
         <div className="groupitems catalog-items" onDragOver={event => allow(event, `group:${group.id}`,group.id, 'item')} onDrop={event => drop(event, group.id)}>
           {entries.map((item, index) => <div className={`sponsor-mini catalog-item ${hover.startsWith(`item:${group.id}:${item.id}:`) ? 'catalog-drop-over' : ''} ${hover === `item:${group.id}:${item.id}:before` ? 'catalog-drop-before' : ''} ${hover === `item:${group.id}:${item.id}:after` ? 'catalog-drop-after' : ''}`} key={item.id}
-            onDragOver={event => { event.stopPropagation();allow(event, `item:${group.id}:${item.id}:${placement(event)}`,group.id,'item'); }}
+            onDragOver={event => { if(dragged?.scope==='item'){event.stopPropagation();allow(event, `item:${group.id}:${item.id}:${placement(event)}`,group.id,'item');} }}
             onDrop={event => drop(event,group.id,item.id)}>
             <span draggable className="catalog-drag-handle" title={`Drag ${item.name} to reorder · drop in another list to copy`} onDragStart={event => {event.stopPropagation();startDrag(event,{scope:'item',kind,groupId:group.id,id:item.id});}}>⠿</span>
             {kind === 'sponsor' && <BrandThumb sponsor={item as Sponsor} />}
