@@ -4,7 +4,7 @@ A branded, interactive **frontend demonstration** for sponsor-exposure annotatio
 
 ## What is included
 
-- Admin and analyst demo sign-in, with role-specific navigation and assignment restrictions in the interface.
+- Owner, admin, and analyst demo roles, with role-specific navigation and assignment restrictions in the interface.
 - Task creation with task number, source metadata (local file, HTTPS MP4 or FTP/SFTP metadata), reusable sponsor groups, key-event sets, and camera-angle sets.
 - One analyst for all tags or two analysts split between sponsor visibility and events/camera context.
 - Video controls, manual timestamp seeking, and click-on/click-off unique sponsor visibility. Multiple appearances of one brand in a frame are recorded as a **single active sponsor**.
@@ -33,7 +33,7 @@ required at runtime. Each family’s Open Font License is included alongside the
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | admin@demo.seebot.ai | Demo1234! |
+| Workspace owner | admin@demo.seebot.ai | Demo1234! |
 | Sponsor / all-in-one analyst | analyst@demo.seebot.ai | Demo1234! |
 | Events / camera analyst | events@demo.seebot.ai | Demo1234! |
 
@@ -122,7 +122,9 @@ Note: this is still a browser-local functional demo. It does not synchronize use
 
 ## Admin users, assignments, and status flow
 
-**Admin → Team → Add Analyst** creates a demonstration analyst in that browser's local database. The demo requires a name, valid email address, and a password of at least eight characters. **Admin → Matches → New Task** lets an administrator select a fixture or create a custom match, choose sponsor/event/camera presets, and assign a sponsor analyst plus an event/camera analyst. Both assignments may point to the same user. The task can later be edited in its Actions menu.
+**Team → Add team member** creates a demonstration member in that browser's local database. The demo requires a name, valid email address, and a password of at least eight characters. The workspace owner can create either admins or analysts; admins can add and edit analysts but cannot add admins or remove users. Existing browser data automatically promotes the original `u_admin` demo account to owner without resetting work. **Matches → New Task** lets admins and owners select a fixture or create a custom match, choose sponsor/event/camera presets, and assign a sponsor analyst plus an event/camera analyst. Both assignments may point to the same user. The task can later be edited in its Actions menu.
+
+**Workspace owner → Team → Remove** can remove any other admin or analyst. The owner cannot remove themselves, and the action requires an in-app confirmation. Removing a member unassigns both kinds of match streams where relevant, but preserves all existing annotations and task history. Changing an analyst into an admin also clears their analyst assignments. An admin has no removal control and direct calls to the removal action are rejected by the demo's UI-layer role check.
 
 Task status is automatically derived, not manually changed:
 
@@ -130,7 +132,7 @@ Task status is automatically derived, not manually changed:
 - **In Progress**: at least one recorded tag or at least one submitted stream, while both streams are not yet submitted.
 - **Completed**: both sponsor and context annotation streams have been submitted.
 
-The demo has no real shared user directory or backend. Users, assignments, uploaded logos and annotations cannot be shared between separate devices through GitHub Pages. Production needs backend authentication, role enforcement and shared storage.
+The demo has no real shared user directory or backend. Users, assignments, uploaded logos and annotations cannot be shared between separate devices through GitHub Pages. **Owner removal only affects that browser's demo data; it is not real account revocation.** Production needs backend authentication, tenant-scoped owner checks, removal auditing, session revocation, role enforcement, and shared storage.
 
 ## Insights calculations (October 2026)
 
