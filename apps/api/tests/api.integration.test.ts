@@ -69,14 +69,16 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
     assert.equal((await run(path + '/reopen', 'POST', { stream: 'sponsors' }, bob.cookie)).status, 403);
     assert.equal((await run(path + '/reopen', 'POST', { stream: 'sponsors' }, alice.cookie)).status, 201);
     assert.equal((await run(path + `/annotations/${annotation.json.id}`, 'PATCH', { quality: 'clear' }, bob.cookie)).status, 200);
-    // The server enforces two concurrent camera angles per match.
+    // The server allows only one live camera; the UI closes it before switching.
     const firstCamera=await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'wide',start:10},alice.cookie);
-    const secondCamera=await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'close',start:11},alice.cookie);
     assert.equal(firstCamera.status,201,JSON.stringify(firstCamera.json));
+    assert.equal((await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'close',start:11},alice.cookie)).status,409);
+    assert.equal((await run(path+`/annotations/${firstCamera.json.id}`,'PATCH',{end:11},alice.cookie)).status,200);
+    const secondCamera=await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'close',start:11},alice.cookie);
     assert.equal(secondCamera.status,201,JSON.stringify(secondCamera.json));
     assert.equal((await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'bench',start:12},alice.cookie)).status,409);
-    assert.equal((await run(path+`/annotations/${firstCamera.json.id}`,'PATCH',{end:20},alice.cookie)).status,200);
-    assert.equal((await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'bench',start:21},alice.cookie)).status,201);
+    assert.equal((await run(path+`/annotations/${secondCamera.json.id}`,'PATCH',{end:20},alice.cookie)).status,200);
+    assert.equal((await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'bench',start:20},alice.cookie)).status,201);
     assert.equal((await run('/auth/logout', 'POST', undefined, bob.cookie)).status, 201);
     assert.equal((await run('/auth/me', 'GET', undefined, bob.cookie)).status, 401);
 

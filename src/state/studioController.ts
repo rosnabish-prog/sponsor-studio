@@ -13,6 +13,7 @@ import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
 import { easternMatchDate, hasFinalResult, mergeTodayFixtureUpdates } from '../domain/fixtures';
 import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
 import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } from '../domain/catalogEditing';
+import { selectCameraAngle } from '../domain/cameraSwitch';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -263,7 +264,7 @@ window.openTask=id=>{
 window.setFilter=s=>{taskFilter=s;render()};
 function studioSidebarHeading(){
  if(studioTab==='events')return {title:'KEY MATCH EVENTS',hint:'Tap a match event to start an interval. Tap again to stop it.'};
- if(studioTab==='cameras')return {title:'CAMERA ANGLES',hint:'Up to two angles at once. End one before starting a third.'};
+ if(studioTab==='cameras')return {title:'CAMERA ANGLES',hint:'One camera at a time. Selecting another angle automatically switches at the playhead.'};
  return {title:'SPONSORS',hint:'Tap a sponsor to switch between OFF and LIVE.'};
 }
  window.setExposureAttribute=(id,field,value)=>{
@@ -348,22 +349,15 @@ window.tagCamera=id=>{
  const t=currentTask();if(!t||!canEdit(t,'context'))return;
  if(!camerasFor(t).some(x=>x.id===id))return;
  const at=seconds(t),active=t.cameras.find(x=>x.cameraId===id&&x.end==null);
- if(!active){const recorded=recordedAt(t.cameras.filter(row=>row.cameraId===id),at);if(recorded)return window.editRecordedAnnotation?.('cameras',recorded.id);}
- if(active){
-  if(sameVideoTimestamp(at,active.start)){
-   if(active.cameraId===id){
-    t.cameras=t.cameras.filter(x=>x.id!==active.id);
-    save();refreshStudio();notify('Camera event removed — same timestamp');return;
-   }
-   t.cameras=t.cameras.filter(x=>x.id!==active.id);save();refreshStudio();return;
-  }
-  if(at<active.start)return notify('Camera end time cannot precede start time');
-  active.end=at;
-  save();refreshStudio();return;
+ if(!active){
+  const recorded=recordedAt(t.cameras,at);
+  if(recorded)return window.editRecordedAnnotation?.('cameras',recorded.id);
  }
- if(t.cameras.filter(x=>x.end===null).length>=2)return notify('Two camera angles are already live. End one before selecting another.');
- t.cameras.push({id:uid(),cameraId:id,start:at,end:null,createdBy:logged,createdAt:tstamp()});
+ const result=selectCameraAngle(t.cameras,id,at,logged,tstamp(),uid);
+ t.cameras=result.rows;
  save();refreshStudio();
+ if(result.action==='switched')notify('Camera switched — previous interval ended automatically.');
+ if(result.action==='cancelled')notify('Camera interval removed — same timestamp.');
 };
 window.deleteLog=(key,id)=>{const t=currentTask(),kind=key==='sponsors'?'sponsors':'context';if(!t||!canEdit(t,kind))return;confirmInApp('Remove annotation','Remove this recorded annotation? This action cannot be undone.',()=>{
   if(key==='sponsors')t.sponsors=t.sponsors.filter(x=>x.id!==id);

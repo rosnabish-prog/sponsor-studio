@@ -41,12 +41,12 @@ function EventButtons({ model, camera }: StudioProps & { camera: boolean }) {
 }
 
 export function StudioControls({ model }: StudioProps) {
-  if (model.selectedTab === 'events') return <section className="studio-chip-group studio-secondary-controls"><div className="chip-group-title"><span>CAMERA ANGLES</span><small>UP TO TWO LIVE ANGLES · TAP AGAIN TO END</small></div><div className="event-chip-row">{model.cameras.length ? <EventButtons model={model} camera /> : <span className="studio-layer-hint">No camera angles assigned to this match.</span>}</div></section>;
+  if (model.selectedTab === 'events') return <section className="studio-chip-group studio-secondary-controls"><div className="chip-group-title"><span>CAMERA ANGLES</span><small>ONE LIVE ANGLE · SELECT ANOTHER TO SWITCH</small></div><div className="event-chip-row">{model.cameras.length ? <EventButtons model={model} camera /> : <span className="studio-layer-hint">No camera angles assigned to this match.</span>}</div></section>;
   if (model.selectedTab === 'cameras') return <section className="studio-chip-group studio-secondary-controls"><div className="chip-group-title"><span>KEY MATCH EVENTS</span><small>TAP TO START · TAP AGAIN TO END</small></div><div className="event-chip-row">{model.events.length ? <EventButtons model={model} camera={false} /> : <span className="studio-layer-hint">No key match events assigned to this match.</span>}</div></section>;
   if (model.selectedTab === 'sponsors') return <div className="studio-layer-hint">Select sponsor logos from the right-hand SPONSORS panel. The timeline below shows sponsor visibility only.</div>;
   return <>
     <section className="studio-chip-group"><div className="chip-group-title"><span>KEY MATCH EVENTS</span><small>TAP TO START · TAP AGAIN TO END</small></div><div className="event-chip-row"><EventButtons model={model} camera={false} /></div></section>
-    <section className="studio-chip-group"><div className="chip-group-title"><span>CAMERA ANGLES</span><small>UP TO TWO LIVE ANGLES · TAP AGAIN TO END</small></div><div className="event-chip-row"><EventButtons model={model} camera /></div></section>
+    <section className="studio-chip-group"><div className="chip-group-title"><span>CAMERA ANGLES</span><small>ONE LIVE ANGLE · SELECT ANOTHER TO SWITCH</small></div><div className="event-chip-row"><EventButtons model={model} camera /></div></section>
   </>;
 }
 

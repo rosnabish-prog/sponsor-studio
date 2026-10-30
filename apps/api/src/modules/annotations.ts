@@ -70,7 +70,7 @@ export class AnnotationService {
         if (active) throw new ConflictException('An annotation is already active for this label');
         if (input.kind === 'CAMERA') {
           const count = await tx.annotation.count({ where: { taskId, kind: 'CAMERA', end: null } });
-          if (count >= 2) throw new ConflictException('No more than two camera angles can be live simultaneously');
+          if (count >= 1) throw new ConflictException('Only one camera angle can be live. End the current interval before starting another');
         }
       }
       const annotation = await tx.annotation.create({ data: {

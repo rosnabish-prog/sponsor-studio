@@ -22,6 +22,7 @@ import { hasFinalResult, mergeTodayFixtureUpdates } from '../src/domain/fixtures
 import { StudioModal } from '../src/components/StudioModals';
 import { readOriginalPng, MAX_ORIGINAL_PNG_BYTES } from '../src/domain/logoUpload';
 import { copyCatalogEntry, reorderById } from '../src/domain/catalogEditing';
+import { selectCameraAngle } from '../src/domain/cameraSwitch';
 import { AttributesScreen, SponsorLibraryScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
@@ -201,6 +202,30 @@ test('events and camera buttons remain available together in complementary panel
   assert.match(renderToStaticMarkup(<StudioRail model={events}/>),/GOAL/i);
   assert.match(renderToStaticMarkup(<StudioControls model={camera}/>),/KEY MATCH EVENTS/);
   assert.match(renderToStaticMarkup(<StudioRail model={camera}/>),/Wide/);
+});
+
+test('camera selections switch without a manual stop and keep one live interval',()=>{
+  let nextId=0;
+  const makeId=()=>`camera-${++nextId}`;
+  const initial=selectCameraAngle([], 'wide', 10, 'analyst', 'now',makeId);
+  assert.equal(initial.action,'started');
+  assert.deepEqual(initial.rows.map(row=>[row.cameraId,row.start,row.end]),[['wide',10,null]]);
+  const switched=selectCameraAngle(initial.rows,'closeup',25,'analyst','now',makeId);
+  assert.equal(switched.action,'switched');
+  assert.deepEqual(switched.rows.map(row=>[row.cameraId,row.start,row.end]),[['wide',10,25],['closeup',25,null]]);
+  assert.equal(switched.rows.filter(row=>row.end===null).length,1);
+  const stopped=selectCameraAngle(switched.rows,'closeup',40,'analyst','now',makeId);
+  assert.equal(stopped.action,'stopped');
+  assert.deepEqual(stopped.rows.map(row=>row.end),[25,40]);
+  const cancelled=selectCameraAngle(initial.rows,'wide',10,'analyst','now',makeId);
+  assert.equal(cancelled.action,'cancelled');
+  assert.equal(cancelled.rows.length,0);
+  const sameMomentSwitch=selectCameraAngle(initial.rows,'closeup',10,'analyst','now',makeId);
+  assert.deepEqual(sameMomentSwitch.rows.map(row=>[row.cameraId,row.start,row.end]),[['closeup',10,null]]);
+  const legacyTwo=[...initial.rows,{id:'old',cameraId:'bench',start:12,end:null,createdBy:'analyst',createdAt:'now'}];
+  const normalized=selectCameraAngle(legacyTwo,'replay',30,'analyst','now',makeId);
+  assert.equal(normalized.rows.filter(row=>row.end===null).length,1);
+  assert.deepEqual(normalized.rows.filter(row=>row.cameraId!=='replay').map(row=>row.end),[30,30]);
 });
 
 test('studio assignments explain each role and workspace creation is hidden', () => {
