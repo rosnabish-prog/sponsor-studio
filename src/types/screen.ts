@@ -13,6 +13,7 @@ export interface ScreenContext {
   fixtures?: Fixture[];
   badges?: Record<string, string>;
   fixtureSyncLabel?: string;
+  fixtureRefreshing?: boolean;
   fixtureDay?: string;
   taskFilter?: string;
   studio?: StudioScreenModel;
@@ -62,6 +63,7 @@ export interface StudioScreenModel {
   sponsors: Sponsor[];
   events: TagAttribute[];
   cameras: TagAttribute[];
+  editingInterval?: {key:'sponsors'|'events'|'cameras';id:string;start:number;end:number};
 }
 
 /** Synchronous commit so annotation handlers can immediately access mounted DOM. */

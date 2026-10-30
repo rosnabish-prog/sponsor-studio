@@ -1,14 +1,14 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
-import type { Fixture, Sponsor, SponsorGroup, StudioData, TagGroup, TaskSummary, TeamMember } from '../types/models';
+import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import type { Fixture, Sponsor, SponsorGroup, StudioData, TagAttribute, TagGroup, TaskSummary, TeamMember } from '../types/models';
+import { displayHotkey, hotkeyFromKeyboard, HOTKEY_PLACEHOLDER } from '../domain/hotkeys';
 
 export type DialogModel =
   | { type: 'confirm'; title: string; message: string; actionLabel: string; danger: boolean }
-  | { type: 'annotation-edit'; key: 'sponsors' | 'events' | 'cameras'; id: string; name: string; start: number; end: number; duration: number }
   | { type: 'assign'; task: TaskSummary; users: TeamMember[] }
   | { type: 'task'; task?: TaskSummary; data: StudioData; fixtures: Fixture[]; localVideoName?: string }
   | { type: 'group'; kind: 'sponsor' | 'event' | 'camera'; group?: SponsorGroup | TagGroup }
   | { type: 'sponsor'; group: SponsorGroup; sponsor?: Sponsor }
-  | { type: 'item'; kind: 'event' | 'camera'; groupId: string }
+  | { type: 'item'; kind: 'event' | 'camera'; groupId: string; item?: TagAttribute }
   | { type: 'user'; user?: TeamMember }
   | { type: 'credentials'; name: string; email: string; temporaryPassword: string | null; purpose: 'created' | 'reset' };
 
@@ -18,6 +18,21 @@ function Cancel() { return <button type="button" className="button ghost" onClic
 function Save({ children }: { children: ReactNode }) { return <button type="submit" className="button primary">{children}</button>; }
 function Field({ title, children, full = false }: { title: string; children: ReactNode; full?: boolean }) {
   return <div className={`field ${full ? 'full' : ''}`}><label>{title}</label>{children}</div>;
+}
+function HotkeyField({ id, initial }: { id: string; initial?: string }) {
+  const [value, setValue] = useState(initial || '');
+  const handle = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Tab') return;
+    event.preventDefault();
+    if (event.key === 'Backspace' || event.key === 'Delete' || event.key === 'Escape') { setValue(''); return; }
+    const next = hotkeyFromKeyboard(event.nativeEvent);
+    if (next) setValue(next);
+  };
+  return <Field title="Keyboard shortcut (optional)">
+    <div className="hotkey-field"><input id={id} type="text" readOnly value={value} onKeyDown={handle} placeholder={HOTKEY_PLACEHOLDER} aria-label="Shortcut; press a letter or digit, optionally with Ctrl or Alt" autoComplete="off" />
+      <button className="button ghost tiny" type="button" onClick={()=>setValue('')} disabled={!value}>Clear</button></div>
+    <small>{value ? `Assigned: ${displayHotkey(value)}. ` : ''}Click this field and press a shortcut. Only one action per shortcut in the workspace; the shortcut works in Annotation Studio when you are not typing.</small>
+  </Field>;
 }
 function Options({ users, selected }: { users: TeamMember[]; selected?: string }) {
   return <><option value="">Unassigned</option>{users.filter(user => user.role === 'analyst').map(user => <option key={user.id} value={user.id}>{user.name} — {user.email}</option>)}</>;
@@ -106,16 +121,18 @@ function SponsorModal({ group, sponsor }: Extract<DialogModel, { type: 'sponsor'
         <small>Transparent margins are trimmed automatically so the brand fills the card. Existing white JPEG backgrounds require re-uploading the original transparent PNG.</small>
       </Field>
       <Field title="Fallback brand color"><input type="color" id="scolor" defaultValue={sponsor?.color || '#7059c4'} style={{ padding: 5, height: 45 }} /></Field>
+      <HotkeyField id="shotkey" initial={sponsor?.hotkey} />
     </div></div>
     <Footer><Cancel />{sponsor && <button className="button warn" type="button" onClick={() => { window.closeModal?.(); window.deleteSponsor?.(group.id, sponsor.id); }}>Delete</button>}<Save>Save sponsor</Save></Footer>
   </form>;
 }
 
-function ItemModal({ kind, groupId }: Extract<DialogModel, { type: 'item' }>) {
-  return <form onSubmit={event => { event.preventDefault(); window.saveAttrItem?.(kind, groupId); }}><div className="modalbody"><div className="formgrid">
-    <Field title="Attribute name"><input id="iname" placeholder={kind === 'event' ? 'Goal, replay, substitution' : 'Wide · left goal'} /></Field>
-    {kind === 'event' && <div className="field full"><label className="checkline"><input type="checkbox" id="ihigh" /><span>Highlight as high-value sponsor moment (e.g., goal, trophy celebration)</span></label></div>}
-  </div></div><Footer><Cancel /><Save>Add attribute</Save></Footer></form>;
+function ItemModal({ kind, groupId, item }: Extract<DialogModel, { type: 'item' }>) {
+  return <form onSubmit={event => { event.preventDefault(); window.saveAttrItem?.(kind, groupId, item?.id); }}><div className="modalbody"><div className="formgrid">
+    <Field title="Attribute name"><input id="iname" required defaultValue={item?.name || ''} placeholder={kind === 'event' ? 'Goal, replay, substitution' : 'Wide · left goal'} /></Field>
+    <HotkeyField id="ihotkey" initial={item?.hotkey} />
+    {kind === 'event' && <div className="field full"><label className="checkline"><input type="checkbox" id="ihigh" defaultChecked={item?.highValue || false} /><span>Highlight as high-value sponsor moment (e.g., goal, trophy celebration)</span></label></div>}
+  </div></div><Footer><Cancel /><Save>{item ? 'Save attribute' : 'Add attribute'}</Save></Footer></form>;
 }
 
 function UserModal({ user }: Extract<DialogModel, { type: 'user' }>) {
@@ -127,30 +144,18 @@ function UserModal({ user }: Extract<DialogModel, { type: 'user' }>) {
   </div></div><Footer><Cancel /><Save>Add team member</Save></Footer></form>;
 }
 
-function AnnotationEditModal({ model }: {model: Extract<DialogModel,{type:'annotation-edit'}>}) {
-  return <form onSubmit={event=>{event.preventDefault();window.saveAnnotationEdit?.(model.key,model.id);}}>
-    <div className="modalbody"><div className="assignment-summary"><strong>{model.name}</strong><p>Adjust the saved interval in video seconds. This changes the recorded annotation, not the underlying video.</p></div>
-      <div className="formgrid">
-        <Field title="Start (seconds)"><input id="annotationStart" type="number" min="0" max={model.duration} step="0.01" required defaultValue={model.start} /></Field>
-        <Field title="End (seconds)"><input id="annotationEnd" type="number" min="0" max={model.duration} step="0.01" required defaultValue={model.end} /></Field>
-      </div><p className="infohint">Original interval: {model.start.toFixed(2)}–{model.end.toFixed(2)} s · Video: {model.duration.toFixed(2)} s</p>
-    </div><Footer><Cancel /><Save>Save edited interval</Save></Footer>
-  </form>;
-}
-
 export function StudioModal({ model }: { model: DialogModel }) {
   const submitConfirm = (event: FormEvent) => { event.preventDefault(); window.acceptInAppConfirm?.(); };
   const titles: Record<DialogModel['type'], string> = {
-    confirm: model.type === 'confirm' ? model.title : '', 'annotation-edit':'Edit annotation', assign: 'Assign task', task: model.type === 'task' && model.task ? 'Edit match task' : 'Create new task',
+    confirm: model.type === 'confirm' ? model.title : '', assign: 'Assign task', task: model.type === 'task' && model.task ? 'Edit match task' : 'Create new task',
     group: model.type === 'group' && model.group ? 'Edit attribute list' : 'New attribute list', sponsor: model.type === 'sponsor' && model.sponsor ? 'Edit sponsor' : 'Add a sponsor',
-    item: model.type === 'item' && model.kind === 'event' ? 'Add match event' : 'Add camera angle', user: 'Add team member',
+    item: model.type === 'item' ? `${model.item ? 'Edit' : 'Add'} ${model.kind === 'event' ? 'match event' : 'camera angle'}` : '', user: 'Add team member',
     credentials: model.type === 'credentials' ? (model.purpose === 'reset' ? 'Temporary password reset' : 'Worker account ready') : '',
   };
   return <div className="overlay" id="modal" onClick={event => { if (event.target === event.currentTarget) window.closeModal?.(); }}>
     <div className={`modal ${model.type === 'task' ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={titles[model.type]}>
       <div className="modalhead"><div><div className="eyebrow">SPONSOR INTELLIGENCE</div><h2>{titles[model.type]}</h2></div><button type="button" className="button ghost icononly" onClick={() => window.closeModal?.()} aria-label="Close dialog"><Icon name="close" /></button></div>
       {model.type === 'confirm' && <form onSubmit={submitConfirm}><div className="modalbody"><p className="confirm-message">{model.message}</p></div><Footer><Cancel /><button type="submit" className={`button ${model.danger ? 'confirm-danger' : 'primary'}`}>{model.actionLabel}</button></Footer></form>}
-      {model.type === 'annotation-edit' && <AnnotationEditModal model={model} />}
       {model.type === 'assign' && <AssignModal {...model} />}
       {model.type === 'task' && <TaskModal {...model} />}
       {model.type === 'group' && <GroupModal {...model} />}
@@ -175,14 +180,13 @@ declare global {
   interface Window {
     closeModal?: () => void;
     acceptInAppConfirm?: () => void;
-    saveAnnotationEdit?: (key:'sponsors'|'events'|'cameras',id:string)=>void;
     saveTaskAssignment?: (id: string) => void;
     saveTask?: (id: string) => void;
     selectFixture?: (id: string) => void;
     saveGroup?: (kind: 'sponsor' | 'event' | 'camera', id: string) => void;
     saveSponsor?: (groupId: string, sponsorId: string) => void;
     deleteSponsor?: (groupId: string, sponsorId: string) => void;
-    saveAttrItem?: (kind: 'event' | 'camera', groupId: string) => void;
+    saveAttrItem?: (kind: 'event' | 'camera', groupId: string, itemId?: string) => void;
     saveUser?: (id: string) => void;
   }
 }

@@ -4,6 +4,7 @@ export interface Sponsor {
   logo?: string;
   color?: string;
   logoTrimmed?: boolean;
+  hotkey?: string;
 }
 
 export interface SponsorGroup {
@@ -18,6 +19,7 @@ export interface TagAttribute {
   name: string;
   highValue?: boolean;
   kind?: string;
+  hotkey?: string;
 }
 
 export interface TagGroup {

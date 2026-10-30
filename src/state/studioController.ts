@@ -8,6 +8,8 @@ import { formatTimestamp as fmt, clampNumber as clamp, mergeIntervals as merged,
 import { api, fromApiTask, type ApiMembership, type ApiUser } from '../api/client';
 import { persistStudio } from '../api/sync';
 import { readStudioRoute, writeStudioRoute, type ProductView } from './routes';
+import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
+import { easternMatchDate, hasFinalResult, mergeTodayFixtureUpdates } from '../domain/fixtures';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -50,6 +52,8 @@ const BADGES: Record<string,string>={
 'Independiente del Valle':'https://www.logotypes101.com/logos/863/F5D3418E82A92E61E8AC6B20401C321F/selloindependiente.png'
 };
 const fixtureById=(id:string)=>OFFICIAL_FIXTURES.find(f=>f.id===id)||null;
+let fixtureFeedLoaded=false,fixtureRefreshing=false;
+const activelyRefreshedFixtures=new Set<string>();
 async function refreshFixtureFeed(){
   try{
     const response=await fetch('data/fixtures.json',{cache:'no-store'});
@@ -58,7 +62,17 @@ async function refreshFixtureFeed(){
     if(!Array.isArray(payload.matches)||payload.matches.length<10)throw Error('Incomplete feed');
     const safe=payload.matches.filter((f:Fixture)=>f&&typeof f.id==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(f.date)&&typeof f.home==='string'&&typeof f.away==='string');
     if(safe.length<10)throw Error('Invalid feed');
-    OFFICIAL_FIXTURES=safe;
+    if(!fixtureFeedLoaded){
+      OFFICIAL_FIXTURES=safe;
+      fixtureFeedLoaded=true;
+    }else{
+      const existing=new Map(OFFICIAL_FIXTURES.map(f=>[f.id,f]));
+      OFFICIAL_FIXTURES=safe.map((f:Fixture)=>{
+        const old=existing.get(f.id);
+        // Do not roll back an already published final score or a manual live refresh.
+        return old&&(hasFinalResult(old)||activelyRefreshedFixtures.has(f.id))?old:f;
+      });
+    }
     for(const team of payload.clubs||[]){
       if(team.name&&typeof team.logo==='string'&&/^https:\/\//.test(team.logo))BADGES[team.name]=team.logo;
     }
@@ -67,6 +81,19 @@ async function refreshFixtureFeed(){
   }catch(err){console.warn('Using bundled fixture snapshot:',err instanceof Error ? err.message : String(err))}
 }
 window.chooseFixtureDay=day=>{fixtureDay=day;render()};
+window.refreshTodayMatches=async()=>{
+ if(fixtureRefreshing)return;
+ const day=easternMatchDate();fixtureRefreshing=true;render();
+ try{
+  const response=await api.refreshFixtures(day);
+  const updated=mergeTodayFixtureUpdates(OFFICIAL_FIXTURES,response.matches,day);
+  OFFICIAL_FIXTURES=updated.fixtures;
+  for(const next of response.matches){if(next.date===day&&OFFICIAL_FIXTURES.some(f=>f.id===next.id&&!hasFinalResult(f)))activelyRefreshedFixtures.add(next.id);}
+  fixtureSyncLabel=`Match results checked ${new Date(response.checkedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/New_York'})} ET`;
+  notify(updated.changed?`${updated.changed} match${updated.changed===1?'':'es'} updated for ${day}. Completed matches preserved.`:`Today's match catalog is up to date. Completed results were not changed.`);
+ }catch(error){notify(error instanceof Error?error.message:'Could not refresh matches. Existing results preserved.');}
+ finally{fixtureRefreshing=false;render()}
+};
 // Match catalog links fixtures to existing tasks rather than creating duplicates.
 const taskForFixture=(id:string)=>{
  const key=String(id||'').trim().toUpperCase();
@@ -153,6 +180,7 @@ let view: ProductView=initialRoute.view;
 let selectedTaskId=initialRoute.view==='studio'?initialRoute.taskId:'',reportTaskId=initialRoute.view==='reports'?initialRoute.taskId:'',taskFilter='all',insightFocusId='',fixtureSyncLabel='Bundled schedule';
 let studioTab:'all'|'sponsors'|'events'|'cameras'='all';
 let tick=0,seekStep=5,videoEl:HTMLVideoElement|null=null,modalOpen=false;
+let editingInterval:{key:'sponsors'|'events'|'cameras';id:string;start:number;end:number}|null=null;
 const localVideos:Record<string,{url:string;name:string}>={};
 const videoDurations:Record<string,number>={};
 function clearLocalVideos(){for(const video of Object.values(localVideos))URL.revokeObjectURL(video.url);for(const id of Object.keys(localVideos))delete localVideos[id];for(const id of Object.keys(videoDurations))delete videoDurations[id];}
@@ -206,7 +234,7 @@ window.login=async e=>{
 window.selectWorkspace=id=>{if(liveWorkspaces.some(w=>w.workspace.id===id)){view='dashboard';selectedTaskId='';writeStudioRoute(view);void loadWorkspace(id).catch(error=>notify('Workspace load failed: '+error.message))}};
 window.logout=()=>{void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];selectedTaskId='';view='dashboard';writeStudioRoute(view,'',true);if(videoEl){videoEl.pause()}clearLocalVideos();render()};
 window.showWorkspaceSwitcher=()=>{workspaceId='';render()};
-window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';writeStudioRoute(view);render();window.scrollTo(0,0)};
+window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';editingInterval=null;writeStudioRoute(view);render();window.scrollTo(0,0)};
 function restoreRoute(){const route=readStudioRoute();view=route.view;selectedTaskId=view==='studio'?route.taskId:'';reportTaskId=view==='reports'?route.taskId:reportTaskId;if(videoEl)videoEl.pause();if(workspaceId)render();window.scrollTo(0,0)}
 window.addEventListener('popstate',restoreRoute);
 window.addEventListener('hashchange',restoreRoute);
@@ -219,7 +247,7 @@ document.addEventListener('pointerdown',dismissActionMenu);
 window.openTask=id=>{
  if(me()?.role==='viewer')return notify('Viewers may access Insights and JSON exports only.');
  if(!visibleTasks().some(task=>task.id===id))return notify('This task is not available in your workspace.');
- selectedTaskId=id;view='studio';tick=0;studioTab='all';writeStudioRoute(view,id);render();window.scrollTo(0,0);
+ selectedTaskId=id;view='studio';tick=0;studioTab='all';editingInterval=null;writeStudioRoute(view,id);render();window.scrollTo(0,0);
  const asset=db.tasks.find(t=>t.id===id)?.videoAssetId;
   if(asset&&!localVideos[id]){void api.playback(workspaceId,id,asset).then(result=>{
   const task=db.tasks.find(t=>t.id===id);if(!task)return;
@@ -266,15 +294,17 @@ window.editRecordedAnnotation=(key,id)=>{
  if(!task||!row||row.end===null||!canEdit(task,key==='sponsors'?'sponsors':'context'))return;
  const name=labelFor(task,key,key==='sponsors'?(row as SponsorAnnotation).sponsorId:key==='events'?(row as EventAnnotation).eventId:(row as CameraAnnotation).cameraId);
  confirmInApp('Edit recorded interval',`You are about to change the saved ${name} interval (${fmt(row.start)}–${fmt(row.end!)}). Continue to the editor?`,()=>{
-  openDialog({type:'annotation-edit',key,id,name,start:row.start,end:row.end!,duration:videoDuration(task)});
+  editingInterval={key,id,start:row.start,end:row.end!};
+  studioTab='all';refreshStudio();notify('Drag either edge of the highlighted timeline segment, then Save.');
  },{actionLabel:'CONTINUE TO EDIT',danger:false});
 };
-window.saveAnnotationEdit=(key,id)=>{
+window.cancelTimelineEdit=()=>{editingInterval=null;refreshStudio()};
+window.saveTimelineEdit=(key,id,start,end)=>{
  const task=currentTask(),row=task?.[key].find(entry=>entry.id===id);
  if(!task||!row||row.end===null||!canEdit(task,key==='sponsors'?'sponsors':'context'))return;
- const start=Number(formVal('annotationStart')),end=Number(formVal('annotationEnd'));
- if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start||end>videoDuration(task))return notify('Use valid start/end times within the video; end must be after start.');
- row.start=start;row.end=end;save();window.closeModal?.();refreshStudio();notify('Recorded annotation updated');
+ if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start||end>videoDuration(task))return notify('The adjusted interval must remain within the video and have a positive duration.');
+ row.start=Math.round(start*100)/100;row.end=Math.round(end*100)/100;
+ editingInterval=null;save();refreshStudio();notify('Annotation interval updated');
 };
 window.tagSponsor=id=>{
  const t=currentTask();if(!t||!canEdit(t,'sponsors'))return;
@@ -401,6 +431,23 @@ const handleVideoFileChange=(e:Event)=>{
 };
 document.getElementById('videofile')?.addEventListener('change',handleVideoFileChange);
 function runKeydown(e:KeyboardEvent){if(e.key==='Escape'){window.closeTaskMenu?.();return;}if(view!=='studio'||modalOpen||(e.target instanceof Element&&e.target.matches('input,textarea,select,[contenteditable]')))return;if(e.code==='Space'){e.preventDefault();window.togglePlay?.()}else if(e.key==='ArrowLeft'){e.preventDefault();window.skipByStep?.(-1)}else if(e.key==='ArrowRight'){e.preventDefault();window.skipByStep?.(1)}}
+function runShortcut(e:KeyboardEvent){
+ if(e.repeat||view!=='studio'||modalOpen||editingInterval||e.isComposing||(e.target instanceof Element&&e.target.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]')))return;
+ const shortcut=hotkeyFromKeyboard(e),task=currentTask();if(!shortcut||!task)return;
+ const matches=[
+  ...sponsorFor(task).filter(x=>x.hotkey===shortcut).map(x=>({kind:'sponsor',id:x.id})),
+  ...eventsFor(task).filter(x=>x.hotkey===shortcut).map(x=>({kind:'event',id:x.id})),
+  ...camerasFor(task).filter(x=>x.hotkey===shortcut).map(x=>({kind:'camera',id:x.id})),
+ ];
+ if(matches.length!==1)return;
+ const chosen=matches[0];
+ if(chosen.kind==='sponsor'&&!canEdit(task,'sponsors')||chosen.kind!=='sponsor'&&!canEdit(task,'context'))return;
+ e.preventDefault();e.stopPropagation();
+ if(chosen.kind==='sponsor')window.tagSponsor?.(chosen.id);
+ else if(chosen.kind==='event')window.tagEvent?.(chosen.id);
+ else window.tagCamera?.(chosen.id);
+}
+document.addEventListener('keydown',runShortcut,true);
 document.addEventListener('keydown',runKeydown);
 window.submitMyTask=()=>{
  let t=currentTask();if(!t)return;
@@ -572,18 +619,24 @@ window.saveSponsor=async(gid,sid)=>{
  const group=db.sponsorGroups.find(row=>row.id===gid),name=formVal('sname').trim();
  const file=(document.getElementById('simage') as HTMLInputElement|null)?.files?.[0];
  if(!group||!name)return notify('Sponsor name required');
+ const shortcut=normalizeHotkey(formVal('shotkey'));
+ if(shortcut&&shortcutTaken(shortcut,sid))return notify('This shortcut is already assigned to another sponsor, event, or camera.');
  if(file&&file.size>6*1024*1024)return notify('Sponsor image must be under 6 MB');
  let logoData:string|undefined;
  try{if(file)logoData=await thumbnail(file)}catch{return notify('Could not read this logo image.')}
  let sponsor=group.sponsors.find(row=>row.id===sid);
  if(!sponsor){sponsor={id:uid(),name};group.sponsors.push(sponsor)}
- sponsor.name=name;sponsor.color=formVal('scolor');
+ sponsor.name=name;sponsor.color=formVal('scolor');sponsor.hotkey=shortcut;
  if(logoData){sponsor.logo=logoData;sponsor.logoTrimmed=true;}
  save();window.closeModal?.();render();notify('Sponsor saved');
 };
 window.deleteSponsor=(gid,sid)=>{let g=db.sponsorGroups.find(x=>x.id===gid);if(!g)return;let used=db.tasks.some(t=>t.sponsors.some(v=>v.sponsorId===sid));if(used)return notify('This brand has recorded annotations. Preserve the history; create a new list instead.');const sponsor=g.sponsors.find(x=>x.id===sid);confirmInApp('Delete sponsor',`Delete ${sponsor?.name||'this sponsor'} and its uploaded brand image from the list?`,()=>{g.sponsors=g.sponsors.filter(x=>x.id!==sid);save();render();notify('Sponsor removed')},{actionLabel:'DELETE SPONSOR'})};
-window.attrItemModal=(kind,gid)=>openDialog({type:'item',kind,groupId:gid});
-window.saveAttrItem=(kind,gid)=>{if(me()?.role!=='admin')return;const gs=kind==='event'?db.eventGroups:db.cameraGroups,g=gs.find(x=>x.id===gid),name=formVal('iname').trim();if(!g||!name)return notify('Attribute name required');g.items.push({id:uid(),name,...(kind==='event'?{kind:'range',highValue:!!(document.getElementById('ihigh') as HTMLInputElement|null)?.checked}: {})});save();window.closeModal?.();render()};
+function shortcutTaken(key:string,exceptId=''){
+ return [...db.sponsorGroups.flatMap(group=>group.sponsors),...db.eventGroups.flatMap(group=>group.items),...db.cameraGroups.flatMap(group=>group.items)]
+  .some(item=>item.id!==exceptId&&normalizeHotkey(item.hotkey)===key);
+}
+window.attrItemModal=(kind,gid,id='')=>{const group=(kind==='event'?db.eventGroups:db.cameraGroups).find(row=>row.id===gid);if(group)openDialog({type:'item',kind,groupId:gid,item:group.items.find(row=>row.id===id)});};
+window.saveAttrItem=(kind,gid,id='')=>{if(me()?.role!=='admin')return;const gs=kind==='event'?db.eventGroups:db.cameraGroups,g=gs.find(x=>x.id===gid),name=formVal('iname').trim();if(!g||!name)return notify('Attribute name required');const shortcut=normalizeHotkey(formVal('ihotkey'));if(shortcut&&shortcutTaken(shortcut,id))return notify('This shortcut is already assigned to another sponsor, event, or camera.');let item=g.items.find(row=>row.id===id);if(!item){item={id:uid(),name};g.items.push(item)}item.name=name;item.hotkey=shortcut;if(kind==='event'){item.kind='range';item.highValue=!!(document.getElementById('ihigh') as HTMLInputElement|null)?.checked;}save();window.closeModal?.();render();};
 window.removeItem=(kind,gid,id)=>{let gs=kind==='event'?db.eventGroups:db.cameraGroups,g=gs.find(x=>x.id===gid);if(!g)return;const item=g.items.find(x=>x.id===id);if(!item)return;confirmInApp('Remove attribute',`Remove "${item.name}" from this list? Historical annotations may lose the display label.`,()=>{g.items=g.items.filter(x=>x.id!==id);save();render();notify('Attribute removed')},{actionLabel:'REMOVE ATTRIBUTE'})};
 window.userModal=(id='')=>openDialog({type:'user',user:db.users.find(u=>u.id===id)});
 window.resetMemberPassword=id=>{
@@ -694,7 +747,7 @@ function render(){
   logCount:t.sponsors.length+t.events.length+t.cameras.length,
   cameraLabel:currentCamera?labelFor(t,'cameras',currentCamera.cameraId):'CAMERA NOT SELECTED',
   railTitle:heading!.title,railHint:heading!.hint,submitted:t.submitted||{sponsors:false,context:false},
-  task:t,sponsors:sponsorFor(t),events:eventsFor(t),cameras:camerasFor(t),
+  task:t,sponsors:sponsorFor(t),events:eventsFor(t),cameras:camerasFor(t),editingInterval:editingInterval||undefined,
   seekStep,playbackRate,videoDimensions,videoError,playing:!!videoEl&&!videoEl.paused
  }:undefined;
  const reportsTasks=view==='reports'?visibleTasks():[];
@@ -706,7 +759,7 @@ function render(){
   selectedTask:selectedReport,
   data:db,focusId:insightFocusId,fixtures:OFFICIAL_FIXTURES,badges:BADGES,visibleTasks:reportsTasks
  }:undefined;
- mount(view,{user:{name:user.name,role:user.role},taskId:selectedTaskId,data:db,viewerId:logged,fixtures:OFFICIAL_FIXTURES,badges:BADGES,fixtureSyncLabel,fixtureDay,taskFilter,studio:studioModel,reports:reportsModel,workspaceName:liveWorkspaces.find(x=>x.workspace.id===workspaceId)?.workspace.name,workspaces:liveWorkspaces.map(x=>x.workspace)},()=>{
+ mount(view,{user:{name:user.name,role:user.role},taskId:selectedTaskId,data:db,viewerId:logged,fixtures:OFFICIAL_FIXTURES,badges:BADGES,fixtureSyncLabel,fixtureRefreshing,fixtureDay,taskFilter,studio:studioModel,reports:reportsModel,workspaceName:liveWorkspaces.find(x=>x.workspace.id===workspaceId)?.workspace.name,workspaces:liveWorkspaces.map(x=>x.workspace)},()=>{
   if(view==='studio')attachVideo();
  });
 }
@@ -716,6 +769,7 @@ render();
 void loadLiveSession().catch(()=>{logged='';remoteUser=null;passwordChangeRequired=false;sessionPending=false;render()});
 return ()=>{
  clearInterval(fixtureRefreshId);
+ document.removeEventListener('keydown',runShortcut,true);
  document.removeEventListener('keydown',runKeydown);
  document.removeEventListener('pointerdown',dismissActionMenu);
  window.removeEventListener('popstate',restoreRoute);

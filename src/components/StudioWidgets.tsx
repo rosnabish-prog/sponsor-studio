@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { StudioScreenModel } from '../types/screen';
 import type { AnnotationBase, CameraAnnotation, EventAnnotation, Sponsor, SponsorAnnotation, TagAttribute } from '../types/models';
 import { formatTimestamp as fmt } from '../domain/intervals';
 import { annotatedEndpoint } from '../domain/labelingProgress';
 import { PLACEMENT_TYPES, VISIBILITY_QUALITIES } from '../domain/classifications';
+import { displayHotkey } from '../domain/hotkeys';
 
 type StudioProps = { model: StudioScreenModel };
 type TrackKind = 'sponsor' | 'event' | 'camera';
@@ -19,10 +20,11 @@ export function BrandLogo({ sponsor, className = 'tinylogo' }: { sponsor: Sponso
 function EventChip({ item, active, recorded, disabled, camera }: { item: TagAttribute; active: boolean; recorded: boolean; disabled: boolean; camera: boolean }) {
   return <button type="button" className={`event-chip tagged-state-chip ${camera ? 'camera-chip' : ''} ${active ? 'active' : ''} ${recorded ? 'recorded' : ''}`}
     onClick={() => camera ? window.tagCamera?.(item.id) : window.tagEvent?.(item.id)} disabled={disabled}
-    aria-pressed={active || recorded} aria-label={`${item.name} · ${active ? 'LIVE, tap to end' : recorded ? 'RECORDED at this time, tap to edit with confirmation' : 'OFF, tap to start'}`}
-    title={`${item.name} · ${active ? 'LIVE' : recorded ? 'RECORDED — click to edit' : 'OFF'}`}>
+    aria-pressed={active || recorded} aria-label={`${item.name}${item.hotkey ? `, ${displayHotkey(item.hotkey)}` : ''} · ${active ? 'LIVE, tap to end' : recorded ? 'SAVED at this time, tap to edit with confirmation' : 'OFF, tap to start'}`}
+    title={`${item.name}${item.hotkey ? ` · ${displayHotkey(item.hotkey)}` : ''} · ${active ? 'LIVE' : recorded ? 'SAVED — click to edit' : 'OFF'}`}>
     <span className="chip-symbol">{camera ? '◎' : '↔'}</span><span className="chip-label">{item.name}</span>
-    <span className={`tag-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'RECORDED' : 'OFF'}</span>
+    {item.hotkey && <kbd className="hotkey-hint">{displayHotkey(item.hotkey)}</kbd>}
+    <span className={`tag-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
   </button>;
 }
 
@@ -60,35 +62,64 @@ export function StudioRail({ model }: StudioProps) {
     const recorded = !active&&model.task.sponsors.some(row=>row.sponsorId===sponsor.id&&row.end!==null&&row.start<=model.tick&&model.tick<row.end);
     return <button key={sponsor.id} className={`rail-brand ${active ? 'isactive' : ''} ${recorded?'isrecorded':''}`} type="button"
       onClick={() => window.tagSponsor?.(sponsor.id)} disabled={!model.canSponsor}
-      aria-label={`${sponsor.name} · ${active ? 'LIVE, click to stop' : recorded ? 'RECORDED at this time, click to edit' : 'OFF, click to start'}`} aria-pressed={active||recorded}
-      title={`${sponsor.name} · ${active ? 'LIVE' : recorded ? 'RECORDED — click to edit' : 'OFF'}`}>
+      aria-label={`${sponsor.name}${sponsor.hotkey ? `, ${displayHotkey(sponsor.hotkey)}` : ''} · ${active ? 'LIVE, click to stop' : recorded ? 'SAVED at this time, click to edit' : 'OFF, click to start'}`} aria-pressed={active||recorded}
+      title={`${sponsor.name}${sponsor.hotkey ? ` · ${displayHotkey(sponsor.hotkey)}` : ''} · ${active ? 'LIVE' : recorded ? 'SAVED — click to edit' : 'OFF'}`}>
       <span className="rail-logo"><BrandLogo sponsor={sponsor} /></span>
-      <span className={`rail-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'RECORDED' : 'OFF'}</span>
+      {sponsor.hotkey && <kbd className="hotkey-hint rail-hotkey">{displayHotkey(sponsor.hotkey)}</kbd>}
+      <span className={`rail-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
     </button>;
   })}</div>;
 }
 
 type TimelineDelete = { key: 'sponsors'|'events'|'cameras'; id: string; name: string; x: number; y: number };
-function TimelineTrack({ name, items, kind, model, duration, onContextMenu }: { name: string; items: AnnotationBase[]; kind: TrackKind; model: StudioScreenModel; duration: number; onContextMenu: (next: TimelineDelete) => void }) {
+type IntervalEdit = {key:'sponsors'|'events'|'cameras';id:string;start:number;end:number};
+function TimelineTrack({ name, items, kind, color, model, duration, onContextMenu, draft, setDraft }: { name: string; items: AnnotationBase[]; kind: TrackKind; color?: string; model: StudioScreenModel; duration: number; onContextMenu: (next: TimelineDelete) => void; draft:IntervalEdit|null;setDraft:(edit:IntervalEdit)=>void }) {
   const canDelete = kind === 'sponsor' ? model.canSponsor : model.canContext;
+  const nudge=(event:React.KeyboardEvent<HTMLSpanElement>,side:'start'|'end',base:IntervalEdit)=>{
+    if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+    event.preventDefault();event.stopPropagation();
+    const delta=event.key==='ArrowLeft'?-0.1:0.1;
+    const raw=Math.round((base[side]+delta)*100)/100;
+    setDraft({...base,[side]:side==='start'?Math.max(0,Math.min(raw,base.end-.01)):Math.min(duration,Math.max(raw,base.start+.01))});
+  };
+  const startHandle=(event:ReactPointerEvent<HTMLSpanElement>,side:'start'|'end',base:IntervalEdit)=>{
+    event.preventDefault();event.stopPropagation();
+    const track=event.currentTarget.closest('.track') as HTMLElement|null;
+    if(!track)return;
+    const rect=track.getBoundingClientRect();
+    const move=(next:globalThis.PointerEvent)=>{
+      const value=Math.max(0,Math.min(duration,(next.clientX-rect.left)/rect.width*duration));
+      const rounded=Math.round(value*100)/100;
+      setDraft({...base,[side]:side==='start'?Math.min(rounded,base.end-.01):Math.max(rounded,base.start+.01)});
+    };
+    const stop=()=>{document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',stop);document.removeEventListener('pointercancel',stop);};
+    document.addEventListener('pointermove',move);document.addEventListener('pointerup',stop);document.addEventListener('pointercancel',stop);
+  };
   return <div className="trackrow" data-timeline-kind={kind}><span className="trackname" title={name}>{name}</span>
     <div className="track" onClick={event => {
       const rect = event.currentTarget.getBoundingClientRect();
       if (rect.width > 0) window.seekVideo?.(Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * duration);
     }}>
       {items.map(item => {
-        const start = Math.max(0, Math.min(item.start, duration));
-        const end = Math.max(0, Math.min(item.end == null ? Math.max(item.start, model.task.observedTime || 0, model.tick) : item.end, duration));
+        const key=kind==='sponsor'?'sponsors':kind==='event'?'events':'cameras';
+        const editing=!!draft&&draft.key===key&&draft.id===item.id;
+        const start = Math.max(0, Math.min(editing?draft.start:item.start, duration));
+        const end = Math.max(0, Math.min(editing?draft.end:item.end == null ? Math.max(item.start, model.task.observedTime || 0, model.tick) : item.end, duration));
         const point = kind === 'event' && (item as EventAnnotation).kind === 'point';
-        return <span key={item.id} title={`${name}: ${fmt(item.start)}${point ? '' : ` – ${fmt(item.end == null ? model.tick : item.end)}`}${canDelete ? ' · Right-click to delete' : ''}`}
+        return <span key={item.id} title={`${name}: ${fmt(start)}${point ? '' : ` – ${fmt(end)}`}${canDelete ? ' · Right-click to delete' : ''}`}
           onContextMenu={(event: MouseEvent<HTMLSpanElement>) => {
             if(!canDelete)return;
             event.preventDefault();event.stopPropagation();
             onContextMenu({key:kind==='sponsor'?'sponsors':kind==='event'?'events':'cameras',id:item.id,name,x:event.clientX,y:event.clientY});
           }}
           onClick={event=>{event.stopPropagation();window.seekVideo?.(item.start);}}
-          className={`block ${kind} ${item.end == null ? 'open' : ''} ${point ? 'dotpoint' : ''}`}
-          style={{ left: `${100 * start / duration}%`, width: `${point ? .15 : Math.max(.15, 100 * (end - start) / duration)}%` }} />;
+          className={`block ${kind} ${item.end == null ? 'open' : ''} ${point ? 'dotpoint' : ''} ${editing ? 'timeline-block-editing':''}`}
+          style={{ left: `${100 * start / duration}%`, width: `${point ? .15 : Math.max(.15, 100 * (end - start) / duration)}%`, ...(color ? {'--segment-color':color} as CSSProperties : {}) }}>
+          {editing && !point && <>
+            <span className="timeline-resize-handle start" role="slider" aria-label={`Adjust ${name} start`} aria-valuenow={start} aria-valuemin={0} aria-valuemax={end} tabIndex={0} onPointerDown={event=>startHandle(event,'start',draft)} onKeyDown={event=>nudge(event,'start',draft)} />
+            <span className="timeline-resize-handle end" role="slider" aria-label={`Adjust ${name} end`} aria-valuenow={end} aria-valuemin={start} aria-valuemax={duration} tabIndex={0} onPointerDown={event=>startHandle(event,'end',draft)} onKeyDown={event=>nudge(event,'end',draft)} />
+          </>}
+        </span>;
       })}
     </div>
   </div>;
@@ -98,8 +129,18 @@ export function StudioTimeline({ model }: StudioProps) {
   const [filter, setFilter] = useState<'all'|'sponsors'|'events'|'cameras'>('all');
   const [menu, setMenu] = useState<TimelineDelete | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [draft,setDraft] = useState<IntervalEdit|null>(model.editingInterval ? {...model.editingInterval} : null);
+  const [editExtra,setEditExtra]=useState(0);
+  const scrubbing = useRef<number|null>(null);
+  const scrubFrame=useRef<number|null>(null);
+  const pendingSeek=useRef<number|null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  useEffect(()=>{
+    setDraft(model.editingInterval ? {...model.editingInterval} : null);
+    setEditExtra(0);
+  },[model.editingInterval?.key,model.editingInterval?.id]);
+  useEffect(()=>()=>{if(scrubFrame.current!==null)cancelAnimationFrame(scrubFrame.current);},[]);
   useEffect(()=>{
     const el=timelineRef.current;if(!el)return;
     const wheel=(event:WheelEvent)=>{
@@ -119,20 +160,37 @@ export function StudioTimeline({ model }: StudioProps) {
     return () => { document.removeEventListener('pointerdown', closeOutside);document.removeEventListener('keydown', closeEscape); };
   }, [menu]);
   const show = (kind: TrackKind) => filter === 'all' || filter === `${kind}s`;
-  const lines: { name: string; items: AnnotationBase[]; kind: TrackKind }[] = [];
+  const lines: { name: string; items: AnnotationBase[]; kind: TrackKind; color?:string }[] = [];
   const measurable = (row:AnnotationBase) => row.end == null || row.end > row.start;
-  if (show('sponsor')) model.sponsors.forEach(item => {const items=model.task.sponsors.filter(row => row.sponsorId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'sponsor'});});
+  if (show('sponsor')) model.sponsors.forEach(item => {const items=model.task.sponsors.filter(row => row.sponsorId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'sponsor',color:item.color});});
   if (show('event')) model.events.forEach(item => {const items=model.task.events.filter(row => row.eventId === item.id && (measurable(row)||row.kind==='point'));if(items.length)lines.push({name:item.name,items,kind:'event'});});
   if (show('camera')) model.cameras.forEach(item => {const items=model.task.cameras.filter(row => row.cameraId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'camera'});});
   const endpoint=annotatedEndpoint(model.task,model.tick);
-  const duration=Math.min(model.duration||3600,Math.max(60,Math.ceil(endpoint/60)*60));
+  const duration=Math.min(model.duration||3600,Math.max(60,Math.ceil((Math.max(endpoint,draft?.end||0)+(draft?60+editExtra:0))/60)*60));
+  const scrub=(event:ReactPointerEvent<HTMLElement>)=>{
+    const lane=event.currentTarget.closest('.timeline-scaled')?.querySelector('.timeline-global-playhead-area');
+    const rect=lane?.getBoundingClientRect();
+    if(!rect||rect.width<=0)return;
+    pendingSeek.current=Math.min(duration,Math.max(0,(event.clientX-rect.left)/rect.width*duration));
+    if(scrubFrame.current===null)scrubFrame.current=requestAnimationFrame(()=>{scrubFrame.current=null;if(pendingSeek.current!==null)window.seekVideo?.(pendingSeek.current);});
+  };
+  const beginScrub=(event:ReactPointerEvent<HTMLDivElement>)=>{
+    if((event.target as Element).closest('.block,.timeline-resize-handle'))return;
+    if(event.button!==0)return;
+    scrubbing.current=event.pointerId;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    scrub(event);
+  };
+  const moveScrub=(event:ReactPointerEvent<HTMLDivElement>)=>{if(scrubbing.current===event.pointerId)scrub(event);};
+  const endScrub=(event:ReactPointerEvent<HTMLDivElement>)=>{if(scrubbing.current===event.pointerId){scrubbing.current=null;if(scrubFrame.current!==null){cancelAnimationFrame(scrubFrame.current);scrubFrame.current=null;}if(pendingSeek.current!==null)window.seekVideo?.(pendingSeek.current);event.currentTarget.releasePointerCapture?.(event.pointerId);}};
   return <div className="timeline-content">
     <div className="timeline-filter"><label htmlFor="timelineLayerFilter">SHOW TRACKS</label><select id="timelineLayerFilter" value={filter} onChange={event => {setFilter(event.target.value as typeof filter);setMenu(null);}}>
       <option value="all">All annotations</option><option value="sponsors">Sponsors</option><option value="events">Events</option><option value="cameras">Cameras</option>
     </select><span>{lines.length} recorded tracks · timeline through {fmt(endpoint)} · Ctrl + scroll to zoom{model.tick>duration?' · playhead is beyond recorded range':''}</span><span className="timeline-zoom-label">{zoom}×</span><button type="button" className="button ghost tiny" onClick={()=>setZoom(1)}>Reset zoom</button></div>
-    {lines.length ? <div className="timeline-viewport" ref={timelineRef} aria-label="Zoomable annotated timeline"><div className="timeline-scaled" style={{width:`${zoom*100}%`}}><div className="track-top">{[0, .25, .5, .75, 1].map(share => <span key={share}>{fmt(duration * share)}</span>)}</div>
-      <div className="timeline-track-stack">
-        {lines.map((line, index) => <TimelineTrack key={`${line.kind}:${index}`} {...line} duration={duration} model={model} onContextMenu={setMenu} />)}
+    {draft && <div className="timeline-edit-toolbar"><strong>EDIT INTERVAL · Drag either edge · ←/→ moves 0.1 sec</strong><span>{fmt(draft.start)} – {fmt(draft.end)}</span><button type="button" className="button ghost tiny" onClick={()=>setEditExtra(x=>x+60)}>+ 1 min view</button><button type="button" className="button primary tiny" onClick={()=>window.saveTimelineEdit?.(draft.key,draft.id,draft.start,draft.end)} disabled={draft.end<=draft.start}>Save interval</button><button type="button" className="button ghost tiny" onClick={()=>window.cancelTimelineEdit?.()}>Cancel</button></div>}
+    {lines.length ? <div className="timeline-viewport" ref={timelineRef} aria-label="Zoomable annotated timeline"><div className="timeline-scaled" style={{width:`${zoom*100}%`}}><div className="track-top" onPointerDown={beginScrub} onPointerMove={moveScrub} onPointerUp={endScrub} onPointerCancel={endScrub}>{[0, .25, .5, .75, 1].map(share => <span key={share}>{fmt(duration * share)}</span>)}</div>
+      <div className="timeline-track-stack" onPointerDown={beginScrub} onPointerMove={moveScrub} onPointerUp={endScrub} onPointerCancel={endScrub}>
+        {lines.map((line, index) => <TimelineTrack key={`${line.kind}:${index}`} {...line} duration={duration} model={model} onContextMenu={setMenu} draft={draft} setDraft={setDraft} />)}
         <div className="timeline-global-playhead-area" aria-hidden="true">{model.tick<=duration&&<span className="timeline-global-playhead" style={{left:`${100 * Math.max(0,Math.min(1,model.tick/duration))}%`}} />}</div>
       </div></div></div>
       : <div className="timeline-empty">No {filter === 'all' ? '' : `${filter} `}intervals recorded yet. Use the tagging controls to begin an annotation.</div>}
@@ -185,5 +243,7 @@ declare global {
     setExposureAttribute?: (id: string, field: 'placement' | 'quality', value: string) => void;
     deleteLog?: (key: 'sponsors' | 'events' | 'cameras', id: string) => void;
     editRecordedAnnotation?: (key: 'sponsors'|'events'|'cameras', id:string)=>void;
+    saveTimelineEdit?: (key:'sponsors'|'events'|'cameras',id:string,start:number,end:number)=>void;
+    cancelTimelineEdit?: ()=>void;
   }
 }

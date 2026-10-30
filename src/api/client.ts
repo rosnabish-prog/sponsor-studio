@@ -1,4 +1,4 @@
-import type { StudioData, TaskSummary } from '../types/models';
+import type { StudioData, TaskSummary, Fixture } from '../types/models';
 
 const runtimeEnv = import.meta.env || {};
 const baseUrl = (runtimeEnv.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
@@ -38,6 +38,7 @@ export interface ApiTask {
 }
 
 export const api = {
+  refreshFixtures:(day:string)=>apiRequest<{day:string;checkedAt:string;matches:Fixture[]}>(`/fixtures/refresh?day=${encodeURIComponent(day)}`),
   me: () => apiRequest<{user:ApiUser}>('/auth/me'),
   login: (body: {email:string;password:string}) => apiRequest<{user:ApiUser}>('/auth/login','POST',body),
   logout: () => apiRequest<{ok:boolean}>('/auth/logout','POST'),

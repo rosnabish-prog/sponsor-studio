@@ -16,6 +16,9 @@ import { AppShell } from '../src/components/AppShell';
 import { StudioControls, StudioRail, StudioTimeline } from '../src/components/StudioWidgets';
 import { WorkspaceScreen } from '../src/components/WorkspaceScreen';
 import { LabelingStatusScreen } from '../src/components/LabelingStatusScreen';
+import { displayHotkey, hotkeyFromKeyboard, normalizeHotkey } from '../src/domain/hotkeys';
+import { hasFinalResult, mergeTodayFixtureUpdates } from '../src/domain/fixtures';
+import { StudioModal } from '../src/components/StudioModals';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
 import type { StudioScreenModel } from '../src/types/screen';
@@ -245,11 +248,53 @@ test('timeline ends near annotations and allows control-scroll zoom', () => {
 test('recorded annotations are visible at the playhead, and admin task deletion is gated', () => {
   const at={...studio,tick:20,task:{...studio.task,sponsors:[{...task.sponsors[0],start:2,end:30}],cameras:[{id:'c',cameraId:'camera',start:10,end:40,createdBy:'a1',createdAt:'now'}]}};
   const rail=renderToStaticMarkup(<StudioRail model={at}/>);
-  assert.match(rail,/RECORDED at this time, click to edit/);
-  assert.match(renderToStaticMarkup(<StudioControls model={at}/>),/RECORDED at this time, tap to edit/);
+  assert.match(rail,/SAVED at this time, click to edit/);
+  assert.match(rail,/● SAVED/);
+  assert.match(renderToStaticMarkup(<StudioControls model={at}/>),/SAVED at this time, tap to edit/);
   const studioHtml=renderToStaticMarkup(<AnnotationStudioScreen model={at} isAdmin/>);
   assert.match(studioHtml,/DELETE TASK/);
   assert.match(studioHtml,/REOPEN TASK/);
+});
+
+test('sponsor and tag shortcuts accept letters, digits, Ctrl and Alt with stable normalized keys',()=>{
+  assert.equal(normalizeHotkey(' Ctrl + Q '),'ctrl+q');
+  assert.equal(normalizeHotkey('Alt + 8'),'alt+8');
+  assert.equal(normalizeHotkey('t'),'t');
+  assert.equal(normalizeHotkey('shift+x'),'');
+  assert.equal(displayHotkey('ctrl+r'),'Ctrl + R');
+  const key=(code:string,extra:Partial<KeyboardEvent>={})=>({key:code==='Digit1'?'1':'q',code,shiftKey:false,ctrlKey:false,altKey:false,metaKey:false,...extra});
+  assert.equal(hotkeyFromKeyboard(key('KeyQ',{ctrlKey:true})),'ctrl+q');
+  assert.equal(hotkeyFromKeyboard(key('Digit1',{altKey:true})),'alt+1');
+  assert.equal(hotkeyFromKeyboard(key('KeyQ',{shiftKey:true})), '');
+  const sponsorHtml=renderToStaticMarkup(<StudioModal model={{type:'sponsor',group:{id:'g',name:'Brands',sponsors:[]},sponsor:{id:'s',name:'Orange',hotkey:'alt+q'}}}/>);
+  assert.match(sponsorHtml,/id="shotkey"/);
+  assert.match(sponsorHtml,/value="alt\+q"/);
+  const attrHtml=renderToStaticMarkup(<StudioModal model={{type:'item',kind:'camera',groupId:'cg',item:{id:'camera',name:'Wide',hotkey:'ctrl+1'}}}/>);
+  assert.match(attrHtml,/id="ihotkey"/);
+  assert.match(attrHtml,/value="ctrl\+1"/);
+});
+
+test('timeline segment carries sponsor configured color and offers confirmed edge editing',()=>{
+  const customized={...studio,sponsors:[{id:'s1',name:'Recorded Brand',color:'#12a4dd'}],editingInterval:{key:'sponsors' as const,id:'one',start:2,end:30}};
+  const timeline=renderToStaticMarkup(<StudioTimeline model={customized}/>);
+  assert.match(timeline,/--segment-color:#12a4dd/);
+  // The edit controls appear after the saved-annotation confirmation in the controller.
+  const withEditing={...customized};
+  const editMarkup=renderToStaticMarkup(<StudioTimeline model={withEditing}/>);
+  assert.match(editMarkup,/timeline-edit-toolbar|timeline-resize-handle/);
+});
+
+test('refresh updates only incomplete fixtures on current match day and never rewrites completed scores',()=>{
+  const today='2026-10-30';
+  const fixture=(id:string,date:string,status:string,score:string)=>({id,date,home:'Home',away:'Away',status,score});
+  const original=[fixture('M1',today,'finished','2 : 1'),fixture('M2',today,'scheduled',''),fixture('M3','2026-10-29','scheduled','')];
+  const updates=[fixture('M1',today,'finished','9 : 9'),fixture('M2',today,'finished','0 : 0'),fixture('M3','2026-10-29','finished','1 : 1')];
+  const next=mergeTodayFixtureUpdates(original,updates,today);
+  assert.equal(next.changed,1);
+  assert.equal(next.fixtures[0].score,'2 : 1');
+  assert.equal(next.fixtures[1].score,'0 : 0');
+  assert.equal(next.fixtures[2].score,'');
+  assert.ok(hasFinalResult(next.fixtures[1]));
 });
 
 test('viewer sees only Insights and export, with no studio or management actions', () => {

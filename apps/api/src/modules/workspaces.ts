@@ -36,6 +36,7 @@ function validateCatalog(input: unknown): Prisma.InputJsonValue {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new BadRequestException('Invalid catalog');
   const data = input as Record<string, unknown>;
   const groups: Record<string, unknown[]> = {};
+  const assignedHotkeys = new Map<string,string>();
   for (const key of ['sponsorGroups', 'eventGroups', 'cameraGroups']) {
     const entries = data[key];
     if (!Array.isArray(entries) || entries.length > 100) throw new BadRequestException(`Invalid ${key}`);
@@ -57,8 +58,13 @@ function validateCatalog(input: unknown): Prisma.InputJsonValue {
             typeof item.name !== 'string' || item.name.length < 1 || item.name.length > 150) {
             throw new BadRequestException('Invalid catalog item');
           }
+          const hotkey=typeof item.hotkey==='string' && /^(?:(?:ctrl|alt)\+)?[a-z0-9]$/.test(item.hotkey)?item.hotkey:'';
+          const owner=assignedHotkeys.get(hotkey);
+          if(hotkey&&owner&&owner!==item.id)throw new BadRequestException(`Shortcut ${hotkey} is already assigned`);
+          if(hotkey)assignedHotkeys.set(hotkey,item.id);
           return {
             id: item.id, name: item.name,
+            hotkey,
             ...(key === 'sponsorGroups' ? {
               logo: typeof item.logo === 'string' && /^(https:\/\/|data:image\/(png|jpeg|webp);base64,)/.test(item.logo) ? item.logo.slice(0, 100_000) : '',
               color: typeof item.color === 'string' && /^#[\da-f]{6}$/i.test(item.color) ? item.color : '#888888',

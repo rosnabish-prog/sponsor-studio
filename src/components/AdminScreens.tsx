@@ -1,4 +1,5 @@
 import type { Sponsor, StudioData, TagGroup } from '../types/models';
+import { displayHotkey } from '../domain/hotkeys';
 
 function Icon({ name }: { name: string }) {
   return <svg className="ic"><use href={`#i-${name}`} /></svg>;
@@ -43,7 +44,7 @@ export function SponsorLibraryScreen({ data }: { data: StudioData }) {
             <div className="groupitems">
               {group.sponsors.map(sponsor => (
                 <div className="sponsor-mini" key={sponsor.id}>
-                  <BrandThumb sponsor={sponsor} />{sponsor.name}{' '}
+                  <BrandThumb sponsor={sponsor} />{sponsor.name}{' '}{sponsor.hotkey && <kbd className="hotkey-hint">{displayHotkey(sponsor.hotkey)}</kbd>}
                   <button className="button ghost tiny" onClick={() => window.sponsorModal?.(group.id, sponsor.id)} title="Replace or upload logo">UPLOAD / EDIT</button>
                   <button className="button warn tiny" onClick={() => window.deleteSponsor?.(group.id, sponsor.id)} title="Delete sponsor">DELETE</button>
                 </div>
@@ -74,7 +75,8 @@ function AttributeCategory({ kind, title, groups }: { kind: 'event' | 'camera'; 
             <div className="groupitems">
               {group.items.map(item => (
                 <span className="sponsor-mini" key={item.id}>
-                  {item.name} {kind === 'event' && item.highValue === true && <span className="tag">HIGH VALUE</span>}{' '}
+                  {item.name} {item.hotkey && <kbd className="hotkey-hint">{displayHotkey(item.hotkey)}</kbd>} {kind === 'event' && item.highValue === true && <span className="tag">HIGH VALUE</span>}{' '}
+                  <button className="button ghost tiny" onClick={() => window.attrItemModal?.(kind, group.id, item.id)}>EDIT</button>
                   <button className="button ghost tiny" style={{ padding: '3px 5px' }} title="Remove attribute" onClick={() => window.removeItem?.(kind, group.id, item.id)}><Icon name="close" /></button>
                 </span>
               ))}
@@ -142,7 +144,7 @@ declare global {
     groupModal?: (kind: 'sponsor' | 'event' | 'camera', id?: string) => void;
     sponsorModal?: (groupId: string, sponsorId?: string) => void;
     deleteSponsor?: (groupId: string, sponsorId: string) => void;
-    attrItemModal?: (kind: 'event' | 'camera', groupId: string) => void;
+    attrItemModal?: (kind: 'event' | 'camera', groupId: string, itemId?: string) => void;
     removeItem?: (kind: 'event' | 'camera', groupId: string, id: string) => void;
     userModal?: (id?: string) => void;
     resetMemberPassword?: (id: string) => void;
