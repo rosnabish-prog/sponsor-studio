@@ -14,6 +14,7 @@ import { easternMatchDate, hasFinalResult, mergeTodayFixtureUpdates } from '../d
 import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
 import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } from '../domain/catalogEditing';
 import { selectCameraAngle } from '../domain/cameraSwitch';
+import { captureStudioSpacebar } from '../domain/studioKeyboard';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -435,7 +436,8 @@ const handleVideoFileChange=(e:Event)=>{
  if(file)window.attachLocalVideoFile?.(file);
 };
 document.getElementById('videofile')?.addEventListener('change',handleVideoFileChange);
-function runKeydown(e:KeyboardEvent){if(e.key==='Escape'){window.closeTaskMenu?.();return;}if(view!=='studio'||modalOpen||(e.target instanceof Element&&e.target.matches('input,textarea,select,[contenteditable]')))return;if(e.code==='Space'){e.preventDefault();window.togglePlay?.()}else if(e.key==='ArrowLeft'){e.preventDefault();window.skipByStep?.(-1)}else if(e.key==='ArrowRight'){e.preventDefault();window.skipByStep?.(1)}}
+function runPlaybackKey(e:KeyboardEvent){captureStudioSpacebar(e,view==='studio'&&!modalOpen,()=>window.togglePlay?.());}
+function runKeydown(e:KeyboardEvent){if(e.key==='Escape'){window.closeTaskMenu?.();return;}if(view!=='studio'||modalOpen||(e.target instanceof Element&&e.target.matches('input,textarea,select,[contenteditable]')))return;if(e.key==='ArrowLeft'){e.preventDefault();window.skipByStep?.(-1)}else if(e.key==='ArrowRight'){e.preventDefault();window.skipByStep?.(1)}}
 function runShortcut(e:KeyboardEvent){
  if(e.repeat||view!=='studio'||modalOpen||editingInterval||e.isComposing||(e.target instanceof Element&&e.target.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]')))return;
  const shortcut=hotkeyFromKeyboard(e),task=currentTask();if(!shortcut||!task)return;
@@ -452,6 +454,8 @@ function runShortcut(e:KeyboardEvent){
  else if(chosen.kind==='event')window.tagEvent?.(chosen.id);
  else window.tagCamera?.(chosen.id);
 }
+document.addEventListener('keydown',runPlaybackKey,true);
+document.addEventListener('keyup',runPlaybackKey,true);
 document.addEventListener('keydown',runShortcut,true);
 document.addEventListener('keydown',runKeydown);
 window.submitMyTask=()=>{
@@ -798,6 +802,8 @@ void loadLiveSession().catch(()=>{logged='';remoteUser=null;passwordChangeRequir
  return ()=>{
   videoRecovery?.dispose();videoRecovery=null;
  clearInterval(fixtureRefreshId);
+ document.removeEventListener('keydown',runPlaybackKey,true);
+ document.removeEventListener('keyup',runPlaybackKey,true);
  document.removeEventListener('keydown',runShortcut,true);
  document.removeEventListener('keydown',runKeydown);
  document.removeEventListener('pointerdown',dismissActionMenu);

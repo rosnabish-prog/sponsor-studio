@@ -23,6 +23,7 @@ import { StudioModal } from '../src/components/StudioModals';
 import { readOriginalPng, MAX_ORIGINAL_PNG_BYTES } from '../src/domain/logoUpload';
 import { copyCatalogEntry, reorderById } from '../src/domain/catalogEditing';
 import { selectCameraAngle } from '../src/domain/cameraSwitch';
+import { captureStudioSpacebar } from '../src/domain/studioKeyboard';
 import { AttributesScreen, SponsorLibraryScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
@@ -61,6 +62,47 @@ test('interrupted video reconnects at the tagging time and resumes only after se
   video.dispatchEvent(new Event('seeked'));
   assert.equal(recovery.isRecovering(),false); assert.equal(video.plays,1);assert.equal(messages.at(-1),'');
   recovery.dispose();
+});
+
+test('Space pauses video without activating the focused sponsor button or deleting its tag', () => {
+  const dom = new JSDOM('<button id="sponsor">Sponsor</button><input id="field"/>', {url:'http://localhost/'});
+  const previousDocument = globalThis.document;
+  const previousElement = globalThis.Element;
+  (globalThis as unknown as {document:Document}).document = dom.window.document;
+  (globalThis as unknown as {Element:typeof Element}).Element = dom.window.Element;
+  const button = dom.window.document.getElementById('sponsor') as HTMLButtonElement;
+  const field = dom.window.document.getElementById('field') as HTMLInputElement;
+  let playbackToggles = 0;
+  let annotationToggles = 0;
+  button.addEventListener('click', () => annotationToggles++);
+  const listener = (event:KeyboardEvent) => captureStudioSpacebar(event,true,()=>playbackToggles++);
+  dom.window.document.addEventListener('keydown', listener, true);
+  dom.window.document.addEventListener('keyup', listener, true);
+  const space = (type:'keydown'|'keyup', repeat=false) => new dom.window.KeyboardEvent(type, {bubbles:true,cancelable:true,code:'Space',key:' ',repeat});
+  try {
+    button.focus();
+    assert.equal(dom.window.document.activeElement,button);
+    assert.equal(button.dispatchEvent(space('keydown')),false,'keydown is canceled before native button activation');
+    assert.notEqual(dom.window.document.activeElement,button,'focused sponsor button is blurred');
+    assert.equal(button.dispatchEvent(space('keyup')),false,'keyup cannot synthesize a button click');
+    assert.equal(playbackToggles,1);
+    assert.equal(annotationToggles,0);
+    assert.equal(dom.window.document.body.dispatchEvent(space('keydown')),false);
+    assert.equal(dom.window.document.body.dispatchEvent(space('keydown',true)),false,'held Space does not repeat playback');
+    assert.equal(dom.window.document.body.dispatchEvent(space('keyup')),false);
+    assert.equal(playbackToggles,2,'the next Space resumes the video');
+    assert.equal(annotationToggles,0);
+    field.focus();
+    assert.equal(field.dispatchEvent(space('keydown')),true,'typing controls keep native keyboard behavior');
+    assert.equal(playbackToggles,2);
+    assert.equal(captureStudioSpacebar(space('keydown'),false,()=>playbackToggles++),false);
+  } finally {
+    dom.window.document.removeEventListener('keydown',listener,true);
+    dom.window.document.removeEventListener('keyup',listener,true);
+    (globalThis as unknown as {document:Document}).document = previousDocument;
+    (globalThis as unknown as {Element:typeof Element}).Element = previousElement;
+    dom.window.close();
+  }
 });
 
 test('recovery respects a user pause and seek, limits retries, and allows manual retry', () => {
