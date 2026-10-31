@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { Client } from 'pg';
+import { Algorithm, hash } from '@node-rs/argon2';
 
 test('live sign-in has no outbound email recovery flow',async({page})=>{
   await page.goto('http://127.0.0.1:4173',{waitUntil:'domcontentloaded'});
@@ -14,6 +17,18 @@ test('live sign-in has no outbound email recovery flow',async({page})=>{
 
 test('live React mode signs in, creates a workspace task and persists sponsor tags', async ({ page }) => {
   const id=Math.random().toString(36).slice(2,10);
+  const ownerEmail=`reviewer-${id}@example.org`;
+  const ownerPassword='integration-password-123';
+  const databaseUrl=process.env.TEST_DATABASE_URL||process.env.DATABASE_URL;
+  if(!databaseUrl)throw new Error('Live integration needs an isolated PostgreSQL test database');
+  const db=new Client({connectionString:databaseUrl});
+  await db.connect();
+  try{
+    const passwordHash=await hash(ownerPassword,{algorithm:Algorithm.Argon2id,memoryCost:19_456,timeCost:2,outputLen:32,parallelism:1});
+    await db.query('INSERT INTO "User" ("id","name","email","passwordHash") VALUES ($1,$2,$3,$4)',[
+      randomUUID(),'P0 Reviewer',ownerEmail,passwordHash,
+    ]);
+  }finally{await db.end();}
   const apiFailures:string[]=[];
   page.on('response',async response=>{
     if(response.url().includes('/api/')&&response.status()>=400){
@@ -21,12 +36,18 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
     }
   });
   await page.goto('http://127.0.0.1:4173', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button',{name:'NEW ORGANIZATION? CREATE ACCOUNT'}).click();
-  await page.locator('#regname').fill('P0 Reviewer');
-  await page.locator('#regorg').fill('P0 Test Workspace '+id);
-  await page.locator('#loginemail').fill(`reviewer-${id}@example.org`);
-  await page.locator('#loginpass').fill('integration-password-123');
-  await page.getByRole('button',{name:'CREATE ACCOUNT'}).click();
+  await page.locator('#loginemail').fill(ownerEmail);
+  await page.locator('#loginpass').fill(ownerPassword);
+  await page.getByRole('button',{name:'SIGN IN'}).click();
+  await expect(page.getByRole('heading',{name:'NO WORKSPACE ASSIGNED.'})).toBeVisible();
+  // Public sign-up was intentionally removed. The test owner provisions their
+  // first workspace through the existing authenticated API, not a removed UI.
+  await page.evaluate(async name=>{
+    const response=await fetch('/api/workspaces',{method:'POST',credentials:'include',
+      headers:{'content-type':'application/json'},body:JSON.stringify({name})});
+    if(!response.ok)throw new Error(`Test workspace creation failed: ${response.status}`);
+  },'P0 Test Workspace '+id);
+  await page.reload();
   await expect(page.locator('.ops-nav')).toBeVisible({timeout:20_000});
 
   const getWorkspace=async()=>page.evaluate(async()=>{
