@@ -277,9 +277,9 @@ window.login=async e=>{
 };
 window.selectWorkspace=id=>{if(liveWorkspaces.some(w=>w.workspace.id===id)){view='dashboard';selectedTaskId='';writeStudioRoute(view);void loadWorkspace(id).catch(error=>notify('Workspace load failed: '+error.message))}};
 window.logout=()=>{if(backfillDrafts.length)return notify('End your in-progress gap tags before signing out so their intervals can be saved.');void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];catalogClipboard=null;selectedTaskId='';view='dashboard';writeStudioRoute(view,'',true);if(videoEl){videoEl.pause()}clearLocalVideos();render()};
-window.showWorkspaceSwitcher=()=>{flushBackfills(currentTask());workspaceId='';render()};
-window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;flushBackfills(currentTask());view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';editingInterval=null;writeStudioRoute(view);render();window.scrollTo(0,0)};
-function restoreRoute(){const route=readStudioRoute();if(route.view!=='studio'||route.taskId!==selectedTaskId)flushBackfills(currentTask());view=route.view;selectedTaskId=view==='studio'?route.taskId:'';reportTaskId=view==='reports'?route.taskId:reportTaskId;if(videoEl)videoEl.pause();if(workspaceId)render();window.scrollTo(0,0)}
+window.showWorkspaceSwitcher=()=>{if(!flushBackfills(currentTask()))return;workspaceId='';render()};
+window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;if(!flushBackfills(currentTask()))return;view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';editingInterval=null;writeStudioRoute(view);render();window.scrollTo(0,0)};
+function restoreRoute(){const route=readStudioRoute();if((route.view!=='studio'||route.taskId!==selectedTaskId)&&!flushBackfills(currentTask())){writeStudioRoute(view,selectedTaskId,true);return;}view=route.view;selectedTaskId=view==='studio'?route.taskId:'';reportTaskId=view==='reports'?route.taskId:reportTaskId;if(videoEl)videoEl.pause();if(workspaceId)render();window.scrollTo(0,0)}
 window.addEventListener('popstate',restoreRoute);
 window.addEventListener('hashchange',restoreRoute);
 window.closeTaskMenu=()=>{const menu=document.getElementById('taskActionMenu') as HTMLDetailsElement|null;if(menu)menu.open=false};
@@ -291,7 +291,7 @@ document.addEventListener('pointerdown',dismissActionMenu);
 window.openTask=id=>{
  if(me()?.role==='viewer')return notify('Viewers may access Insights and JSON exports only.');
  if(!visibleTasks().some(task=>task.id===id))return notify('This task is not available in your workspace.');
- if(selectedTaskId!==id)flushBackfills(currentTask());
+ if(selectedTaskId!==id&&!flushBackfills(currentTask()))return;
  videoRecovery?.dispose();videoRecovery=null;videoError='';
  selectedTaskId=id;view='studio';tick=0;studioTab='all';editingInterval=null;writeStudioRoute(view,id);render();window.scrollTo(0,0);
  const asset=db.tasks.find(t=>t.id===id)?.videoAssetId;
@@ -335,11 +335,14 @@ function beginBackfill(task:TaskSummary,track:TrackKey,labelId:string,at:number)
  refreshStudio();return true;
 }
 function finishBackfill(task:TaskSummary,draft:BackfillDraft,at:number,record=true){
- if(at-draft.start<=SAME_TIME_TOLERANCE){backfillDrafts=backfillDrafts.filter(row=>row!==draft);refreshStudio();return false;}
+ if(at-draft.start<=SAME_TIME_TOLERANCE){
+  notify('This tag has not advanced beyond its start. Seek forward before ending it; the existing selection was preserved.');
+  return false;
+ }
  const rows=task[draft.track];
  const boundary=nextBoundary(rows,draft.start);
  const end=Math.min(at,boundary??at,videoDuration(task));
- if(end-draft.start<=SAME_TIME_TOLERANCE){backfillDrafts=backfillDrafts.filter(row=>row!==draft);refreshStudio();return false;}
+ if(end-draft.start<=SAME_TIME_TOLERANCE){notify('The available gap has no positive duration. No annotation was changed.');return false;}
  const overlaps=rows.some(row=>row.start<end&&(row.end===null||row.end>draft.start)&&
   (draft.track==='cameras'||draft.track==='sponsors'&&'sponsorId' in row&&row.sponsorId===draft.labelId||draft.track==='events'&&'eventId' in row&&row.eventId===draft.labelId));
  if(overlaps){notify('Another saved interval now occupies this gap. Nothing was overwritten; review the timeline before ending this draft.');return false;}
@@ -359,9 +362,22 @@ function finishBoundaryDrafts(task:TaskSummary,at:number){
   if(boundary!==null&&at>=boundary)finishBackfill(task,draft,boundary);
  }
 }
-function flushBackfills(task:TaskSummary|undefined){
- if(!task)return;
- for(const draft of [...backfillDrafts.filter(row=>row.taskId===task.id)])finishBackfill(task,draft,seconds(task));
+function preserveGapDraftsOnRewind(task:TaskSummary,from:number){
+ for(const draft of [...backfillDrafts]){
+  if(draft.taskId===task.id&&from-draft.start>SAME_TIME_TOLERANCE)
+   finishBackfill(task,draft,from);
+ }
+}
+function flushBackfills(task:TaskSummary|undefined):boolean{
+ if(!task)return true;
+ const pending=[...backfillDrafts.filter(row=>row.taskId===task.id)];
+ const at=seconds(task);
+ if(pending.some(draft=>at-draft.start<=SAME_TIME_TOLERANCE)){
+  notify('An earlier gap tag is still open. Return to its start, advance playback, and end the tag before leaving. No labels were deleted.');
+  return false;
+ }
+ for(const draft of pending)if(!finishBackfill(task,draft,at))return false;
+ return true;
 }
 function warnOnGapDraftUnload(event:BeforeUnloadEvent){
  if(!backfillDrafts.length)return;
@@ -631,7 +647,7 @@ window.restoreAnnotationRevision=async(id,version,expectedRevision)=>{
  window.dispatchEvent(new CustomEvent('annotation-history-updated',{detail:id}));
  notify('Only the selected annotation was restored. Other timelines were left unchanged.');
 };
-window.seekVideo=val=>{const t=currentTask();if(!t)return;const next=clamp(Number(val)||0,0,videoDuration(t));if(next<tick-0.2)preserveOpenAnnotationsOnRewind(t,tick);tick=next;finishBoundaryDrafts(t,tick);protectFutureIntervals(t,tick);videoRecovery?.seek(tick);if(videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();refreshStudio();};
+window.seekVideo=val=>{const t=currentTask();if(!t)return;const next=clamp(Number(val)||0,0,videoDuration(t));if(next<tick-0.2){preserveGapDraftsOnRewind(t,tick);preserveOpenAnnotationsOnRewind(t,tick)}tick=next;finishBoundaryDrafts(t,tick);protectFutureIntervals(t,tick);videoRecovery?.seek(tick);if(videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();refreshStudio();};
 window.skipVideo=(n:number)=>window.seekVideo?.((videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.currentTime)?videoEl.currentTime:tick)+n);
 window.skipByStep=direction=>window.skipVideo?.((Number(direction)||0)*seekStep);
 window.setSeekStep=value=>{seekStep=value===10?10:5;refreshStudio();};
@@ -667,7 +683,7 @@ function attachVideo(){
   videoEl=el;
   el.playbackRate=playbackRate;
   el.addEventListener('ratechange',()=>{if(videoEl!==el)return;playbackRate=el.playbackRate;refreshStudio()});
- el.addEventListener('timeupdate',()=>{if(videoEl!==el||videoRecovery?.isRecovering())return;const t=currentTask();if(t&&el.currentTime<tick-0.2)preserveOpenAnnotationsOnRewind(t,tick);tick=el.currentTime;if(t){finishBoundaryDrafts(t,tick);protectFutureIntervals(t,tick)}recordTick();refreshStudio();});
+ el.addEventListener('timeupdate',()=>{if(videoEl!==el||videoRecovery?.isRecovering())return;const t=currentTask();if(t&&el.currentTime<tick-0.2){preserveGapDraftsOnRewind(t,tick);preserveOpenAnnotationsOnRewind(t,tick)}tick=el.currentTime;if(t){finishBoundaryDrafts(t,tick);protectFutureIntervals(t,tick)}recordTick();refreshStudio();});
  el.addEventListener('play',refreshStudio);
  el.addEventListener('pause',refreshStudio);
  el.addEventListener('loadedmetadata',()=>{

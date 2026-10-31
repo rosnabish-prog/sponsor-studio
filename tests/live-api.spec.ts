@@ -127,6 +127,21 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
       &&sponsors.some((a:{start:number;end:number|null})=>a.start===10&&a.end===20);
   },{w:workspaceId,t:taskId})).toBe(true);
 
+  // Rewind with a gap draft open: commit at the furthest reached playhead,
+  // not the earlier seek destination. All pre-existing intervals survive.
+  await page.evaluate(()=>window.seekVideo?.(620));
+  await page.getByRole('button',{name:/Adidas x Messi.*OFF/}).first().click();
+  await expect(page.getByText('GAP DRAFT · END TAG TO SAVE')).toBeVisible();
+  await page.evaluate(()=>window.seekVideo?.(640));
+  await page.evaluate(()=>window.seekVideo?.(610));
+  await expect.poll(async()=>page.evaluate(async ({w,t})=>{
+    const anns=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    const sponsors=anns.filter((a:{kind:string})=>a.kind==='SPONSOR');
+    return sponsors.some((a:{start:number;end:number|null})=>a.start===620&&a.end===640)
+      &&sponsors.some((a:{start:number;end:number|null})=>a.start===660&&a.end===null)
+      &&sponsors.some((a:{start:number;end:number|null})=>a.start===180&&a.end===600);
+  },{w:workspaceId,t:taskId})).toBe(true);
+
   // Hide All closes only the currently visible LIVE tag. Unhide starts a new
   // distinct exposure, and Undo removes only that last newly created segment.
   await page.evaluate(()=>window.seekVideo?.(680));
@@ -145,6 +160,20 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
     const sponsors=anns.filter((a:{kind:string})=>a.kind==='SPONSOR');
     return !sponsors.some((a:{start:number})=>a.start===700)
       &&sponsors.some((a:{start:number;end:number|null})=>a.start===660&&a.end===680)
+      &&sponsors.some((a:{start:number;end:number|null})=>a.start===180&&a.end===600);
+  },{w:workspaceId,t:taskId})).toBe(true);
+  // Regular LIVE tags obey the same rewind contract: save through the last
+  // forward point, and do not remove the selected label or older segments.
+  await page.evaluate(()=>window.seekVideo?.(720));
+  await page.getByRole('button',{name:'UNHIDE ALL'}).click();
+  await page.evaluate(()=>window.seekVideo?.(740));
+  await page.evaluate(()=>window.seekVideo?.(700));
+  await expect.poll(async()=>page.evaluate(async ({w,t})=>{
+    const anns=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    const sponsors=anns.filter((a:{kind:string})=>a.kind==='SPONSOR');
+    return sponsors.some((a:{start:number;end:number|null})=>a.start===720&&a.end===740)
+      &&sponsors.some((a:{start:number;end:number|null})=>a.start===660&&a.end===680)
+      &&sponsors.some((a:{start:number;end:number|null})=>a.start===620&&a.end===640)
       &&sponsors.some((a:{start:number;end:number|null})=>a.start===180&&a.end===600);
   },{w:workspaceId,t:taskId})).toBe(true);
   await expect(page.getByRole('button',{name:/LAST ANNOTATED/})).toBeVisible();
