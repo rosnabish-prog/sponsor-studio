@@ -63,6 +63,8 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
   await page.locator('#taskname').fill('P0 E2E Match '+id);
   await page.locator('#tasknumber').fill('P0-'+id);
   await page.locator('#taskduration').fill('90');
+  // An annotation task must explicitly include the sponsor attribute list.
+  await page.locator('#studioModalForm input[name="sgroups"][value="sg_main"]').check();
   await page.locator('#studioModalForm').getByRole('button',{name:'Create task'}).click();
 
   try {
