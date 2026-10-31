@@ -237,6 +237,7 @@ export function StudioLogs({ model }: StudioProps) {
         <option value="">NOT CLASSIFIED</option>{VISIBILITY_QUALITIES.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
       </select></label></div> : <span className="muted small">—</span>}</td>
     <td><button type="button" className="button ghost tiny" onClick={() => window.seekVideo?.(row.start)} title="Jump to time"><Icon name="play" /></button>
+      <button type="button" className="button ghost tiny" onClick={()=>window.openAnnotationHistory?.(row.id)} title="View item history and restore a previous version">HISTORY</button>
       {(row.key === 'sponsors' ? model.canSponsor : model.canContext) && <button type="button" className="button ghost tiny" onClick={() => window.deleteLog?.(row.key, row.id)} title="Remove log"><Icon name="close" /></button>}</td>
   </tr>)}{!logs.length && <tr><td colSpan={6} style={{ textAlign: 'center', color: '#999', padding: 20 }}>No actions recorded yet</td></tr>}</tbody></table>
     <p className="exposure-meta-note">For each sponsor appearance, select the primary placement and readability. Unknown stays unclassified. If placement or clarity changes materially during an appearance, end the interval and start a new one.</p>
@@ -254,5 +255,6 @@ declare global {
     retagRecordedSponsor?: (id:string, at:number)=>void;
     saveTimelineEdit?: (key:'sponsors'|'events'|'cameras',id:string,start:number,end:number)=>void;
     cancelTimelineEdit?: ()=>void;
+    openAnnotationHistory?: (id:string)=>void;
   }
 }

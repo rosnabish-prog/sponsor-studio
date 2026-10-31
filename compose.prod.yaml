@@ -26,6 +26,29 @@ services:
     environment:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
 
+  backups:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/scripts/backup-runner.sh"]
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: sponsor
+      PGPASSWORD: ${DB_PASSWORD}
+      PGDATABASE: sponsor_studio
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - ./scripts/backup-postgres.sh:/scripts/backup-postgres.sh:ro
+      - ./scripts/backup-runner.sh:/scripts/backup-runner.sh:ro
+      - ./scripts/restore-isolated-postgres.sh:/scripts/restore-isolated-postgres.sh:ro
+      - sponsor_studio_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   caddy_data:
   caddy_config:
+  sponsor_studio_backups:

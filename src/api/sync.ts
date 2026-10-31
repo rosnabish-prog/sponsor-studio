@@ -38,6 +38,7 @@ function attributes(a:StudioAnnotation) {
  * Server responses re-key temporary IDs before acknowledging the save. */
 export async function persistStudio(
   workspaceId:string,before:StudioData,after:StudioData,version:number,rekey:Rekey,
+  onRevision?:(annotationId:string,revision:number)=>void,
 ):Promise<number> {
   if (JSON.stringify(catalog(before))!==JSON.stringify(catalog(after))) {
     const response=await api.saveCatalog(workspaceId,catalog(after),version);
@@ -66,7 +67,7 @@ export async function persistStudio(
     if(previous)assertNoBulkAnnotationDeletion(previous,task);
     for (const old of oldAnnotations) {
       if (!newAnnotations.some(row=>row.item.id===old.item.id)) {
-        await api.removeAnnotation(workspaceId,task.id,old.item.id);
+        await api.removeAnnotation(workspaceId,task.id,old.item.id,old.item.revision??1);
       }
     }
     // Close old camera intervals before starting the next one.
@@ -75,11 +76,16 @@ export async function persistStudio(
       if (!old) continue;
       const changed=JSON.stringify({labelId:old.labelId,start:old.item.start,...attributes(old.item)})!==
         JSON.stringify({labelId:current.labelId,start:current.item.start,...attributes(current.item)});
-      if (changed) await api.updateAnnotation(workspaceId,task.id,current.item.id,{
+      if (changed) {
+       const result=await api.updateAnnotation(workspaceId,task.id,current.item.id,{
+        expectedRevision:old.item.revision??1,
         start:current.item.start,end:current.item.end,
         ...(current.kind==='CAMERA'?{labelId:current.labelId}:{}),
         ...(current.kind==='SPONSOR'?attributes(current.item):{}),
       });
+       current.item.revision=result.revision;
+       onRevision?.(current.item.id,result.revision);
+      }
     }
     for (const current of newAnnotations) {
       if (oldAnnotations.some(row=>row.item.id===current.item.id)) continue;
@@ -89,6 +95,8 @@ export async function persistStudio(
       });
       rekey('annotation',current.item.id,result.id);
       current.item.id=result.id;
+      current.item.revision=result.revision;
+      onRevision?.(result.id,result.revision);
     }
 
     for (const stream of ['sponsors','context'] as const) {

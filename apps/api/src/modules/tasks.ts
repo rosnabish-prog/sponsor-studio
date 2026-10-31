@@ -73,7 +73,7 @@ export class TaskService {
     const where = member.role === 'OWNER' || member.role === 'ADMIN' || member.role === 'REVIEWER' || member.role === 'VIEWER'
       ? { workspaceId }
       : { workspaceId, OR: [{ sponsorAnalystId: userId }, { contextAnalystId: userId }] };
-    const tasks=await this.db.task.findMany({ where, include: { annotations: true, videos: {
+    const tasks=await this.db.task.findMany({ where, include: { annotations: {where:{deletedAt:null}}, videos: {
       where: { status: 'READY' }, select: { id: true, filename: true, mimeType: true }, orderBy: { createdAt: 'desc' }, take: 1,
     } }, orderBy: { createdAt: 'desc' } });
     return member.role==='VIEWER'?tasks.map(task=>({...withoutVideoAccess(task),videos:[]})):tasks;
@@ -123,7 +123,7 @@ export class TaskService {
     await this.checkAssignments(workspaceId, [input.sponsorAnalystId, input.contextAnalystId]);
     if (input.durationSeconds !== undefined && input.durationSeconds < task.durationSeconds) {
       const invalidAnnotation = await this.db.annotation.count({ where: {
-        taskId, OR: [{ start: { gt: input.durationSeconds } }, { end: { gt: input.durationSeconds } }],
+        taskId,deletedAt:null, OR: [{ start: { gt: input.durationSeconds } }, { end: { gt: input.durationSeconds } }],
       } });
       if (invalidAnnotation) throw new ConflictException('Existing annotations extend beyond the new duration');
     }
@@ -144,7 +144,7 @@ export class TaskService {
     return this.db.$transaction(async tx => {
       await tx.$queryRaw`SELECT "id" FROM "Task" WHERE "id"::text = ${taskId} AND "workspaceId"::text = ${workspaceId} FOR UPDATE`;
       const active = await tx.annotation.count({ where: {
-        taskId, end: null,
+        taskId, end: null,deletedAt:null,
         kind: stream === 'sponsors' ? 'SPONSOR' : { in: ['EVENT', 'CAMERA'] },
       } });
       if (active) throw new ConflictException('Close active annotation intervals before submitting');
@@ -169,6 +169,10 @@ export class TaskService {
   async remove(workspaceId: string, taskId: string, actorId: string) {
     const { task, role } = await this.find(workspaceId, taskId, actorId);
     mustManage(role);
+    // Cascading a task delete used to permanently erase its entire annotation history.
+    // Require an explicit archival workflow before a task with any history can be removed.
+    if(await this.db.annotation.count({where:{taskId}}))
+      throw new ConflictException('This task has annotations or annotation history. Deletion is blocked to protect recorded work.');
     const assets = await this.db.videoAsset.findMany({ where: { taskId: task.id }, select: {
       objectKey: true, uploadId: true, status: true,
     } });

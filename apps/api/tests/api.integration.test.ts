@@ -63,22 +63,48 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
     const annotation = await run(path + '/annotations', 'POST', { kind: 'SPONSOR', labelId: 's_test', start: 20 }, bob.cookie);
     assert.equal(annotation.status, 201, JSON.stringify(annotation.json));
     assert.equal((await run(path + '/submit', 'POST', { stream: 'sponsors' }, bob.cookie)).status, 409);
-    assert.equal((await run(path + `/annotations/${annotation.json.id}`, 'PATCH', { end: 25 }, bob.cookie)).status, 200);
+    assert.equal((await run(path + `/annotations/${annotation.json.id}`, 'PATCH', { end: 25,expectedRevision:1 }, bob.cookie)).status, 200);
     assert.equal((await run(path + '/submit', 'POST', { stream: 'sponsors' }, bob.cookie)).status, 201);
-    assert.equal((await run(path + `/annotations/${annotation.json.id}`, 'PATCH', { quality: 'clear' }, bob.cookie)).status, 403);
+    assert.equal((await run(path + `/annotations/${annotation.json.id}`, 'PATCH', { quality: 'clear',expectedRevision:2 }, bob.cookie)).status, 403);
     assert.equal((await run(path + '/reopen', 'POST', { stream: 'sponsors' }, bob.cookie)).status, 403);
     assert.equal((await run(path + '/reopen', 'POST', { stream: 'sponsors' }, alice.cookie)).status, 201);
-    assert.equal((await run(path + `/annotations/${annotation.json.id}`, 'PATCH', { quality: 'clear' }, bob.cookie)).status, 200);
+    assert.equal((await run(path + `/annotations/${annotation.json.id}`, 'PATCH', { quality: 'clear',expectedRevision:2 }, bob.cookie)).status, 200);
     // The server allows only one live camera; the UI closes it before switching.
     const firstCamera=await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'wide',start:10},alice.cookie);
     assert.equal(firstCamera.status,201,JSON.stringify(firstCamera.json));
     assert.equal((await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'close',start:11},alice.cookie)).status,409);
-    assert.equal((await run(path+`/annotations/${firstCamera.json.id}`,'PATCH',{end:11},alice.cookie)).status,200);
+    assert.equal((await run(path+`/annotations/${firstCamera.json.id}`,'PATCH',{end:11,expectedRevision:1},alice.cookie)).status,200);
     const secondCamera=await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'close',start:11},alice.cookie);
     assert.equal(secondCamera.status,201,JSON.stringify(secondCamera.json));
     assert.equal((await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'bench',start:12},alice.cookie)).status,409);
-    assert.equal((await run(path+`/annotations/${secondCamera.json.id}`,'PATCH',{end:20},alice.cookie)).status,200);
+    assert.equal((await run(path+`/annotations/${secondCamera.json.id}`,'PATCH',{end:20,expectedRevision:1},alice.cookie)).status,200);
     assert.equal((await run(path+'/annotations','POST',{kind:'CAMERA',labelId:'bench',start:20},alice.cookie)).status,201);
+    // Single-annotation edits and soft-deletes never change other camera intervals.
+    const preEdit=(await run(path+'/annotations','GET',undefined,alice.cookie)).json as any[];
+    const laterCamera=preEdit.find(row=>row.labelId==='bench');
+    assert.equal((await run(path+`/annotations/${firstCamera.json.id}`,'PATCH',{
+      start:9,end:11,expectedRevision:2,
+    },alice.cookie)).status,200);
+    assert.equal((await run(path+`/annotations/${firstCamera.json.id}`,'PATCH',{
+      start:8,expectedRevision:2,
+    },alice.cookie)).status,409,'stale revision is rejected');
+    let afterEdit=(await run(path+'/annotations','GET',undefined,alice.cookie)).json as any[];
+    assert.deepEqual(afterEdit.find(row=>row.id===laterCamera.id),laterCamera,'later camera unchanged');
+    assert.equal((await run(path+`/annotations/${firstCamera.json.id}`,'DELETE',{
+      expectedRevision:3,
+    },alice.cookie)).status,200);
+    afterEdit=(await run(path+'/annotations','GET',undefined,alice.cookie)).json as any[];
+    assert.equal(afterEdit.some(row=>row.id===firstCamera.json.id),false,'soft-deleted item hidden');
+    assert.deepEqual(afterEdit.find(row=>row.id===laterCamera.id),laterCamera,'other camera survives delete');
+    const history=(await run(path+`/annotations/${firstCamera.json.id}/history`,'GET',undefined,alice.cookie)).json as any[];
+    assert.deepEqual(history.map(row=>row.action),['SOFT_DELETED','UPDATED','UPDATED','CREATED']);
+    const restored=await run(path+`/annotations/${firstCamera.json.id}/restore`,'POST',{
+      version:2,expectedRevision:4,
+    },alice.cookie);
+    assert.equal(restored.status,201,JSON.stringify(restored.json));
+    assert.equal(restored.json.end,11);
+    afterEdit=(await run(path+'/annotations','GET',undefined,alice.cookie)).json as any[];
+    assert.deepEqual(afterEdit.find(row=>row.id===laterCamera.id),laterCamera,'restore affects target only');
     assert.equal((await run('/auth/logout', 'POST', undefined, bob.cookie)).status, 201);
     assert.equal((await run('/auth/me', 'GET', undefined, bob.cookie)).status, 401);
 
@@ -135,8 +161,8 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
     assert.equal((await run(path+'/videos/'+task.json.id+'/playback','GET',undefined,viewerLogin.cookie)).status,403);
     assert.equal((await run(path,'DELETE',undefined,viewerLogin.cookie)).status,403);
     const removed=await run(path,'DELETE',undefined,alice.cookie);
-    assert.equal(removed.status,200,JSON.stringify(removed.json));
-    assert.equal((await run(path,'GET',undefined,alice.cookie)).status,404);
+    assert.equal(removed.status,409,JSON.stringify(removed.json));
+    assert.equal((await run(path,'GET',undefined,alice.cookie)).status,200,'tasks with annotation history cannot be deleted');
     assert.equal((await run(`/workspaces/${workspaceId}/catalog`,'GET',undefined,alice.cookie)).status,200,'Catalog survives task deletion');
     // Workspace membership removal is owner-only and does not delete the user's account.
     const memberPath=`/workspaces/${workspaceId}/members/${viewer.json.user.id}`;

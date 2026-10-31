@@ -29,6 +29,12 @@ export interface ApiCatalog { version: number; payload: Pick<StudioData,'sponsor
 export interface ApiAnnotation {
   id:string; kind:'SPONSOR'|'EVENT'|'CAMERA';labelId:string;
   start:number;end:number|null;placement:string|null;quality:string|null;createdBy:string;createdAt:string;
+  revision:number;deletedAt:string|null;
+}
+export interface ApiAnnotationRevision {
+  id:string;taskId:string;annotationId:string;version:number;actorId:string;action:string;createdAt:string;
+  snapshot:{kind:'SPONSOR'|'EVENT'|'CAMERA';labelId:string;start:number;end:number|null;
+    placement:string|null;quality:string|null;createdBy:string;createdAt:string;deletedAt:string|null};
 }
 export interface ApiTask {
   id:string;workspaceId:string;number:string;name:string;fixtureId:string|null;
@@ -63,7 +69,10 @@ export const api = {
   reopen: (w:string,id:string,stream:'sponsors'|'context') => apiRequest<{ok:boolean}>(`/workspaces/${w}/tasks/${id}/reopen`,'POST',{stream}),
   addAnnotation: (w:string,id:string,body:Record<string,unknown>) => apiRequest<ApiAnnotation>(`/workspaces/${w}/tasks/${id}/annotations`,'POST',body),
   updateAnnotation: (w:string,id:string,a:string,body:Record<string,unknown>) => apiRequest<ApiAnnotation>(`/workspaces/${w}/tasks/${id}/annotations/${a}`,'PATCH',body),
-  removeAnnotation: (w:string,id:string,a:string) => apiRequest<{ok:boolean}>(`/workspaces/${w}/tasks/${id}/annotations/${a}`,'DELETE'),
+  removeAnnotation: (w:string,id:string,a:string,expectedRevision:number) => apiRequest<{ok:boolean;revision:number}>(`/workspaces/${w}/tasks/${id}/annotations/${a}`,'DELETE',{expectedRevision}),
+  annotationHistory:(w:string,id:string,a?:string) => apiRequest<ApiAnnotationRevision[]>(`/workspaces/${w}/tasks/${id}/annotations/${a?`${a}/history`:'history'}`),
+  restoreAnnotation:(w:string,id:string,a:string,version:number,expectedRevision:number) =>
+    apiRequest<ApiAnnotation>(`/workspaces/${w}/tasks/${id}/annotations/${a}/restore`,'POST',{version,expectedRevision}),
   startUpload:(w:string,t:string,body:{filename:string;mimeType:string;sizeBytes:number})=>apiRequest<{assetId:string;partSize:number;partCount:number}>(`/workspaces/${w}/tasks/${t}/videos`,'POST',body),
   signParts:(w:string,t:string,a:string,parts:number[])=>apiRequest<{parts:{partNumber:number;url:string}[]}>(`/workspaces/${w}/tasks/${t}/videos/${a}/parts`,'POST',{parts}),
   finishUpload:(w:string,t:string,a:string,parts:{partNumber:number;eTag:string}[])=>apiRequest<{id:string;filename:string;status:string}>(`/workspaces/${w}/tasks/${t}/videos/${a}/complete`,'POST',{parts}),
@@ -75,7 +84,7 @@ export function fromApiTask(t:ApiTask):TaskSummary {
   const m=t.metadata||{};
   const list=(value:unknown)=>Array.isArray(value)?value.filter((v):v is string=>typeof v==='string'):[];
   const annotations=t.annotations||[];
-  const common=(a:ApiAnnotation)=>({id:a.id,start:a.start,end:a.end,createdBy:a.createdBy,createdAt:a.createdAt});
+  const common=(a:ApiAnnotation)=>({id:a.id,revision:a.revision,start:a.start,end:a.end,createdBy:a.createdBy,createdAt:a.createdAt});
   return {
     id:t.id,number:t.number,name:t.name,fixtureId:t.fixtureId||undefined,
     date:t.matchDate?.slice(0,10),duration:t.durationSeconds,

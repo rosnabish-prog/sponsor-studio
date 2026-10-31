@@ -18,6 +18,7 @@ import { captureStudioSpacebar } from '../domain/studioKeyboard';
 import { supportedPlaybackRate } from '../domain/videoPlayback';
 import { retagSponsorFromTimestamp, nextSavedSponsorStart } from '../domain/sponsorRetag';
 import { preserveAnnotationsOnRewind } from '../domain/annotationRewind';
+import { editSingleInterval } from '../domain/isolatedInterval';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -146,6 +147,9 @@ async function syncLive() {
     }else{
      for(const task of db.tasks)for(const row of [...task.sponsors,...task.events,...task.cameras])if(row.id===previous)row.id=now;
     }
+   },(annotationId,revision)=>{
+    for(const task of db.tasks)for(const row of [...task.sponsors,...task.events,...task.cameras])
+     if(row.id===annotationId)row.revision=revision;
    });
    shadow=next;
   }
@@ -329,7 +333,13 @@ window.saveTimelineEdit=(key,id,start,end)=>{
  const task=currentTask(),row=task?.[key].find(entry=>entry.id===id);
  if(!task||!row||row.end===null||!canEdit(task,key==='sponsors'?'sponsors':'context'))return;
  if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start||end>videoDuration(task))return notify('The adjusted interval must remain within the video and have a positive duration.');
- row.start=Math.round(start*100)/100;row.end=Math.round(end*100)/100;
+ const result=key==='sponsors'
+  ?editSingleInterval(task.sponsors,id,start,end,(a,b)=>a.sponsorId===b.sponsorId)
+  :key==='events'
+   ?editSingleInterval(task.events,id,start,end,(a,b)=>a.eventId===b.eventId)
+   :editSingleInterval(task.cameras,id,start,end,()=>true);
+ if(result==='overlap')return notify('This edit overlaps another interval in the same timeline. No annotations were changed.');
+ if(result!=='updated')return notify('The selected interval no longer exists. Refresh before editing.');
  editingInterval=null;save();refreshStudio();notify('Annotation interval updated');
 };
 window.tagSponsor=id=>{
@@ -397,12 +407,23 @@ window.tagCamera=id=>{
  if(result.action==='switched')notify('Camera switched — previous interval ended automatically.');
  if(result.action==='cancelled')notify('Camera interval removed — same timestamp.');
 };
-window.deleteLog=(key,id)=>{const t=currentTask(),kind=key==='sponsors'?'sponsors':'context';if(!t||!canEdit(t,kind))return;confirmInApp('Remove annotation','Remove this recorded annotation? This action cannot be undone.',()=>{
+window.deleteLog=(key,id)=>{const t=currentTask(),kind=key==='sponsors'?'sponsors':'context';if(!t||!canEdit(t,kind))return;confirmInApp('Remove annotation','Hide this recorded annotation? You can restore it from Annotation History.',()=>{
   if(key==='sponsors')t.sponsors=t.sponsors.filter(x=>x.id!==id);
   else if(key==='events')t.events=t.events.filter(x=>x.id!==id);
   else t.cameras=t.cameras.filter(x=>x.id!==id);
   save();refreshStudio();notify('Annotation removed');
  },{actionLabel:'REMOVE ANNOTATION'});};
+window.restoreAnnotationRevision=async(id,version,expectedRevision)=>{
+ const task=currentTask();
+ if(!task||!workspaceId||syncRunning||syncDirty)throw new Error('Wait for pending annotation changes to finish before restoring.');
+ const itemHistory=await api.annotationHistory(workspaceId,task.id,id);
+ const latest=itemHistory[0];
+ if(!latest||latest.version!==expectedRevision)throw new Error('This annotation changed. Refresh its history and try again.');
+ await api.restoreAnnotation(workspaceId,task.id,id,version,expectedRevision);
+ await loadWorkspace(workspaceId);
+ window.dispatchEvent(new CustomEvent('annotation-history-updated',{detail:id}));
+ notify('Only the selected annotation was restored. Other timelines were left unchanged.');
+};
 window.seekVideo=val=>{const t=currentTask();if(!t)return;const next=clamp(Number(val)||0,0,videoDuration(t));if(next<tick-0.2)preserveOpenAnnotationsOnRewind(t,tick);tick=next;protectFutureCameraIntervals(t,tick);videoRecovery?.seek(tick);if(videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();refreshStudio();};
 window.skipVideo=(n:number)=>window.seekVideo?.((videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.currentTime)?videoEl.currentTime:tick)+n);
 window.skipByStep=direction=>window.skipVideo?.((Number(direction)||0)*seekStep);
@@ -828,7 +849,7 @@ window.exportTask=id=>{let t=db.tasks.find(x=>x.id===id);if(!t||!visibleTasks().
  const heading=t?studioSidebarHeading():null;
  const currentCamera=t?.cameras.find(x=>x.end==null);
  const studioModel=t?{
-  id:t.id,number:t.number,name:t.name,date:t.date,duration:videoDuration(t),
+  id:t.id,workspaceId,number:t.number,name:t.name,date:t.date,duration:videoDuration(t),
   videoName:localVideo?.name||t.videoName,videoType:t.videoType,videoSrc,isLocalVideo:!!localVideo,
   status:taskStatus(t),sponsorAnalyst:nameUser(t.sponsorAnalystId),contextAnalyst:nameUser(t.contextAnalystId),
   canSponsor:canEdit(t,'sponsors'),canContext:canEdit(t,'context'),

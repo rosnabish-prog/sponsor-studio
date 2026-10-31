@@ -1576,3 +1576,18 @@ select:not([multiple]):disabled{
 #studio-screen :is(.studio-media-column,.sponsor-rail):focus-visible {
  box-shadow:none!important;
 }
+
+/* Compact per-annotation version history; does not obstruct the tagging console. */
+.annotation-history-panel{margin-top:17px;min-width:0}
+.annotation-history-panel .sectionhead{align-items:center;gap:12px}
+.annotation-history-panel .sectionhead .tag{vertical-align:middle;font-size:9px;margin-left:7px}
+.annotation-history-filters{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:14px 0}
+.annotation-history-filters .muted{flex:1;min-width:180px;overflow-wrap:anywhere}
+.annotation-history-filters select{width:auto;max-width:210px;padding:9px;border:1px solid #4b4848;background:#232326;color:#f6f6f6;border-radius:6px}
+.annotation-history-panel .logtable{max-height:440px}
+.annotation-history-panel .table th,.annotation-history-panel .table td{white-space:normal;vertical-align:middle}
+.annotation-history-item,.annotation-history-id{display:block;font-size:10px;margin-top:4px}
+.annotation-history-item{font-weight:700}
+.annotation-history-id{font-family:monospace;color:#a4a4aa}
+.annotation-history-restore{display:flex;gap:6px;flex-wrap:wrap}
+.annotation-history-error{color:#ff8a8a;padding:10px 12px;background:#522526;border-radius:6px}

@@ -3,6 +3,7 @@ import type { StudioScreenModel } from '../types/screen';
 import { formatTimestamp } from '../domain/intervals';
 import { VIDEO_PLAYBACK_RATES } from '../domain/videoPlayback';
 import { StudioControls, StudioLogs, StudioRail, StudioTimeline } from './StudioWidgets';
+import { AnnotationHistoryPanel } from './AnnotationHistoryPanel';
 import { attachVideoAlignmentPause } from './videoAlignmentScroll';
 
 function Icon({ name }: { name: string }) {
@@ -117,6 +118,7 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
           </div>
         </div>
         <div className="card cardpad" style={{ marginTop: 17 }}><div className="sectionhead"><h2>Recorded actions</h2><span className="tag" id="logcount">{model.logCount} logs</span></div><div id="logBody"><StudioLogs model={model} /></div></div>
+        <AnnotationHistoryPanel model={model} isAdmin={isAdmin} />
       </div>
       <aside className="sponsor-rail" aria-label={`${model.railTitle} tagging panel`} tabIndex={0}>
         <div className="rail-compact-heading"><h2 id="railTagTitle">{model.railTitle}</h2><p id="railTagHint">{model.railHint}</p></div>

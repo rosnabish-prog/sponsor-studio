@@ -109,6 +109,7 @@ model Task {
   sponsorAnalyst   User?        @relation("SponsorAnalyst", fields: [sponsorAnalystId], references: [id], onDelete: SetNull)
   contextAnalyst   User?        @relation("ContextAnalyst", fields: [contextAnalystId], references: [id], onDelete: SetNull)
   annotations      Annotation[]
+  annotationRevisions AnnotationRevision[]
   videos           VideoAsset[]
 
   @@unique([workspaceId, number])
@@ -124,6 +125,9 @@ model Annotation {
   end       Float?
   placement String?        @db.VarChar(100)
   quality   String?        @db.VarChar(100)
+  revision  Int            @default(1)
+  deletedAt DateTime?
+  deletedBy String?        @db.Uuid
   createdBy String         @db.Uuid
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
@@ -131,6 +135,24 @@ model Annotation {
   author    User           @relation(fields: [createdBy], references: [id], onDelete: Restrict)
 
   @@index([taskId, kind, start])
+  @@index([taskId, deletedAt])
+}
+
+// Append-only, per-annotation snapshots. Undo/restore updates only annotationId.
+model AnnotationRevision {
+  id           String   @id @default(uuid()) @db.Uuid
+  taskId       String   @db.Uuid
+  annotationId String   @db.Uuid
+  version      Int
+  action       String   @db.VarChar(30)
+  snapshot     Json
+  actorId      String   @db.Uuid
+  createdAt    DateTime @default(now())
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([annotationId, version])
+  @@index([taskId, createdAt])
+  @@index([taskId, annotationId, version])
 }
 
 model VideoAsset {

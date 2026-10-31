@@ -33,6 +33,7 @@ export interface ReportsScreenModel {
 
 export interface StudioScreenModel {
   id: string;
+  workspaceId: string;
   number: string;
   name: string;
   date?: string;

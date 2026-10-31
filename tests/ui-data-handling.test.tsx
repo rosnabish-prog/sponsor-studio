@@ -28,6 +28,7 @@ import { VIDEO_PLAYBACK_RATES, supportedPlaybackRate } from '../src/domain/video
 import { nextSavedSponsorStart, retagSponsorFromTimestamp } from '../src/domain/sponsorRetag';
 import { preserveAnnotationsOnRewind } from '../src/domain/annotationRewind';
 import { assertNoBulkAnnotationDeletion } from '../src/api/sync';
+import { editSingleInterval } from '../src/domain/isolatedInterval';
 import { AttributesScreen, SponsorLibraryScreen, TeamScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
@@ -184,13 +185,44 @@ test('leaderboard excludes brands without positive duration, while configured br
 });
 
 const studio:StudioScreenModel={
-    id:task.id,number:task.number,name:task.name,duration:task.duration,status:'done',
+    id:task.id,workspaceId:'w1',number:task.number,name:task.name,duration:task.duration,status:'done',
     sponsorAnalyst:'Worker',contextAnalyst:'Worker',canSponsor:true,canContext:true,
     selectedTab:'all',tick:20,sponsorCount:0,logCount:2,cameraLabel:'CAMERA NOT SELECTED',
     seekStep:5,playbackRate:1,videoDimensions:'',videoError:'',playing:false,railTitle:'SPONSORS',railHint:'',
     submitted:task.submitted,task,sponsors:data.sponsorGroups[0].sponsors,events:data.eventGroups[0].items,
     cameras:data.cameraGroups[0].items,isLocalVideo:false,
 };
+
+test('editing a camera segment changes only its selected ID and preserves all later camera segments',()=>{
+  const cameraRows=[
+    {id:'a',cameraId:'wide',start:0,end:20},
+    {id:'b',cameraId:'close',start:20,end:40},
+    {id:'c',cameraId:'bench',start:40,end:60},
+  ];
+  const siblingBefore=JSON.stringify(cameraRows.slice(1));
+  const siblingReferences=cameraRows.slice(1);
+  assert.equal(editSingleInterval(cameraRows,'a',0,18,()=>true),'updated');
+  assert.equal(cameraRows[0].end,18);
+  assert.equal(JSON.stringify(cameraRows.slice(1)),siblingBefore);
+  assert.equal(cameraRows[1],siblingReferences[0]);
+  assert.equal(cameraRows[2],siblingReferences[1]);
+  assert.equal(editSingleInterval(cameraRows,'a',0,25,()=>true),'overlap');
+  assert.equal(cameraRows[0].end,18,'overlapping edit rejected without mutation');
+  assert.equal(editSingleInterval(cameraRows,'unknown',0,5,()=>true),'not-found');
+});
+
+test('changing a sponsor or event interval cannot touch another label or another timeline',()=>{
+  const sponsors=[
+    {id:'one',sponsorId:'gatorade',start:0,end:20},
+    {id:'two',sponsorId:'nike',start:4,end:15},
+    {id:'three',sponsorId:'gatorade',start:30,end:60},
+  ];
+  const events=[{id:'goal',eventId:'goal',start:12,end:13}];
+  const before=JSON.stringify({sibling:sponsors.slice(1),events});
+  assert.equal(editSingleInterval(sponsors,'one',0,25,(a,b)=>a.sponsorId===b.sponsorId),'updated');
+  assert.equal(JSON.stringify({sibling:sponsors.slice(1),events}),before);
+  assert.equal(editSingleInterval(sponsors,'one',0,32,(a,b)=>a.sponsorId===b.sponsorId),'overlap');
+});
 
 test('Studio offers direct playback speeds from quarter-speed through double-speed', () => {
   assert.deepEqual(VIDEO_PLAYBACK_RATES, [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]);

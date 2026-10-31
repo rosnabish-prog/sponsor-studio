@@ -38,6 +38,7 @@ export interface TeamMember {
 
 export interface AnnotationBase {
   id: string;
+  revision?: number;
   start: number;
   end: number | null;
   createdBy: string;
