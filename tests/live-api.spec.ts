@@ -106,11 +106,11 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
   // Workers are provisioned by the admin; the platform sends no credentials.
   await page.getByRole('button',{name:'Go to Sponsor Studio dashboard'}).click();
   await page.getByRole('button',{name:'Team'}).click();
-  await page.getByRole('button',{name:'Add analyst'}).click();
+  await page.getByRole('button',{name:'Add team member'}).click();
   await page.locator('#uname').fill('Managed E2E Worker');
   const workerEmail=`managed-${id}@example.org`;
   await page.locator('#uemail').fill(workerEmail);
-  await page.getByRole('button',{name:'Save analyst'}).click();
+  await page.getByRole('dialog',{name:'Add team member'}).getByRole('button',{name:'Add team member'}).click();
   await expect(page.getByRole('heading',{name:'Worker account ready'})).toBeVisible();
   const temporaryPassword=await page.locator('#temporaryPassword').innerText();
   expect(temporaryPassword.length).toBeGreaterThan(20);
