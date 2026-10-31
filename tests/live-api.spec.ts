@@ -98,7 +98,8 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
   },{w:workspaceId,t:taskId})).toBe(1);
 
   await page.reload();
-  await expect(page.locator('.ops-nav')).toBeVisible({timeout:15_000});
+  // Reload preserves the Studio route, whose focused layout hides the main navigation.
+  await expect(page.locator('.focusbar')).toBeVisible({timeout:15_000});
   await page.evaluate(id=>window.openTask?.(id),taskId);
   await expect(page.locator('.logtable')).toContainText('Adidas x Messi');
 
