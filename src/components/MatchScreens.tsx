@@ -119,10 +119,10 @@ function FixtureCatalog({ context }: { context: ScreenContext }) {
         <div>
           <div className="eyebrow">SCHEDULE / LIVE DATA SNAPSHOT</div>
           <h2>MATCH CATALOG</h2>
-          <p className="sub">Published fixture schedule with live annotation-task status. Completed matches are ready to review; existing tasks open directly without creating duplicates. Times shown in Eastern Time (ET).</p>
+          <p className="sub">Shared match catalog with live annotation-task status. Sync adds newly available matches and updates unfinished fixtures without changing completed results or saved work. Times shown in Eastern Time (ET).</p>
         </div>
         <div className="fixture-refresh-tools"><span className="tag">{context.fixtureSyncLabel} · {fixtures.length} matches</span>
-          <button type="button" className="button ghost tiny" onClick={()=>window.refreshTodayMatches?.()} disabled={context.fixtureRefreshing} title="Recheck today's unfinished matches in Eastern Time; existing final results are never overwritten">{context.fixtureRefreshing?'CHECKING…':'↻ REFRESH TODAY'}</button></div>
+          <button type="button" className="button ghost tiny" onClick={()=>window.syncMatchCatalog?.()} disabled={context.fixtureRefreshing} title="Synchronize the full 2026 match catalog from BuildUp; preserve final results and annotation tasks">{context.fixtureRefreshing?'SYNCING…':'↻ SYNC MATCHES'}</button></div>
       </div>
       <div className="fixture-days">
         <button className={`chip ${context.fixtureDay === 'all' ? 'active' : ''}`} onClick={() => window.chooseFixtureDay?.('all')}>ALL DAYS</button>
@@ -203,7 +203,7 @@ export function MatchesScreen({ context }: { context: ScreenContext }) {
   return <>
     <div className="pagehead">
       <div><div className="eyebrow">PRODUCTION / ALL MATCHES</div><h1>Match assignments</h1><p className="sub">Only matches assigned to your account are visible to you.</p></div>
-      <div className="row wrap"><button className="button ghost" onClick={()=>window.refreshTodayMatches?.()} disabled={context.fixtureRefreshing}>{context.fixtureRefreshing?'Checking today…':'↻ Refresh today'}</button><button className="button ghost" onClick={()=>window.navigate?.('labeling')}>Labeling status <Icon name="arrow" /></button>
+      <div className="row wrap"><button className="button ghost" onClick={()=>window.syncMatchCatalog?.()} disabled={context.fixtureRefreshing}>{context.fixtureRefreshing?'Syncing matches…':'↻ Sync matches'}</button><button className="button ghost" onClick={()=>window.navigate?.('labeling')}>Labeling status <Icon name="arrow" /></button>
       {(context.user?.role === 'admin' || context.user?.role === 'owner') && <button className="button primary" onClick={() => window.createTaskModal?.()}><Icon name="plus" /> New task</button>}</div>
     </div>
     <div className="filterbar">
@@ -221,6 +221,6 @@ declare global {
     chooseFixtureDay?: (day: string) => void;
     createTaskModal?: (id?: string) => void;
     setFilter?: (filter: string) => void;
-    refreshTodayMatches?: () => Promise<void>;
+    syncMatchCatalog?: () => Promise<void>;
   }
 }

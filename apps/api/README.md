@@ -24,6 +24,8 @@ Routes below are prefixed with `/api`. Most require a valid session cookie.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Database-aware health check |
+| GET | `/fixtures/catalog` | Read the shared, persisted public match catalog |
+| POST | `/fixtures/sync` | Sync the 2026 BuildUp catalog, adding new matches and updating unfinished fixtures |
 | POST | `/auth/login` | Start session (email, password) |
 | GET | `/auth/me` | Current signed-in user |
 | POST | `/auth/logout` | Revoke session |
@@ -48,6 +50,12 @@ Routes below are prefixed with `/api`. Most require a valid session cookie.
 | GET | `/workspaces/:workspaceId/tasks/:taskId/videos/buildup/stream` | Authorized BuildUp video stream with byte-range support |
 
 For annotation creation, send `{"kind":"SPONSOR","labelId":"s_adidas","start":12.5}`. A subsequent `PATCH` with `{"end":17.8}` closes it. `EVENT` and `CAMERA` are also supported. The writer must be an assigned analyst or workspace admin; submitted streams are immutable until an admin reopens them. All task and annotation lookups are scoped to the workspace.
+
+## Shared match catalog synchronization
+
+The **Sync matches** button reads public 2026 tournament matches and club metadata from BuildUp. New fixture codes become available in the Match Catalog, and unfinished fixtures can receive updated scores, statuses, dates, and venues. Published final results (a final status and numeric score) are immutable. Sync writes only `FixtureSnapshot` rows; it cannot create, reassign, delete, or edit annotation tasks. The browser combines these saved records with the bundled fixture snapshot, so matches remain visible if BuildUp is temporarily unavailable.
+
+Migration `20261031_000010_fixture_catalog` creates the `FixtureSnapshot` table. Run `npm run db:deploy` as part of the controlled database deployment **before** starting the updated API. Existing task and annotation tables are not modified. Synchronization is manual: no EC2 auto-deployment or background sync is installed by this feature.
 
 ## BuildUp match video
 

@@ -45,7 +45,8 @@ export interface ApiTask {
 }
 
 export const api = {
-  refreshFixtures:(day:string)=>apiRequest<{day:string;checkedAt:string;matches:Fixture[]}>(`/fixtures/refresh?day=${encodeURIComponent(day)}`),
+  fixtureCatalog:()=>apiRequest<{matches:Fixture[]}>('/fixtures/catalog'),
+  syncFixtures:()=>apiRequest<{checkedAt:string;added:number;updated:number;matches:Fixture[]}>('/fixtures/sync','POST'),
   me: () => apiRequest<{user:ApiUser}>('/auth/me'),
   login: (body: {email:string;password:string}) => apiRequest<{user:ApiUser}>('/auth/login','POST',body),
   logout: () => apiRequest<{ok:boolean}>('/auth/logout','POST'),
