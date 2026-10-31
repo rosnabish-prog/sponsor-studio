@@ -95,6 +95,11 @@ export interface Fixture {
   date: string;
   home: string;
   away: string;
+  sourceId?: string;
+  homeId?: string;
+  awayId?: string;
+  homeLogo?: string;
+  awayLogo?: string;
   time?: string;
   group?: string;
   stage?: string;

@@ -18,7 +18,7 @@ import { StudioControls, StudioRail, StudioTimeline } from '../src/components/St
 import { WorkspaceScreen } from '../src/components/WorkspaceScreen';
 import { LabelingStatusScreen } from '../src/components/LabelingStatusScreen';
 import { displayHotkey, hotkeyFromKeyboard, normalizeHotkey } from '../src/domain/hotkeys';
-import { hasFinalResult, mergeTodayFixtureUpdates } from '../src/domain/fixtures';
+import { hasFinalResult, mergeFixtureCatalog } from '../src/domain/fixtures';
 import { StudioModal } from '../src/components/StudioModals';
 import { readOriginalPng, MAX_ORIGINAL_PNG_BYTES } from '../src/domain/logoUpload';
 import { copyCatalogEntry, reorderById } from '../src/domain/catalogEditing';
@@ -683,17 +683,22 @@ test('timeline segment carries sponsor configured color and offers confirmed edg
   assert.match(editMarkup,/timeline-edit-toolbar|timeline-resize-handle/);
 });
 
-test('refresh updates only incomplete fixtures on current match day and never rewrites completed scores',()=>{
+test('catalog sync preserves final scores, adds missing fixtures and updates unfinished matches across dates',()=>{
   const today='2026-10-30';
   const fixture=(id:string,date:string,status:string,score:string)=>({id,date,home:'Home',away:'Away',status,score});
   const original=[fixture('M1',today,'finished','2 : 1'),fixture('M2',today,'scheduled',''),fixture('M3','2026-10-29','scheduled','')];
-  const updates=[fixture('M1',today,'finished','9 : 9'),fixture('M2',today,'finished','0 : 0'),fixture('M3','2026-10-29','finished','1 : 1')];
-  const next=mergeTodayFixtureUpdates(original,updates,today);
-  assert.equal(next.changed,1);
+  const updates=[fixture('M1',today,'finished','9 : 9'),fixture('M2',today,'finished','0 : 0'),fixture('M3','2026-10-29','finished','1 : 1'),fixture('M4','2026-11-01','scheduled','')];
+  const next=mergeFixtureCatalog(original,updates);
+  assert.equal(next.changed,2);
+  assert.equal(next.added,1);
   assert.equal(next.fixtures[0].score,'2 : 1');
   assert.equal(next.fixtures[1].score,'0 : 0');
-  assert.equal(next.fixtures[2].score,'');
+  assert.equal(next.fixtures[2].score,'1 : 1');
+  assert.equal(next.fixtures[3].id,'M4');
   assert.ok(hasFinalResult(next.fixtures[1]));
+  const repeated=mergeFixtureCatalog(next.fixtures,updates);
+  assert.equal(repeated.changed,0);
+  assert.equal(repeated.added,0);
 });
 
 test('viewer sees only Insights and export, with no studio or management actions', () => {

@@ -10,7 +10,7 @@ import { recoverVideo } from './videoRecovery';
 import { persistStudio } from '../api/sync';
 import { readStudioRoute, writeStudioRoute, type ProductView } from './routes';
 import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
-import { easternMatchDate, hasFinalResult, mergeTodayFixtureUpdates } from '../domain/fixtures';
+import { mergeFixtureCatalog } from '../domain/fixtures';
 import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
 import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } from '../domain/catalogEditing';
 import { hasRecordedCameraAfter, nextSavedCameraStart, resumeCameraFromTimestamp, selectCameraAngle } from '../domain/cameraSwitch';
@@ -62,8 +62,15 @@ const BADGES: Record<string,string>={
 'Independiente del Valle':'https://www.logotypes101.com/logos/863/F5D3418E82A92E61E8AC6B20401C321F/selloindependiente.png'
 };
 const fixtureById=(id:string)=>OFFICIAL_FIXTURES.find(f=>f.id===id)||null;
-let fixtureFeedLoaded=false,fixtureRefreshing=false;
-const activelyRefreshedFixtures=new Set<string>();
+let fixtureRefreshing=false;
+let savedFixtureCatalog:Fixture[]=[];
+let lastCatalogSyncLabel='';
+function updateFixtureBadges(fixtures:Fixture[]){
+  for(const fixture of fixtures){
+    if(fixture.homeLogo&&/^https:\/\//.test(fixture.homeLogo))BADGES[fixture.home]=fixture.homeLogo;
+    if(fixture.awayLogo&&/^https:\/\//.test(fixture.awayLogo))BADGES[fixture.away]=fixture.awayLogo;
+  }
+}
 async function refreshFixtureFeed(){
   try{
     const response=await fetch('data/fixtures.json',{cache:'no-store'});
@@ -72,36 +79,41 @@ async function refreshFixtureFeed(){
     if(!Array.isArray(payload.matches)||payload.matches.length<10)throw Error('Incomplete feed');
     const safe=payload.matches.filter((f:Fixture)=>f&&typeof f.id==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(f.date)&&typeof f.home==='string'&&typeof f.away==='string');
     if(safe.length<10)throw Error('Invalid feed');
-    if(!fixtureFeedLoaded){
-      OFFICIAL_FIXTURES=safe;
-      fixtureFeedLoaded=true;
-    }else{
-      const existing=new Map(OFFICIAL_FIXTURES.map(f=>[f.id,f]));
-      OFFICIAL_FIXTURES=safe.map((f:Fixture)=>{
-        const old=existing.get(f.id);
-        // Do not roll back an already published final score or a manual live refresh.
-        return old&&(hasFinalResult(old)||activelyRefreshedFixtures.has(f.id))?old:f;
-      });
-    }
+    OFFICIAL_FIXTURES=mergeFixtureCatalog(OFFICIAL_FIXTURES,safe).fixtures;
+    // Server-saved fixtures take precedence over older published snapshots.
+    OFFICIAL_FIXTURES=mergeFixtureCatalog(OFFICIAL_FIXTURES,savedFixtureCatalog).fixtures;
     for(const team of payload.clubs||[]){
       if(team.name&&typeof team.logo==='string'&&/^https:\/\//.test(team.logo))BADGES[team.name]=team.logo;
     }
-    fixtureSyncLabel='BuildUp public fixture feed · auto-synced';
+    updateFixtureBadges(savedFixtureCatalog);
+    fixtureSyncLabel=lastCatalogSyncLabel||(savedFixtureCatalog.length?'Saved match catalog + published snapshot':'Published fixture snapshot');
     if(me()&&!modalOpen&&['tasks','dashboard'].includes(view))render();
   }catch(err){console.warn('Using bundled fixture snapshot:',err instanceof Error ? err.message : String(err))}
 }
+async function loadSavedFixtureCatalog(){
+  try{
+    const response=await api.fixtureCatalog();
+    savedFixtureCatalog=response.matches;
+    OFFICIAL_FIXTURES=mergeFixtureCatalog(OFFICIAL_FIXTURES,savedFixtureCatalog).fixtures;
+    updateFixtureBadges(savedFixtureCatalog);
+    fixtureSyncLabel=lastCatalogSyncLabel||(savedFixtureCatalog.length?'Saved match catalog + published snapshot':'Published fixture snapshot');
+    render();
+  }catch(err){console.warn('Saved fixture catalog unavailable:',err instanceof Error?err.message:String(err))}
+}
 window.chooseFixtureDay=day=>{fixtureDay=day;render()};
-window.refreshTodayMatches=async()=>{
+window.syncMatchCatalog=async()=>{
  if(fixtureRefreshing)return;
- const day=easternMatchDate();fixtureRefreshing=true;render();
+ fixtureRefreshing=true;render();
  try{
-  const response=await api.refreshFixtures(day);
-  const updated=mergeTodayFixtureUpdates(OFFICIAL_FIXTURES,response.matches,day);
+  const response=await api.syncFixtures();
+  savedFixtureCatalog=response.matches;
+  const updated=mergeFixtureCatalog(OFFICIAL_FIXTURES,response.matches);
   OFFICIAL_FIXTURES=updated.fixtures;
-  for(const next of response.matches){if(next.date===day&&OFFICIAL_FIXTURES.some(f=>f.id===next.id&&!hasFinalResult(f)))activelyRefreshedFixtures.add(next.id);}
-  fixtureSyncLabel=`Match results checked ${new Date(response.checkedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/New_York'})} ET`;
-  notify(updated.changed?`${updated.changed} match${updated.changed===1?'':'es'} updated for ${day}. Completed matches preserved.`:`Today's match catalog is up to date. Completed results were not changed.`);
- }catch(error){notify(error instanceof Error?error.message:'Could not refresh matches. Existing results preserved.');}
+  updateFixtureBadges(response.matches);
+  lastCatalogSyncLabel=`Catalog synced ${new Date(response.checkedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/New_York'})} ET`;
+  fixtureSyncLabel=lastCatalogSyncLabel;
+  notify(response.added||response.updated?`${response.added} new matches, ${response.updated} updated. Final results and annotation tasks preserved.`:'Match catalog is up to date. Final results and annotation tasks preserved.');
+ }catch(error){notify(error instanceof Error?error.message:'Could not sync matches. Existing results preserved.');}
  finally{fixtureRefreshing=false;render()}
 };
 // Match catalog links fixtures to existing tasks rather than creating duplicates.
@@ -217,6 +229,7 @@ async function loadLiveSession() {
  liveWorkspaces=await api.workspaces();
  if(liveWorkspaces.length)await loadWorkspace(liveWorkspaces[0].workspace.id);
  else{workspaceId='';sessionPending=false;render()}
+ await loadSavedFixtureCatalog();
 }
 const initialRoute=readStudioRoute();
 let view: ProductView=initialRoute.view;

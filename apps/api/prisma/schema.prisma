@@ -77,6 +77,14 @@ model WorkspaceCatalog {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
+// Shared BuildUp match metadata. Independent of annotation tasks and assignments.
+model FixtureSnapshot {
+  id        String   @id @db.VarChar(100)
+  payload   Json
+  finalized Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
 model Membership {
   id          String        @id @default(uuid()) @db.Uuid
   workspaceId String        @db.Uuid
