@@ -1,0 +1,142 @@
+name: Sponsor Studio EC2 production deployment
+
+on:
+  push:
+    branches: [development]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One production deployment at a time. Never interrupt a migration mid-flight.
+concurrency:
+  group: sponsor-studio-ec2-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Build and test full stack
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: sponsor
+          POSTGRES_PASSWORD: sponsor_ci
+          POSTGRES_DB: sponsor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sponsor -d sponsor_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sponsor:sponsor_ci@localhost:5432/sponsor_test?schema=public
+      TEST_DATABASE_URL: postgresql://sponsor:sponsor_ci@localhost:5432/sponsor_test?schema=public
+      APP_ORIGIN: http://127.0.0.1:4173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - name: Build API and Prisma client
+        run: npm run build:api
+      - name: Apply migrations to disposable CI database
+        run: npm run db:deploy
+      - name: Run API, UI and validation tests
+        run: npm test
+      - name: Build production frontend
+        run: npm run build
+      - name: Check deployment script and SSM document syntax
+        run: |
+          bash -n scripts/deploy-ec2.sh
+          python -m json.tool deploy/aws/ssm-deploy-document.json > /dev/null
+      - name: Install Chromium for live integration test
+        run: npx playwright install --with-deps chromium
+      - name: Start API and test frontend
+        run: |
+          npm run start --workspace @sponsor-studio/api > "$RUNNER_TEMP/sponsor-api.log" 2>&1 &
+          VITE_BACKEND_ENABLED=true npm run dev -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/sponsor-ui.log" 2>&1 &
+          curl --retry 20 --retry-connrefused --retry-delay 2 --fail http://127.0.0.1:3001/api/health || { tail -n 60 "$RUNNER_TEMP/sponsor-api.log"; exit 1; }
+          curl --retry 20 --retry-connrefused --retry-delay 2 --fail http://127.0.0.1:4173/
+      - name: Live login and annotation integration
+        run: npm run test:live
+      - name: Upload browser traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ec2-production-test-traces
+          path: |
+            test-results/
+            playwright-report/
+
+  deploy:
+    name: Deploy tested SHA through SSM
+    needs: verify
+    runs-on: ubuntu-latest
+    # Intentional safety switch: adding this workflow cannot touch EC2 until enabled.
+    if: github.ref == 'refs/heads/development' && vars.EC2_AUTO_DEPLOY_ENABLED == 'true'
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Require scoped AWS deployment configuration
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+        run: |
+          test -n "$AWS_DEPLOY_ROLE_ARN" || { echo 'Missing AWS_DEPLOY_ROLE_ARN repository variable'; exit 1; }
+          test -n "$AWS_REGION" || { echo 'Missing AWS_REGION repository variable'; exit 1; }
+          test -n "$EC2_INSTANCE_ID" || { echo 'Missing EC2_INSTANCE_ID repository variable'; exit 1; }
+          [[ "$EC2_INSTANCE_ID" =~ ^i-[0-9a-f]+$ ]] || { echo 'Invalid EC2_INSTANCE_ID'; exit 1; }
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: sponsor-studio-ec2-deploy
+      - name: Deploy and wait for final EC2 result
+        env:
+          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          DEPLOY_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          command_id="$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name SponsorStudioDeploy \
+            --parameters "CommitSha=$DEPLOY_SHA" \
+            --timeout-seconds 1800 \
+            --comment "Sponsor Studio development $DEPLOY_SHA" \
+            --query 'Command.CommandId' --output text)"
+          echo "SSM command: $command_id"
+          for attempt in $(seq 1 180); do
+            if ! status="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$EC2_INSTANCE_ID" --query 'Status' --output text 2>&1)"; then
+              if (( attempt <= 6 )); then sleep 10; continue; fi
+              echo "$status" >&2
+              exit 1
+            fi
+            case "$status" in
+              Success)
+                echo "Deployment succeeded for $DEPLOY_SHA"
+                exit 0 ;;
+              Failed|Cancelled|TimedOut)
+                echo "Deployment failed: $status" >&2
+                aws ssm get-command-invocation --command-id "$command_id" --instance-id "$EC2_INSTANCE_ID" \
+                  --query '{Status:Status,Details:StatusDetails,Output:StandardOutputContent,Error:StandardErrorContent}' --output json
+                exit 1 ;;
+              Pending|InProgress|Delayed|Cancelling)
+                sleep 10 ;;
+              *)
+                echo "Unexpected SSM status: $status" >&2
+                exit 1 ;;
+            esac
+          done
+          echo 'Deployment did not complete within 30 minutes.' >&2
+          exit 1

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "2.2",
+  "description": "Deploy an approved Sponsor Studio development commit to the production EC2 Compose stack",
+  "parameters": {
+    "CommitSha": {
+      "type": "String",
+      "description": "Full Git SHA from the successful GitHub Actions run",
+      "allowedPattern": "^[0-9a-f]{40}$"
+    }
+  },
+  "mainSteps": [
+    {
+      "action": "aws:runShellScript",
+      "name": "DeploySponsorStudio",
+      "inputs": {
+        "timeoutSeconds": "1800",
+        "runCommand": [
+          "sudo -u sponsor-deploy -H /bin/bash /opt/sponsor-studio/scripts/deploy-ec2.sh '{{ CommitSha }}'"
+        ]
+      }
+    }
+  ]
+}

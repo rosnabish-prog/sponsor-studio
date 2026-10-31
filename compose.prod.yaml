@@ -16,15 +16,15 @@ services:
     environment:
       NODE_ENV: production
       APP_ORIGIN: https://sponsor-studio.seebot.ai
-      DATABASE_URL: postgresql://sponsor:${DB_PASSWORD}@postgres:5432/sponsor_studio?schema=public
+      DATABASE_URL: postgresql://sponsor:${DB_PASSWORD:?Set the existing production DB_PASSWORD in .env}@postgres:5432/sponsor_studio?schema=public
 
   migrations:
     environment:
-      DATABASE_URL: postgresql://sponsor:${DB_PASSWORD}@postgres:5432/sponsor_studio?schema=public
+      DATABASE_URL: postgresql://sponsor:${DB_PASSWORD:?Set the existing production DB_PASSWORD in .env}@postgres:5432/sponsor_studio?schema=public
 
   postgres:
     environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set the existing production DB_PASSWORD in .env}
 
   backups:
     image: postgres:17-alpine
@@ -34,7 +34,7 @@ services:
       PGHOST: postgres
       PGPORT: "5432"
       PGUSER: sponsor
-      PGPASSWORD: ${DB_PASSWORD}
+      PGPASSWORD: ${DB_PASSWORD:?Set the existing production DB_PASSWORD in .env}
       PGDATABASE: sponsor_studio
       BACKUP_DIR: /backups
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
