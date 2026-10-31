@@ -18,13 +18,18 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
   app.use(cookieParser());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.setGlobalPrefix('api');
+  // Distinguish simulated clients for the login-throttle test environment.
+  // Production continues to enforce its five-attempt limit per client IP.
+  app.getHttpAdapter().getInstance().set('trust proxy','loopback');
   await app.listen(0, '127.0.0.1');
   const { port } = app.getHttpServer().address() as { port: number };
   const url = `http://127.0.0.1:${port}/api`;
+  let loginAttempt=0;
   const run = async (path: string, method = 'GET', body?: unknown, cookie?: string) => {
     const result = await fetch(url + path, {
       method,
-      headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) },
+      headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(cookie ? { cookie } : {}),
+        ...(path==='/auth/login'?{'x-forwarded-for':`198.51.100.${++loginAttempt}`}:{}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
     const json = await result.json() as Record<string, any>;
