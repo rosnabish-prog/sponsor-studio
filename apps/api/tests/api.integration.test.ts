@@ -12,6 +12,8 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
   // Integration tests run against the compiled NestJS output. esbuild/tsx does not
   // emit the decorator metadata that NestJS dependency injection requires.
   const { AppModule } = await import('../dist/modules/app.module.js');
+  const { DatabaseService } = await import('../dist/modules/database.js');
+  const { hashPassword } = await import('../dist/modules/auth.js');
   const app = await NestFactory.create(AppModule, { logger: ['error'] });
   app.use(cookieParser());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
@@ -30,8 +32,13 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
   };
   try {
     const suffix = Math.random().toString(36).slice(2, 12);
-    const alice = await run('/auth/register', 'POST', { name: 'Alice', email: `alice-${suffix}@example.org`, password: 'safe-test-password-A1' });
-    const bob = await run('/auth/register', 'POST', { name: 'Bob', email: `bob-${suffix}@example.org`, password: 'safe-test-password-B1' });
+    // Public registration was deliberately removed. Seed only this disposable
+    // TEST_DATABASE_URL, then exercise real login/session/authorization routes.
+    const testDb=app.get(DatabaseService);
+    await testDb.user.create({data:{name:'Alice',email:`alice-${suffix}@example.org`,passwordHash:await hashPassword('safe-test-password-A1')}});
+    await testDb.user.create({data:{name:'Bob',email:`bob-${suffix}@example.org`,passwordHash:await hashPassword('safe-test-password-B1')}});
+    const alice = await run('/auth/login', 'POST', { email: `alice-${suffix}@example.org`, password: 'safe-test-password-A1' });
+    const bob = await run('/auth/login', 'POST', { email: `bob-${suffix}@example.org`, password: 'safe-test-password-B1' });
     assert.equal(alice.status, 201, JSON.stringify(alice.json));
     assert.equal(bob.status, 201, JSON.stringify(bob.json));
     assert.ok(alice.cookie);
