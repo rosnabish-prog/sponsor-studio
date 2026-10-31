@@ -1,5 +1,5 @@
 import type { StudioMount } from '../types/screen';
-import type { CameraAnnotation, EventAnnotation, Fixture, Sponsor, SponsorAnnotation, StudioData, TaskSummary, TeamMember } from '../types/models';
+import type { AnnotationBase, CameraAnnotation, EventAnnotation, Fixture, Sponsor, SponsorAnnotation, StudioData, TaskSummary, TeamMember } from '../types/models';
 import type { DialogModel } from '../components/StudioModals';
 import { computeInsights } from '../domain/analytics';
 import { annotatedEndpoint } from '../domain/labelingProgress';
@@ -19,6 +19,7 @@ import { supportedPlaybackRate } from '../domain/videoPlayback';
 import { retagSponsorFromTimestamp, nextSavedSponsorStart } from '../domain/sponsorRetag';
 import { preserveAnnotationsOnRewind } from '../domain/annotationRewind';
 import { editSingleInterval } from '../domain/isolatedInterval';
+import { annotationChanges, lastAnnotatedTimestamp, nextBoundary, sameAnnotationContent, serverSnapshotMatchesRow, snapshotAnnotations, type AnnotationSnapshot, type UndoChange } from '../domain/annotationUndo';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -132,6 +133,34 @@ let passwordChangeRequired=false;
 let sessionPending=true;
 const cloneStudio=(value:StudioData):StudioData=>JSON.parse(JSON.stringify(value)) as StudioData;
 let shadow:StudioData=cloneStudio(db),syncDirty=false,syncRunning=false;
+type TrackKey='sponsors'|'events'|'cameras';
+type BackfillDraft={taskId:string;track:TrackKey;labelId:string;start:number;id:string};
+type HiddenSponsors={taskId:string;resumeIds:string[]};
+type UndoEntry={taskId:string;label:string;changes:UndoChange[];hiddenBefore:HiddenSponsors|null;hiddenAfter:HiddenSponsors|null};
+const undoStacks=new Map<string,UndoEntry[]>();
+let backfillDrafts:BackfillDraft[]=[];
+let hiddenSponsors:HiddenSponsors|null=null;
+let undoInProgress=false;
+function cloneHidden(value:HiddenSponsors|null):HiddenSponsors|null{return value?{taskId:value.taskId,resumeIds:[...value.resumeIds]}:null;}
+function rememberAnnotationChange(task:TaskSummary,before:AnnotationSnapshot,label:string,hiddenBefore:HiddenSponsors|null=hiddenSponsors){
+ const changes=annotationChanges(before,snapshotAnnotations(task));
+ if(!changes.length&&JSON.stringify(hiddenBefore)===JSON.stringify(hiddenSponsors))return false;
+ const stack=undoStacks.get(task.id)||[];
+ stack.push({taskId:task.id,label,changes,hiddenBefore:cloneHidden(hiddenBefore),hiddenAfter:cloneHidden(hiddenSponsors)});
+ undoStacks.set(task.id,stack.slice(-10));
+ return true;
+}
+function recordAnnotationChange(task:TaskSummary,before:AnnotationSnapshot,label:string,hiddenBefore:HiddenSponsors|null=hiddenSponsors){
+ if(rememberAnnotationChange(task,before,label,hiddenBefore))save();
+ refreshStudio();
+}
+function rekeyUndoRow(previous:string,now:string){
+ for(const stack of undoStacks.values())for(const entry of stack)for(const change of entry.changes){
+  if(change.id===previous)change.id=now;
+  if(change.before?.id===previous)change.before.id=now;
+  if(change.after?.id===previous)change.after.id=now;
+ }
+}
 async function syncLive() {
  if(syncRunning)return;
  syncRunning=true;
@@ -146,6 +175,7 @@ async function syncLive() {
      if(reportTaskId===previous)reportTaskId=now;
     }else{
      for(const task of db.tasks)for(const row of [...task.sponsors,...task.events,...task.cameras])if(row.id===previous)row.id=now;
+     rekeyUndoRow(previous,now);
     }
    },(annotationId,revision)=>{
     for(const task of db.tasks)for(const row of [...task.sponsors,...task.events,...task.cameras])
@@ -198,11 +228,11 @@ const localVideos:Record<string,{url:string;name:string}>={};
 const videoDurations:Record<string,number>={};
 function clearLocalVideos(){for(const video of Object.values(localVideos))URL.revokeObjectURL(video.url);for(const id of Object.keys(localVideos))delete localVideos[id];for(const id of Object.keys(videoDurations))delete videoDurations[id];}
 const me=()=>db.users.find(x=>x.id===logged)||(remoteUser&&logged?{...remoteUser,password:'',role:'viewer' as const}:undefined);const currentTask=()=>db.tasks.find(x=>x.id===selectedTaskId);const reportTask=()=>db.tasks.find(x=>x.id===reportTaskId)||db.tasks[0];const visibleTasks=()=>isManager()||me()?.role==='viewer'?db.tasks:db.tasks.filter(t=>t.sponsorAnalystId===logged||t.contextAnalystId===logged);
-const isManager=()=>me()?.role==='owner'||me()?.role==='admin';
+const isManager=():boolean=>me()?.role==='owner'||me()?.role==='admin';
 const taskStatus=(t:TaskSummary):'ready'|'progress'|'done'=>t.submitted?.sponsors&&t.submitted?.context?'done':t.sponsors.length||t.events.length||t.cameras.length||t.submitted?.sponsors||t.submitted?.context?'progress':'ready';
 const foundUser=(id:string)=>db.users.find(u=>u.id===id);const nameUser=(id:string)=>foundUser(id)?.name||'Unassigned';
 const allowed=(t:TaskSummary,kind:'sponsors'|'context')=>isManager()||(me()?.role==='analyst'&&((kind==='sponsors'?t.sponsorAnalystId:t.contextAnalystId)===logged));
-const canEdit=(t:TaskSummary,kind:'sponsors'|'context')=>allowed(t,kind)&&!(t.submitted?.[kind]);
+const canEdit=(t:TaskSummary,kind:'sponsors'|'context')=>!undoInProgress&&allowed(t,kind)&&!(t.submitted?.[kind]);
 const sponsorFor=(t:TaskSummary)=>db.sponsorGroups.filter(g=>t.sponsorGroupIds.includes(g.id)).flatMap(g=>g.sponsors.map(s=>({...s,groupName:g.name}))).filter((s,i,a)=>a.findIndex(v=>v.id===s.id)===i);
 const eventsFor=(t:TaskSummary)=>db.eventGroups.filter(g=>t.eventGroupIds.includes(g.id)).flatMap(g=>g.items);
 const camerasFor=(t:TaskSummary)=>db.cameraGroups.filter(g=>t.cameraGroupIds.includes(g.id)).flatMap(g=>g.items);
@@ -246,10 +276,10 @@ window.login=async e=>{
  try{const result=await api.login({email,password:pwd});remoteUser=result.user;await loadLiveSession()}catch(error){const err=document.getElementById('authError');if(err)err.textContent=error instanceof Error?error.message:'Sign in failed';}
 };
 window.selectWorkspace=id=>{if(liveWorkspaces.some(w=>w.workspace.id===id)){view='dashboard';selectedTaskId='';writeStudioRoute(view);void loadWorkspace(id).catch(error=>notify('Workspace load failed: '+error.message))}};
-window.logout=()=>{void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];catalogClipboard=null;selectedTaskId='';view='dashboard';writeStudioRoute(view,'',true);if(videoEl){videoEl.pause()}clearLocalVideos();render()};
-window.showWorkspaceSwitcher=()=>{workspaceId='';render()};
-window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';editingInterval=null;writeStudioRoute(view);render();window.scrollTo(0,0)};
-function restoreRoute(){const route=readStudioRoute();view=route.view;selectedTaskId=view==='studio'?route.taskId:'';reportTaskId=view==='reports'?route.taskId:reportTaskId;if(videoEl)videoEl.pause();if(workspaceId)render();window.scrollTo(0,0)}
+window.logout=()=>{if(backfillDrafts.length)return notify('End your in-progress gap tags before signing out so their intervals can be saved.');void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];catalogClipboard=null;selectedTaskId='';view='dashboard';writeStudioRoute(view,'',true);if(videoEl){videoEl.pause()}clearLocalVideos();render()};
+window.showWorkspaceSwitcher=()=>{flushBackfills(currentTask());workspaceId='';render()};
+window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;flushBackfills(currentTask());view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';editingInterval=null;writeStudioRoute(view);render();window.scrollTo(0,0)};
+function restoreRoute(){const route=readStudioRoute();if(route.view!=='studio'||route.taskId!==selectedTaskId)flushBackfills(currentTask());view=route.view;selectedTaskId=view==='studio'?route.taskId:'';reportTaskId=view==='reports'?route.taskId:reportTaskId;if(videoEl)videoEl.pause();if(workspaceId)render();window.scrollTo(0,0)}
 window.addEventListener('popstate',restoreRoute);
 window.addEventListener('hashchange',restoreRoute);
 window.closeTaskMenu=()=>{const menu=document.getElementById('taskActionMenu') as HTMLDetailsElement|null;if(menu)menu.open=false};
@@ -261,6 +291,7 @@ document.addEventListener('pointerdown',dismissActionMenu);
 window.openTask=id=>{
  if(me()?.role==='viewer')return notify('Viewers may access Insights and JSON exports only.');
  if(!visibleTasks().some(task=>task.id===id))return notify('This task is not available in your workspace.');
+ if(selectedTaskId!==id)flushBackfills(currentTask());
  videoRecovery?.dispose();videoRecovery=null;videoError='';
  selectedTaskId=id;view='studio';tick=0;studioTab='all';editingInterval=null;writeStudioRoute(view,id);render();window.scrollTo(0,0);
  const asset=db.tasks.find(t=>t.id===id)?.videoAssetId;
@@ -282,8 +313,9 @@ function studioSidebarHeading(){
  if(!choices||!['',...choices.map(x=>x[0])].includes(value))return;
  const item=t.sponsors.find(x=>x.id===id);
  if(!item)return;
+ const before=snapshotAnnotations(t);
  item[field]=value||null;
- save();notify('Sponsor exposure '+(field==='placement'?'placement':'quality')+' saved');
+ recordAnnotationChange(t,before,'Change sponsor '+field);notify('Sponsor exposure '+(field==='placement'?'placement':'quality')+' saved');
 };
 window.setStudioTab=k=>{if(!['all','sponsors','events','cameras'].includes(k))return;studioTab=k;refreshStudio();};
 function refreshStudio(){if(currentTask()&&view==='studio')render();}
@@ -293,15 +325,121 @@ const sameVideoTimestamp=(a:number,b:number)=>Math.abs(Number(a)-Number(b))<=SAM
 function recordedAt<T extends {start:number;end:number|null}>(rows:T[],at:number):T|undefined {
  return rows.find(row=>row.end!==null&&((row.start<=at&&at<row.end)||('kind' in row&&row.kind==='point'&&Math.abs(row.start-at)<.5)));
 }
+function draftFor(task:TaskSummary,track:TrackKey,labelId:string){
+ return backfillDrafts.find(draft=>draft.taskId===task.id&&draft.track===track&&draft.labelId===labelId);
+}
+function beginBackfill(task:TaskSummary,track:TrackKey,labelId:string,at:number){
+ if(draftFor(task,track,labelId))return false;
+ backfillDrafts.push({taskId:task.id,track,labelId,start:at,id:uid()});
+ notify(`Recording the gap from ${fmt(at)}. End this tag to save it; existing later annotations will stay untouched.`);
+ refreshStudio();return true;
+}
+function finishBackfill(task:TaskSummary,draft:BackfillDraft,at:number,record=true){
+ if(at-draft.start<=SAME_TIME_TOLERANCE){backfillDrafts=backfillDrafts.filter(row=>row!==draft);refreshStudio();return false;}
+ const rows=task[draft.track];
+ const boundary=nextBoundary(rows,draft.start);
+ const end=Math.min(at,boundary??at,videoDuration(task));
+ if(end-draft.start<=SAME_TIME_TOLERANCE){backfillDrafts=backfillDrafts.filter(row=>row!==draft);refreshStudio();return false;}
+ const overlaps=rows.some(row=>row.start<end&&(row.end===null||row.end>draft.start)&&
+  (draft.track==='cameras'||draft.track==='sponsors'&&'sponsorId' in row&&row.sponsorId===draft.labelId||draft.track==='events'&&'eventId' in row&&row.eventId===draft.labelId));
+ if(overlaps){notify('Another saved interval now occupies this gap. Nothing was overwritten; review the timeline before ending this draft.');return false;}
+ backfillDrafts=backfillDrafts.filter(row=>row!==draft);
+ const before=snapshotAnnotations(task);
+ const base={id:draft.id,start:draft.start,end,createdBy:logged,createdAt:tstamp()};
+ if(draft.track==='sponsors')task.sponsors.push({...base,sponsorId:draft.labelId});
+ else if(draft.track==='events')task.events.push({...base,eventId:draft.labelId,kind:'range'});
+ else task.cameras.push({...base,cameraId:draft.labelId});
+ if(record)recordAnnotationChange(task,before,'Finish gap annotation');
+ return true;
+}
+function finishBoundaryDrafts(task:TaskSummary,at:number){
+ for(const draft of [...backfillDrafts]){
+  if(draft.taskId!==task.id)continue;
+  const boundary=nextBoundary(task[draft.track],draft.start);
+  if(boundary!==null&&at>=boundary)finishBackfill(task,draft,boundary);
+ }
+}
+function flushBackfills(task:TaskSummary|undefined){
+ if(!task)return;
+ for(const draft of [...backfillDrafts.filter(row=>row.taskId===task.id)])finishBackfill(task,draft,seconds(task));
+}
+function warnOnGapDraftUnload(event:BeforeUnloadEvent){
+ if(!backfillDrafts.length)return;
+ event.preventDefault();event.returnValue='';
+}
+window.addEventListener('beforeunload',warnOnGapDraftUnload);
+window.jumpToLastAnnotation=()=>{
+ const task=currentTask();if(!task)return;
+ const last=lastAnnotatedTimestamp(task);
+ if(last===null)return notify('No saved annotation exists yet.');
+ window.seekVideo?.(last);
+ notify(`Jumped to the last annotated timestamp: ${fmt(last)}.`);
+};
+window.undoLastAnnotationChange=async()=>{
+ const task=currentTask();if(!task||!workspaceId)return;
+ if(undoInProgress)return notify('Undo is already in progress.');
+ if(backfillDrafts.some(draft=>draft.taskId===task.id))return notify('End the current gap tag before undoing a saved change.');
+ if(syncDirty||syncRunning)return notify('Wait until the last annotation finishes saving before undoing.');
+ const stack=undoStacks.get(task.id),entry=stack?.at(-1);
+ if(!entry)return notify('No annotation changes to undo in this session.');
+ if(entry.changes.some(change=>{
+  const present=task[change.track].find(row=>row.id===change.id)||null;
+  return !sameAnnotationContent(present as (typeof change.after),change.after);
+ }))return notify('An annotation changed since that action. Undo was stopped to protect saved work.');
+ if(entry.changes.some(change=>!canEdit(task,change.track==='sponsors'?'sponsors':'context')))
+  return notify('This annotation stream is no longer editable.');
+ undoInProgress=true;
+ try{
+  // Preflight all targets before any write, including edits from other workers.
+  const histories=new Map<string,Awaited<ReturnType<typeof api.annotationHistory>>>();
+  const previousVersions=new Map<string,number>();
+  for(const change of entry.changes){
+   const history=await api.annotationHistory(workspaceId,task.id,change.id);
+   const latest=history[0];
+   if(!latest)throw new Error('A selected annotation has no saved revision history.');
+   const expected=change.after??change.before;
+   if(!expected||!serverSnapshotMatchesRow(latest.snapshot,expected))
+    throw new Error('A selected annotation changed on the server; nothing was overwritten.');
+   if(change.after&&latest.snapshot.deletedAt!==null||!change.after&&latest.snapshot.deletedAt===null)
+    throw new Error('The selected annotation has an unexpected saved state.');
+   if(change.before){
+    // A local action can be queued while another is syncing. Never assume
+    // its client-side revision counter identifies the earlier saved content.
+    // An exact server snapshot must exist before we attempt a restore.
+    const previous=history.find(row=>row.snapshot.deletedAt===null&&serverSnapshotMatchesRow(row.snapshot,change.before!));
+    if(!previous)throw new Error('The exact earlier saved version is unavailable. No annotation was changed.');
+    previousVersions.set(change.id,previous.version);
+   }
+   histories.set(change.id,history);
+  }
+  // Remove creations before restoring closed intervals that used to be LIVE.
+  for(const change of entry.changes.filter(change=>!change.before&&change.after)){
+   const history=histories.get(change.id)!;
+   await api.removeAnnotation(workspaceId,task.id,change.id,history[0].version);
+  }
+  for(const change of entry.changes.filter(change=>!!change.before)){
+   const history=histories.get(change.id)!;
+   await api.restoreAnnotation(workspaceId,task.id,change.id,previousVersions.get(change.id)!,history[0].version);
+  }
+  stack!.pop();hiddenSponsors=cloneHidden(entry.hiddenBefore);
+  backfillDrafts=backfillDrafts.filter(draft=>draft.taskId!==task.id);
+  await loadWorkspace(workspaceId);
+  notify(`Undid: ${entry.label}. Only that action's annotation IDs were restored.`);
+ }catch(error){
+  await loadWorkspace(workspaceId).catch(()=>{});
+  notify('Undo stopped: '+(error instanceof Error?error.message:String(error))+'. Check the annotation history before retrying.');
+ }finally{undoInProgress=false;refreshStudio();}
+};
 function preserveOpenAnnotationsOnRewind(task:TaskSummary, from:number) {
  let closed=0;
+ const before=snapshotAnnotations(task);
  const close=<T extends {start:number;end:number|null;createdBy:string}>(rows:T[]):T[]=>{
   const result=preserveAnnotationsOnRewind(rows,logged,from);
   closed+=result.closed;return result.rows;
  };
  if(canEdit(task,'sponsors'))task.sponsors=close(task.sponsors);
  if(canEdit(task,'context')){task.events=close(task.events);task.cameras=close(task.cameras);}
- if(closed){save();notify(`${closed} LIVE interval${closed===1?'':'s'} saved at ${fmt(from)} before rewinding. No labels were deleted.`)}
+ if(closed){recordAnnotationChange(task,before,'Close LIVE annotations before rewind');notify(`${closed} LIVE interval${closed===1?'':'s'} saved at ${fmt(from)} before rewinding. No labels were deleted.`)}
 }
 window.editRecordedAnnotation=(key,id)=>{
  const task=currentTask(),row=task?.[key].find(entry=>entry.id===id);
@@ -323,9 +461,10 @@ window.retagRecordedSponsor=(id,at)=>{
   if(!current||!canEdit(current,'sponsors'))return;
   const next=retagSponsorFromTimestamp(current.sponsors,id,at,logged,tstamp(),uid);
   if(!next)return notify('This saved interval changed. Seek to it and try again.');
+  const before=snapshotAnnotations(current);
   current.sponsors=next;
   editingInterval=null;
-  save();refreshStudio();notify(`${name} LIVE from ${fmt(at)}.`);
+  recordAnnotationChange(current,before,`Re-tag ${name}`);notify(`${name} LIVE from ${fmt(at)}.`);
  },{actionLabel:'RE-TAG FROM HERE',danger:false});
 };
 window.cancelTimelineEdit=()=>{editingInterval=null;refreshStudio()};
@@ -333,6 +472,7 @@ window.saveTimelineEdit=(key,id,start,end)=>{
  const task=currentTask(),row=task?.[key].find(entry=>entry.id===id);
  if(!task||!row||row.end===null||!canEdit(task,key==='sponsors'?'sponsors':'context'))return;
  if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start||end>videoDuration(task))return notify('The adjusted interval must remain within the video and have a positive duration.');
+ const before=snapshotAnnotations(task);
  const result=key==='sponsors'
   ?editSingleInterval(task.sponsors,id,start,end,(a,b)=>a.sponsorId===b.sponsorId)
   :key==='events'
@@ -340,49 +480,113 @@ window.saveTimelineEdit=(key,id,start,end)=>{
    :editSingleInterval(task.cameras,id,start,end,()=>true);
  if(result==='overlap')return notify('This edit overlaps another interval in the same timeline. No annotations were changed.');
  if(result!=='updated')return notify('The selected interval no longer exists. Refresh before editing.');
- editingInterval=null;save();refreshStudio();notify('Annotation interval updated');
+ editingInterval=null;recordAnnotationChange(task,before,'Edit selected interval');notify('Annotation interval updated');
 };
 window.tagSponsor=id=>{
  const t=currentTask();if(!t||!canEdit(t,'sponsors'))return;
- const at=seconds(t),active=t.sponsors.find(x=>x.sponsorId===id&&x.end==null);
- if(!active){const recorded=recordedAt(t.sponsors.filter(row=>row.sponsorId===id),at);if(recorded)return window.retagRecordedSponsor?.(recorded.id,at);}
+ if(hiddenSponsors?.taskId===t.id)return notify('Sponsors are hidden. Select UNHIDE ALL to resume tagging.');
+ const at=seconds(t),draft=draftFor(t,'sponsors',id);
+ if(draft){finishBackfill(t,draft,at);return;}
+ const active=t.sponsors.find(x=>x.sponsorId===id&&x.end==null&&x.start<=at);
+ if(!active){
+  const recorded=recordedAt(t.sponsors.filter(row=>row.sponsorId===id),at);
+  if(recorded)return window.retagRecordedSponsor?.(recorded.id,at);
+  if(t.sponsors.some(row=>row.sponsorId===id&&row.end===null&&row.start>at)){
+   beginBackfill(t,'sponsors',id,at);return;
+  }
+ }
+ const before=snapshotAnnotations(t);
  if(active){
   if(sameVideoTimestamp(at,active.start)){
    t.sponsors=t.sponsors.filter(x=>x.id!==active.id);
-   save();refreshStudio();notify('Sponsor event removed — same timestamp');return;
+   recordAnnotationChange(t,before,'Cancel new sponsor tag');notify('Sponsor event removed — same timestamp');return;
   }
-  if(at<active.start)return notify('End time cannot precede start time');
   const nextStart=nextSavedSponsorStart(t.sponsors,id,active.start);
   active.end=nextStart!==null&&at>nextStart?nextStart:at;
   if(active.end!==at)notify(`Sponsor tag ended at ${fmt(active.end)} to preserve the next saved appearance.`);
  }else{
   t.sponsors.push({id:uid(),sponsorId:id,start:at,end:null,createdBy:logged,createdAt:tstamp()});
  }
- save();refreshStudio();
+ recordAnnotationChange(t,before,active?'End sponsor visibility':'Start sponsor visibility');
+};
+window.toggleHideAllSponsors=()=>{
+ const task=currentTask();if(!task||!canEdit(task,'sponsors'))return;
+ const at=seconds(task),before=snapshotAnnotations(task),hiddenBefore=cloneHidden(hiddenSponsors);
+ if(hiddenSponsors?.taskId===task.id){
+  const resumeIds=[...hiddenSponsors.resumeIds];
+  hiddenSponsors=null;
+  for(const id of resumeIds){
+   // Existing recorded exposures and future LIVE tags must never be altered by UNHIDE.
+   if(recordedAt(task.sponsors.filter(row=>row.sponsorId===id),at))continue;
+   if(task.sponsors.some(row=>row.sponsorId===id&&row.end===null&&row.start<=at))continue;
+   if(task.sponsors.some(row=>row.sponsorId===id&&row.end===null&&row.start>at)){
+    beginBackfill(task,'sponsors',id,at);continue;
+   }
+   task.sponsors.push({id:uid(),sponsorId:id,start:at,end:null,createdBy:logged,createdAt:tstamp()});
+  }
+  recordAnnotationChange(task,before,'Unhide sponsors',hiddenBefore);
+  notify(resumeIds.length?'Sponsor visibility resumed at the current timestamp.':'Sponsor tagging enabled. Select a visible sponsor to begin.');
+ }else{
+  const resumeIds=new Set(task.sponsors.filter(row=>row.end===null&&row.start<=at).map(row=>row.sponsorId));
+  for(const draft of [...backfillDrafts.filter(row=>row.taskId===task.id&&row.track==='sponsors')]){
+   resumeIds.add(draft.labelId);
+   finishBackfill(task,draft,at,false);
+  }
+  for(const row of [...task.sponsors]){
+   if(row.end!==null||row.start>at)continue;
+   if(sameVideoTimestamp(row.start,at)){
+    // A tiny positive interval avoids destructive bulk deletion when Hide All
+    // follows simultaneous just-started sponsors in the same video frame.
+    if(row.start+0.01<=videoDuration(task))row.end=row.start+0.01;
+    else task.sponsors=task.sponsors.filter(item=>item.id!==row.id);
+   }
+   else row.end=at;
+  }
+  hiddenSponsors={taskId:task.id,resumeIds:[...resumeIds]};
+  recordAnnotationChange(task,before,'Hide all sponsors',hiddenBefore);
+  notify('All currently LIVE sponsors ended here. UNHIDE ALL starts new intervals for the same visible sponsors.');
+ }
 };
 window.tagEvent=id=>{
  const t=currentTask();if(!t||!canEdit(t,'context'))return;
  if(!eventsFor(t).some(x=>x.id===id))return;
- const at=seconds(t),active=t.events.find(x=>x.eventId===id&&x.end==null);
- if(!active){const recorded=recordedAt(t.events.filter(row=>row.eventId===id),at);if(recorded)return window.editRecordedAnnotation?.('events',recorded.id);}
+ const at=seconds(t),draft=draftFor(t,'events',id);
+ if(draft){finishBackfill(t,draft,at);return;}
+ const active=t.events.find(x=>x.eventId===id&&x.end==null&&x.start<=at);
+ if(!active){
+  const recorded=recordedAt(t.events.filter(row=>row.eventId===id),at);
+  if(recorded)return window.editRecordedAnnotation?.('events',recorded.id);
+  if(t.events.some(row=>row.eventId===id&&row.end===null&&row.start>at)){
+   beginBackfill(t,'events',id,at);return;
+  }
+ }
+ const before=snapshotAnnotations(t);
  if(active){
   if(sameVideoTimestamp(at,active.start)){
    t.events=t.events.filter(x=>x.id!==active.id);
-   save();refreshStudio();notify('Key event removed — same timestamp');return;
+   recordAnnotationChange(t,before,'Cancel new match event');notify('Key event removed — same timestamp');return;
   }
-  if(at<active.start)return notify('End time cannot precede start time');
-  active.end=at;
+  const boundary=nextBoundary(t.events.filter(row=>row.eventId===id),active.start);
+  active.end=Math.min(at,boundary??at);
  }else{
   t.events.push({id:uid(),eventId:id,kind:'range',start:at,end:null,createdBy:logged,createdAt:tstamp()});
  }
- save();refreshStudio();
+ recordAnnotationChange(t,before,active?'End match event':'Start match event');
 };
 window.tagCamera=id=>{
  const t=currentTask();if(!t||!canEdit(t,'context'))return;
  if(!camerasFor(t).some(x=>x.id===id))return;
- const at=seconds(t),active=t.cameras.find(x=>x.cameraId===id&&x.end==null);
+ const at=seconds(t),draft=backfillDrafts.find(row=>row.taskId===t.id&&row.track==='cameras');
+ if(draft){
+  finishBackfill(t,draft,at);
+  if(draft.labelId===id)return;
+  if(t.cameras.some(row=>row.end===null&&row.start>at)){
+   beginBackfill(t,'cameras',id,at);return;
+  }
+ }
+ const active=t.cameras.find(x=>x.cameraId===id&&x.end==null&&x.start<=at);
  const futureLive=t.cameras.find(x=>x.end===null&&x.start>at);
- if(futureLive)return notify('An unfinished LIVE camera tag begins after this timestamp. Return to it before switching cameras.');
+ if(futureLive){beginBackfill(t,'cameras',id,at);return;}
  const otherLive=t.cameras.find(x=>x.end===null&&x.cameraId!==id);
  const currentLive=t.cameras.find(x=>x.end===null);
  const nextSaved=currentLive?nextSavedCameraStart(t.cameras,currentLive.start):null;
@@ -395,23 +599,26 @@ window.tagCamera=id=>{
    const current=currentTask();
    if(!current||!canEdit(current,'context'))return;
    if(current.cameras.some(row=>row.end===null))return notify('End the current LIVE camera interval first.');
+   const before=snapshotAnnotations(current);
    current.cameras=resumeCameraFromTimestamp(current.cameras,id,at,logged,tstamp(),uid).rows;
    editingInterval=null;
-   save();refreshStudio();notify(`Camera LIVE from ${fmt(at)}. Other recorded intervals were preserved.`);
+   recordAnnotationChange(current,before,'Resume camera from saved footage');notify(`Camera LIVE from ${fmt(at)}. Other recorded intervals were preserved.`);
   },{actionLabel:'RE-TAG FROM HERE',danger:false});
   return;
  }
+ const before=snapshotAnnotations(t);
  const result=selectCameraAngle(t.cameras,id,at,logged,tstamp(),uid);
  t.cameras=result.rows;
- save();refreshStudio();
+ recordAnnotationChange(t,before,'Switch camera angle');
  if(result.action==='switched')notify('Camera switched — previous interval ended automatically.');
  if(result.action==='cancelled')notify('Camera interval removed — same timestamp.');
 };
 window.deleteLog=(key,id)=>{const t=currentTask(),kind=key==='sponsors'?'sponsors':'context';if(!t||!canEdit(t,kind))return;confirmInApp('Remove annotation','Hide this recorded annotation? You can restore it from Annotation History.',()=>{
+  const before=snapshotAnnotations(t);
   if(key==='sponsors')t.sponsors=t.sponsors.filter(x=>x.id!==id);
   else if(key==='events')t.events=t.events.filter(x=>x.id!==id);
   else t.cameras=t.cameras.filter(x=>x.id!==id);
-  save();refreshStudio();notify('Annotation removed');
+  recordAnnotationChange(t,before,'Remove selected annotation');notify('Annotation removed');
  },{actionLabel:'REMOVE ANNOTATION'});};
 window.restoreAnnotationRevision=async(id,version,expectedRevision)=>{
  const task=currentTask();
@@ -424,7 +631,7 @@ window.restoreAnnotationRevision=async(id,version,expectedRevision)=>{
  window.dispatchEvent(new CustomEvent('annotation-history-updated',{detail:id}));
  notify('Only the selected annotation was restored. Other timelines were left unchanged.');
 };
-window.seekVideo=val=>{const t=currentTask();if(!t)return;const next=clamp(Number(val)||0,0,videoDuration(t));if(next<tick-0.2)preserveOpenAnnotationsOnRewind(t,tick);tick=next;protectFutureCameraIntervals(t,tick);videoRecovery?.seek(tick);if(videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();refreshStudio();};
+window.seekVideo=val=>{const t=currentTask();if(!t)return;const next=clamp(Number(val)||0,0,videoDuration(t));if(next<tick-0.2)preserveOpenAnnotationsOnRewind(t,tick);tick=next;finishBoundaryDrafts(t,tick);protectFutureIntervals(t,tick);videoRecovery?.seek(tick);if(videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();refreshStudio();};
 window.skipVideo=(n:number)=>window.seekVideo?.((videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.currentTime)?videoEl.currentTime:tick)+n);
 window.skipByStep=direction=>window.skipVideo?.((Number(direction)||0)*seekStep);
 window.setSeekStep=value=>{seekStep=value===10?10:5;refreshStudio();};
@@ -433,12 +640,21 @@ window.setPlaybackRate=value=>{if(!supportedPlaybackRate(value))return;playbackR
  let playbackRate=1,videoDimensions='',videoError='';
  let videoRecovery:ReturnType<typeof recoverVideo>|null=null;
 function recordTick(){const t=currentTask();if(t)t.observedTime=Math.max(t.observedTime||0,tick);}
-function protectFutureCameraIntervals(task:TaskSummary,at:number){
- const active=task.cameras.find(row=>row.end===null);
- if(!active||!canEdit(task,'context'))return;
- const boundary=nextSavedCameraStart(task.cameras,active.start);
- if(boundary===null||at<boundary)return;
- active.end=boundary;save();notify(`LIVE camera ended at ${fmt(boundary)} to preserve the next recorded camera interval.`);
+function protectFutureIntervals(task:TaskSummary,at:number){
+ const before=snapshotAnnotations(task);
+ let closed=0;
+ const protect=<T extends AnnotationBase>(rows:T[],allowed:boolean,select:(row:T)=>T[])=>{
+  if(!allowed)return;
+  for(const row of rows){
+   if(row.end!==null||row.start>at)continue;
+   const boundary=nextBoundary(select(row),row.start);
+   if(boundary!==null&&at>=boundary){row.end=boundary;closed++;}
+  }
+ };
+ protect(task.sponsors,canEdit(task,'sponsors'),row=>task.sponsors.filter(item=>item.sponsorId===row.sponsorId));
+ protect(task.events,canEdit(task,'context'),row=>task.events.filter(item=>item.eventId===row.eventId));
+ protect(task.cameras,canEdit(task,'context'),()=>task.cameras);
+ if(closed){recordAnnotationChange(task,before,'Stop LIVE tag at next saved interval');notify(`LIVE tag ended at the next recorded interval. Later annotations were preserved.`)}
 }
 function attachVideo(){
  const el=document.getElementById('matchVideo') as HTMLVideoElement|null;
@@ -451,7 +667,7 @@ function attachVideo(){
   videoEl=el;
   el.playbackRate=playbackRate;
   el.addEventListener('ratechange',()=>{if(videoEl!==el)return;playbackRate=el.playbackRate;refreshStudio()});
- el.addEventListener('timeupdate',()=>{if(videoEl!==el||videoRecovery?.isRecovering())return;const t=currentTask();if(t&&el.currentTime<tick-0.2)preserveOpenAnnotationsOnRewind(t,tick);tick=el.currentTime;if(t)protectFutureCameraIntervals(t,tick);recordTick();refreshStudio();});
+ el.addEventListener('timeupdate',()=>{if(videoEl!==el||videoRecovery?.isRecovering())return;const t=currentTask();if(t&&el.currentTime<tick-0.2)preserveOpenAnnotationsOnRewind(t,tick);tick=el.currentTime;if(t){finishBoundaryDrafts(t,tick);protectFutureIntervals(t,tick)}recordTick();refreshStudio();});
  el.addEventListener('play',refreshStudio);
  el.addEventListener('pause',refreshStudio);
  el.addEventListener('loadedmetadata',()=>{
@@ -502,9 +718,9 @@ const handleVideoFileChange=(e:Event)=>{
 };
 document.getElementById('videofile')?.addEventListener('change',handleVideoFileChange);
 function runPlaybackKey(e:KeyboardEvent){captureStudioSpacebar(e,view==='studio'&&!modalOpen,()=>window.togglePlay?.());}
-function runKeydown(e:KeyboardEvent){if(e.key==='Escape'){window.closeTaskMenu?.();return;}if(view!=='studio'||modalOpen||(e.target instanceof Element&&e.target.matches('input,textarea,select,[contenteditable]')))return;if(e.key==='ArrowLeft'){e.preventDefault();window.skipByStep?.(-1)}else if(e.key==='ArrowRight'){e.preventDefault();window.skipByStep?.(1)}}
+function runKeydown(e:KeyboardEvent){if(e.key==='Escape'){window.closeTaskMenu?.();return;}if(view!=='studio'||modalOpen||(e.target instanceof Element&&e.target.matches('input,textarea,select,[contenteditable]')))return;if(e.ctrlKey&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='z'){e.preventDefault();if(!e.repeat)void window.undoLastAnnotationChange?.();return;}if(e.key==='ArrowLeft'){e.preventDefault();window.skipByStep?.(-1)}else if(e.key==='ArrowRight'){e.preventDefault();window.skipByStep?.(1)}}
 function runShortcut(e:KeyboardEvent){
- if(e.repeat||view!=='studio'||modalOpen||editingInterval||e.isComposing||(e.target instanceof Element&&e.target.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]')))return;
+ if(e.repeat||view!=='studio'||modalOpen||editingInterval||e.isComposing||(e.ctrlKey&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='z')||(e.target instanceof Element&&e.target.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]')))return;
  const shortcut=hotkeyFromKeyboard(e),task=currentTask();if(!shortcut||!task)return;
  const matches=[
   ...sponsorFor(task).filter(x=>x.hotkey===shortcut).map(x=>({kind:'sponsor',id:x.id})),
@@ -520,11 +736,13 @@ function runShortcut(e:KeyboardEvent){
  else window.tagCamera?.(chosen.id);
 }
 document.addEventListener('keydown',runPlaybackKey,true);
+document.addEventListener('keypress',runPlaybackKey,true);
 document.addEventListener('keyup',runPlaybackKey,true);
 document.addEventListener('keydown',runShortcut,true);
 document.addEventListener('keydown',runKeydown);
 window.submitMyTask=()=>{
  let t=currentTask();if(!t)return;
+ if(backfillDrafts.some(draft=>draft.taskId===t.id))return notify('Finish the currently open gap annotation before submitting.');
  let mineS=allowed(t,'sponsors')&&!t.submitted.sponsors,mineC=allowed(t,'context')&&!t.submitted.context;
  if(!mineS&&!mineC)return notify('No open assigned stream to submit.');
  if(mineS&&t.sponsors.some(x=>x.end==null))return notify('Close all active sponsor visibility tags before submitting.');
@@ -848,6 +1066,12 @@ window.exportTask=id=>{let t=db.tasks.find(x=>x.id===id);if(!t||!visibleTasks().
  const videoSrc=localVideo?.url||(t?.videoType==='buildup'&&workspaceId?buildupVideoUrl(workspaceId,t.id):t&&((t.videoType==='https'||t.videoType==='s3')&&t.videoUrl)?t.videoUrl:null);
  const heading=t?studioSidebarHeading():null;
  const currentCamera=t?.cameras.find(x=>x.end==null);
+ const displayTask=t?{
+  ...t,
+  sponsors:[...t.sponsors,...backfillDrafts.filter(d=>d.taskId===t.id&&d.track==='sponsors').map(d=>({id:d.id,sponsorId:d.labelId,start:d.start,end:null,createdBy:logged,createdAt:tstamp()}))],
+  events:[...t.events,...backfillDrafts.filter(d=>d.taskId===t.id&&d.track==='events').map(d=>({id:d.id,eventId:d.labelId,kind:'range' as const,start:d.start,end:null,createdBy:logged,createdAt:tstamp()}))],
+  cameras:[...t.cameras,...backfillDrafts.filter(d=>d.taskId===t.id&&d.track==='cameras').map(d=>({id:d.id,cameraId:d.labelId,start:d.start,end:null,createdBy:logged,createdAt:tstamp()}))],
+ }:undefined;
  const studioModel=t?{
   id:t.id,workspaceId,number:t.number,name:t.name,date:t.date,duration:videoDuration(t),
   videoName:localVideo?.name||t.videoName,videoType:t.videoType,videoSrc,isLocalVideo:!!localVideo,
@@ -857,8 +1081,10 @@ window.exportTask=id=>{let t=db.tasks.find(x=>x.id===id);if(!t||!visibleTasks().
   logCount:t.sponsors.length+t.events.length+t.cameras.length,
   cameraLabel:currentCamera?labelFor(t,'cameras',currentCamera.cameraId):'CAMERA NOT SELECTED',
   railTitle:heading!.title,railHint:heading!.hint,submitted:t.submitted||{sponsors:false,context:false},
-  task:t,sponsors:sponsorFor(t),events:eventsFor(t),cameras:camerasFor(t),editingInterval:editingInterval||undefined,
-  seekStep,playbackRate,videoDimensions,videoError,playing:videoRecovery?videoRecovery.isPlaying():!!videoEl&&!videoEl.paused
+  task:displayTask!,sponsors:sponsorFor(t),events:eventsFor(t),cameras:camerasFor(t),editingInterval:editingInterval||undefined,
+  seekStep,playbackRate,undoCount:undoStacks.get(t.id)?.length||0,sponsorsHidden:hiddenSponsors?.taskId===t.id,
+  pendingBackfillIds:backfillDrafts.filter(d=>d.taskId===t.id).map(d=>d.id),
+  lastAnnotatedAt:lastAnnotatedTimestamp(t),videoDimensions,videoError,playing:videoRecovery?videoRecovery.isPlaying():!!videoEl&&!videoEl.paused
  }:undefined;
  const reportsTasks=view==='reports'?visibleTasks():[];
  const selectedReport=reportsTasks.find(x=>x.id===reportTaskId)||reportsTasks[0];
@@ -881,10 +1107,12 @@ void loadLiveSession().catch(()=>{logged='';remoteUser=null;passwordChangeRequir
   videoRecovery?.dispose();videoRecovery=null;
  clearInterval(fixtureRefreshId);
  document.removeEventListener('keydown',runPlaybackKey,true);
+ document.removeEventListener('keypress',runPlaybackKey,true);
  document.removeEventListener('keyup',runPlaybackKey,true);
  document.removeEventListener('keydown',runShortcut,true);
  document.removeEventListener('keydown',runKeydown);
  document.removeEventListener('pointerdown',dismissActionMenu);
+ window.removeEventListener('beforeunload',warnOnGapDraftUnload);
  window.removeEventListener('popstate',restoreRoute);
  window.removeEventListener('hashchange',restoreRoute);
  document.getElementById('videofile')?.removeEventListener('change',handleVideoFileChange);

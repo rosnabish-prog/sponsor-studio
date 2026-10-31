@@ -97,6 +97,58 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
     return anns.filter((a:{kind:string;start:number;end:number|null})=>a.kind==='SPONSOR'&&a.start===10&&a.end===20).length as number;
   },{w:workspaceId,t:taskId})).toBe(1);
 
+  // Backfill a real gap while a later LIVE record already exists. No existing
+  // sponsor or future interval may be removed, shortened or reopened.
+  await page.evaluate(()=>window.seekVideo?.(660));
+  await page.getByRole('button',{name:/Adidas x Messi.*OFF/}).first().click();
+  await expect.poll(async()=>page.evaluate(async ({w,t})=>{
+    const anns=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    return anns.some((a:{kind:string;start:number;end:number|null})=>a.kind==='SPONSOR'&&a.start===660&&a.end===null);
+  },{w:workspaceId,t:taskId})).toBe(true);
+
+  // Space may pause/play only, even when the sponsor chip has keyboard focus.
+  const liveChip=page.getByRole('button',{name:/Adidas x Messi.*LIVE/}).first();
+  await liveChip.focus();
+  await page.keyboard.press('Space');
+  await expect.poll(async()=>page.evaluate(async ({w,t})=>{
+    const anns=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    return anns.some((a:{kind:string;start:number;end:number|null})=>a.kind==='SPONSOR'&&a.start===660&&a.end===null);
+  },{w:workspaceId,t:taskId})).toBe(true);
+  await page.evaluate(()=>window.seekVideo?.(180));
+  await page.getByRole('button',{name:/Adidas x Messi.*OFF/}).first().click();
+  await expect(page.getByText('GAP DRAFT · END TAG TO SAVE')).toBeVisible();
+  await page.evaluate(()=>window.seekVideo?.(600));
+  await page.getByRole('button',{name:/Adidas x Messi.*LIVE/}).first().click();
+  await expect.poll(async()=>page.evaluate(async ({w,t})=>{
+    const anns=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    const sponsors=anns.filter((a:{kind:string})=>a.kind==='SPONSOR');
+    return sponsors.some((a:{start:number;end:number|null})=>a.start===180&&a.end===600)
+      &&sponsors.some((a:{start:number;end:number|null})=>a.start===660&&a.end===null)
+      &&sponsors.some((a:{start:number;end:number|null})=>a.start===10&&a.end===20);
+  },{w:workspaceId,t:taskId})).toBe(true);
+
+  // Hide All closes only the currently visible LIVE tag. Unhide starts a new
+  // distinct exposure, and Undo removes only that last newly created segment.
+  await page.evaluate(()=>window.seekVideo?.(680));
+  await page.getByRole('button',{name:'HIDE ALL'}).click();
+  await page.evaluate(()=>window.seekVideo?.(700));
+  await page.getByRole('button',{name:'UNHIDE ALL'}).click();
+  await expect.poll(async()=>page.evaluate(async ({w,t})=>{
+    const anns=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    const sponsors=anns.filter((a:{kind:string})=>a.kind==='SPONSOR');
+    return sponsors.some((a:{start:number;end:number|null})=>a.start===660&&a.end===680)
+      &&sponsors.some((a:{start:number;end:number|null})=>a.start===700&&a.end===null);
+  },{w:workspaceId,t:taskId})).toBe(true);
+  await page.getByRole('button',{name:/UNDO LAST CHANGE/}).click();
+  await expect.poll(async()=>page.evaluate(async ({w,t})=>{
+    const anns=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    const sponsors=anns.filter((a:{kind:string})=>a.kind==='SPONSOR');
+    return !sponsors.some((a:{start:number})=>a.start===700)
+      &&sponsors.some((a:{start:number;end:number|null})=>a.start===660&&a.end===680)
+      &&sponsors.some((a:{start:number;end:number|null})=>a.start===180&&a.end===600);
+  },{w:workspaceId,t:taskId})).toBe(true);
+  await expect(page.getByRole('button',{name:/LAST ANNOTATED/})).toBeVisible();
+
   await page.reload();
   // Reload preserves the Studio route, whose focused layout hides the main navigation.
   await expect(page.locator('.focusbar')).toBeVisible({timeout:15_000});

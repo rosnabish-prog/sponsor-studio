@@ -43,7 +43,10 @@ function VideoPanel({ model }: { model: StudioScreenModel }) {
   const sourceState = isLocalVideo ? 'LOCAL VIDEO' : videoType === 's3' ? 'PRIVATE VIDEO · CLOUDFRONT' : videoType === 'buildup' ? 'BUILDUP VIDEO' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : 'NO VIDEO ATTACHED';
   const sourceNote = model.videoError || (isLocalVideo ? `${videoName || 'Video'} · Available in this browser session only. Select it again after refreshing.` : videoSrc ? `${videoName || 'Video'}${model.videoDimensions ? ` · ${model.videoDimensions}` : ''}` : 'Open a local video or configure a direct HTTPS source.');
   return <div className="video-box">
-    <div className="video-header"><span>LIVE TAGGING CONSOLE</span><span id="videoSourceState">{sourceState}</span></div>
+    <div className="video-header"><span>LIVE TAGGING CONSOLE</span><div className="video-header-actions">
+      <button type="button" className="video-jump-last" onClick={()=>window.jumpToLastAnnotation?.()} disabled={model.lastAnnotatedAt===null} title="Jump to the end of the most recent saved annotation">↪ LAST ANNOTATED {model.lastAnnotatedAt!==null?formatTimestamp(model.lastAnnotatedAt):''}</button>
+      <span id="videoSourceState">{sourceState}</span>
+    </div></div>
     <div id="videoFileStatus" className="video-source-note" role="status" aria-live="polite">{sourceNote}</div>
     <div className={`vidframe ${videoSrc ? 'video-native-frame' : ''}`}>
       {videoSrc ? <video id="matchVideo" preload="metadata" playsInline crossOrigin={videoType === 'buildup' ? 'use-credentials' : undefined} aria-label="Match video · original proportions" src={videoSrc} /> :
@@ -107,6 +110,7 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
               key={key} type="button" data-studio-tab={key} aria-pressed={model.selectedTab === key}
               className={model.selectedTab === key ? 'on' : ''} onClick={() => window.setStudioTab?.(key)}>{label}</button>)}</div>
           </div>
+          <div className="studio-undo-toolbar"><button type="button" className="button ghost tiny studio-undo-button" onClick={()=>window.undoLastAnnotationChange?.()} disabled={!model.undoCount} title="Undo up to 10 recently saved annotation actions in this session (Ctrl+Z)">↶ UNDO LAST CHANGE <span>{model.undoCount}/10</span></button><small>Ctrl+Z · Changes restore only their original annotation IDs</small></div>
           <div className="contextline"><Icon name="clock" /> Current video timestamp <b id="currentT">{formatTimestamp(model.tick)}</b>
             <span style={{ marginLeft: 'auto' }}>{model.canSponsor ? 'Sponsor tagging enabled' : 'Sponsor tagging view only'} · {model.canContext ? 'Context tagging enabled' : 'Context view only'}</span>
           </div>
@@ -121,7 +125,7 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
         <AnnotationHistoryPanel model={model} isAdmin={isAdmin} />
       </div>
       <aside className="sponsor-rail" aria-label={`${model.railTitle} tagging panel`} tabIndex={0}>
-        <div className="rail-compact-heading"><h2 id="railTagTitle">{model.railTitle}</h2><p id="railTagHint">{model.railHint}</p></div>
+        <div className="rail-compact-heading"><div className="rail-heading-row"><h2 id="railTagTitle">{model.railTitle}</h2>{model.selectedTab!=='events'&&model.selectedTab!=='cameras'&&<button type="button" className={`sponsor-hide-all ${model.sponsorsHidden?'is-hidden':''}`} onClick={()=>window.toggleHideAllSponsors?.()} disabled={!model.canSponsor} aria-pressed={model.sponsorsHidden}>{model.sponsorsHidden?'UNHIDE ALL':'HIDE ALL'}</button>}</div><p id="railTagHint">{model.railHint}</p></div>
         <div id="sponsorRail" className="rail-scroll"><StudioRail model={model} /></div>
       </aside>
   </div>;
@@ -143,5 +147,8 @@ declare global {
     setSeekStep?: (step: number) => void;
     setPlaybackRate?: (rate: number) => void;
     setStudioTab?: (tab: StudioScreenModel['selectedTab']) => void;
+    toggleHideAllSponsors?: () => void;
+    undoLastAnnotationChange?: () => Promise<void>;
+    jumpToLastAnnotation?: () => void;
   }
 }
