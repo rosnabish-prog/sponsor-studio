@@ -49,12 +49,13 @@ test('registration, workspace isolation, assignments, annotation lifecycle and s
     assert.equal(workspace.status, 201, JSON.stringify(workspace.json));
     const workspaceId: string = workspace.json.id;
     const emptyCatalog=await run(`/workspaces/${workspaceId}/catalog`,'GET',undefined,alice.cookie);
-    assert.equal(emptyCatalog.json.version,0);
+    const initialVersion=emptyCatalog.json.version as number;
+    assert.ok(Number.isInteger(initialVersion),'workspaces can start with a seeded catalog');
     const definitions={sponsorGroups:[{id:'sg_main',name:'Main',sponsors:[{id:'s_test',name:'Test sponsor'}]}],eventGroups:[],cameraGroups:[]};
-    const savedCatalog=await run(`/workspaces/${workspaceId}/catalog`,'PUT',{payload:definitions,version:0},alice.cookie);
+    const savedCatalog=await run(`/workspaces/${workspaceId}/catalog`,'PUT',{payload:definitions,version:initialVersion},alice.cookie);
     assert.equal(savedCatalog.status,200,JSON.stringify(savedCatalog.json));
-    assert.equal(savedCatalog.json.version,1);
-    assert.equal((await run(`/workspaces/${workspaceId}/catalog`,'PUT',{payload:definitions,version:0},alice.cookie)).status,409);
+    assert.equal(savedCatalog.json.version,initialVersion+1);
+    assert.equal((await run(`/workspaces/${workspaceId}/catalog`,'PUT',{payload:definitions,version:initialVersion},alice.cookie)).status,409);
     assert.equal((await run(`/workspaces/${workspaceId}/tasks`, 'GET', undefined, bob.cookie)).status, 404);
     assert.equal((await run(`/workspaces/${workspaceId}/members`, 'POST', { email: `bob-${suffix}@example.org`, role: 'ANALYST' }, alice.cookie)).status, 201);
     const task = await run(`/workspaces/${workspaceId}/tasks`, 'POST', {
