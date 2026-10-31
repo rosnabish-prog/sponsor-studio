@@ -13,10 +13,11 @@ import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
 import { easternMatchDate, hasFinalResult, mergeTodayFixtureUpdates } from '../domain/fixtures';
 import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
 import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } from '../domain/catalogEditing';
-import { hasRecordedCameraAfter, resumeCameraFromTimestamp, selectCameraAngle } from '../domain/cameraSwitch';
+import { hasRecordedCameraAfter, nextSavedCameraStart, resumeCameraFromTimestamp, selectCameraAngle } from '../domain/cameraSwitch';
 import { captureStudioSpacebar } from '../domain/studioKeyboard';
 import { supportedPlaybackRate } from '../domain/videoPlayback';
 import { retagSponsorFromTimestamp, nextSavedSponsorStart } from '../domain/sponsorRetag';
+import { preserveAnnotationsOnRewind } from '../domain/annotationRewind';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -288,16 +289,15 @@ const sameVideoTimestamp=(a:number,b:number)=>Math.abs(Number(a)-Number(b))<=SAM
 function recordedAt<T extends {start:number;end:number|null}>(rows:T[],at:number):T|undefined {
  return rows.find(row=>row.end!==null&&((row.start<=at&&at<row.end)||('kind' in row&&row.kind==='point'&&Math.abs(row.start-at)<.5)));
 }
-function cancelOpenAnnotationsOnRewind(task:TaskSummary) {
- let removed=0;
- const remaining=<T extends {end:number|null;createdBy:string}>(rows:T[]):T[]=>rows.filter(row=>{
-   const discard=row.end==null&&row.createdBy===logged;
-   if(discard)removed++;
-   return !discard;
-  });
- if(canEdit(task,'sponsors'))task.sponsors=remaining(task.sponsors);
- if(canEdit(task,'context')){task.events=remaining(task.events);task.cameras=remaining(task.cameras);}
- if(removed){save();notify(`${removed} unfinished live interval${removed===1?'':'s'} cancelled after rewinding. Saved intervals were preserved.`)}
+function preserveOpenAnnotationsOnRewind(task:TaskSummary, from:number) {
+ let closed=0;
+ const close=<T extends {start:number;end:number|null;createdBy:string}>(rows:T[]):T[]=>{
+  const result=preserveAnnotationsOnRewind(rows,logged,from);
+  closed+=result.closed;return result.rows;
+ };
+ if(canEdit(task,'sponsors'))task.sponsors=close(task.sponsors);
+ if(canEdit(task,'context')){task.events=close(task.events);task.cameras=close(task.cameras);}
+ if(closed){save();notify(`${closed} LIVE interval${closed===1?'':'s'} saved at ${fmt(from)} before rewinding. No labels were deleted.`)}
 }
 window.editRecordedAnnotation=(key,id)=>{
  const task=currentTask(),row=task?.[key].find(entry=>entry.id===id);
@@ -371,16 +371,24 @@ window.tagCamera=id=>{
  const t=currentTask();if(!t||!canEdit(t,'context'))return;
  if(!camerasFor(t).some(x=>x.id===id))return;
  const at=seconds(t),active=t.cameras.find(x=>x.cameraId===id&&x.end==null);
+ const futureLive=t.cameras.find(x=>x.end===null&&x.start>at);
+ if(futureLive)return notify('An unfinished LIVE camera tag begins after this timestamp. Return to it before switching cameras.');
+ const otherLive=t.cameras.find(x=>x.end===null&&x.cameraId!==id);
+ const currentLive=t.cameras.find(x=>x.end===null);
+ const nextSaved=currentLive?nextSavedCameraStart(t.cameras,currentLive.start):null;
+ if(currentLive&&nextSaved!==null&&at>nextSaved)return notify(`This camera tag reached another saved interval at ${fmt(nextSaved)}. Return there to edit that interval separately.`);
  if(!active&&hasRecordedCameraAfter(t.cameras,at)){
-  const affected=t.cameras.filter(row=>row.end!==null&&row.end>at).length;
+  if(otherLive)return notify('End the current LIVE camera interval before editing saved footage.');
+  const crossing=t.cameras.find(row=>row.end!==null&&row.start<=at&&at<row.end);
   videoEl?.pause();
-  confirmInApp('Resume camera tagging',`Start LIVE camera tagging from ${fmt(at)}? This keeps all earlier camera history, but replaces ${affected} saved camera interval${affected===1?'':'s'} at or after this time.`,()=>{
+  confirmInApp('Resume camera tagging',`Start LIVE camera tagging from ${fmt(at)}? ${crossing?'Only the saved interval at this timestamp will be split.':'This timestamp is between saved intervals.'} Every other recorded camera interval is preserved.`,()=>{
    const current=currentTask();
    if(!current||!canEdit(current,'context'))return;
+   if(current.cameras.some(row=>row.end===null))return notify('End the current LIVE camera interval first.');
    current.cameras=resumeCameraFromTimestamp(current.cameras,id,at,logged,tstamp(),uid).rows;
    editingInterval=null;
-   save();refreshStudio();notify(`Camera LIVE from ${fmt(at)}. Future camera intervals replaced.`);
-  },{actionLabel:'RE-TAG FROM HERE',danger:true});
+   save();refreshStudio();notify(`Camera LIVE from ${fmt(at)}. Other recorded intervals were preserved.`);
+  },{actionLabel:'RE-TAG FROM HERE',danger:false});
   return;
  }
  const result=selectCameraAngle(t.cameras,id,at,logged,tstamp(),uid);
@@ -395,7 +403,7 @@ window.deleteLog=(key,id)=>{const t=currentTask(),kind=key==='sponsors'?'sponsor
   else t.cameras=t.cameras.filter(x=>x.id!==id);
   save();refreshStudio();notify('Annotation removed');
  },{actionLabel:'REMOVE ANNOTATION'});};
-window.seekVideo=val=>{const t=currentTask();if(!t)return;const next=clamp(Number(val)||0,0,videoDuration(t));if(next<tick-0.2)cancelOpenAnnotationsOnRewind(t);tick=next;videoRecovery?.seek(tick);if(videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();refreshStudio();};
+window.seekVideo=val=>{const t=currentTask();if(!t)return;const next=clamp(Number(val)||0,0,videoDuration(t));if(next<tick-0.2)preserveOpenAnnotationsOnRewind(t,tick);tick=next;protectFutureCameraIntervals(t,tick);videoRecovery?.seek(tick);if(videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.duration)){try{videoEl.currentTime=clamp(tick,0,videoEl.duration)}catch{}}recordTick();refreshStudio();};
 window.skipVideo=(n:number)=>window.seekVideo?.((videoEl&&!videoRecovery?.isRecovering()&&Number.isFinite(videoEl.currentTime)?videoEl.currentTime:tick)+n);
 window.skipByStep=direction=>window.skipVideo?.((Number(direction)||0)*seekStep);
 window.setSeekStep=value=>{seekStep=value===10?10:5;refreshStudio();};
@@ -404,6 +412,13 @@ window.setPlaybackRate=value=>{if(!supportedPlaybackRate(value))return;playbackR
  let playbackRate=1,videoDimensions='',videoError='';
  let videoRecovery:ReturnType<typeof recoverVideo>|null=null;
 function recordTick(){const t=currentTask();if(t)t.observedTime=Math.max(t.observedTime||0,tick);}
+function protectFutureCameraIntervals(task:TaskSummary,at:number){
+ const active=task.cameras.find(row=>row.end===null);
+ if(!active||!canEdit(task,'context'))return;
+ const boundary=nextSavedCameraStart(task.cameras,active.start);
+ if(boundary===null||at<boundary)return;
+ active.end=boundary;save();notify(`LIVE camera ended at ${fmt(boundary)} to preserve the next recorded camera interval.`);
+}
 function attachVideo(){
  const el=document.getElementById('matchVideo') as HTMLVideoElement|null;
   if(!el){videoRecovery?.dispose();videoRecovery=null;videoEl=null;return;}
@@ -415,7 +430,7 @@ function attachVideo(){
   videoEl=el;
   el.playbackRate=playbackRate;
   el.addEventListener('ratechange',()=>{if(videoEl!==el)return;playbackRate=el.playbackRate;refreshStudio()});
- el.addEventListener('timeupdate',()=>{if(videoEl!==el||videoRecovery?.isRecovering())return;const t=currentTask();if(t&&el.currentTime<tick-0.2)cancelOpenAnnotationsOnRewind(t);tick=el.currentTime;recordTick();refreshStudio();});
+ el.addEventListener('timeupdate',()=>{if(videoEl!==el||videoRecovery?.isRecovering())return;const t=currentTask();if(t&&el.currentTime<tick-0.2)preserveOpenAnnotationsOnRewind(t,tick);tick=el.currentTime;if(t)protectFutureCameraIntervals(t,tick);recordTick();refreshStudio();});
  el.addEventListener('play',refreshStudio);
  el.addEventListener('pause',refreshStudio);
  el.addEventListener('loadedmetadata',()=>{

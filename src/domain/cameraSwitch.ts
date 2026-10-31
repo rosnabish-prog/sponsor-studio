@@ -31,29 +31,28 @@ export function hasRecordedCameraAfter(rows: CameraAnnotation[], at: number): bo
   return rows.some(row => row.end !== null && row.end > at);
 }
 
+export function nextSavedCameraStart(rows: CameraAnnotation[], after: number): number | null {
+  const starts = rows.filter(row => row.end !== null && row.start > after).map(row => row.start);
+  return starts.length ? Math.min(...starts) : null;
+}
+
 /**
  * Re-tag camera footage from a historical playhead, after explicit confirmation.
- * Retain complete history before the playhead, truncate the interval crossing it,
- * and remove future camera intervals so the new live tag never overlaps old ones.
- * Existing saved rows are never reopened (the API correctly forbids that).
+ * Re-tag only the saved interval intersecting the playhead. All other saved
+ * intervals — including later footage — remain untouched. Existing saved
+ * rows are never reopened (the API correctly forbids that).
  */
 export function resumeCameraFromTimestamp(
   rows: CameraAnnotation[], cameraId: string, at: number,
   author: string, createdAt: string, makeId: () => string,
 ): { rows: CameraAnnotation[]; removed: number; trimmed: number } {
-  let removed = 0;
-  let trimmed = 0;
-  const next: CameraAnnotation[] = [];
-  for (const row of rows) {
-    if (row.end !== null && row.end <= at) {
-      next.push(row);
-    } else if (row.start < at - SAME_TIME_TOLERANCE) {
-      next.push({ ...row, end: at });
-      trimmed++;
-    } else {
-      removed++;
-    }
-  }
+  // Never discard another worker's currently LIVE camera interval.
+  if (rows.some(row => row.end === null)) return { rows, removed: 0, trimmed: 0 };
+  const crossing = rows.find(row => row.end !== null && row.start <= at && at < row.end);
+  const next = rows.filter(row => row !== crossing);
+  const removed = crossing && at <= crossing.start ? 1 : 0;
+  const trimmed = crossing && at > crossing.start ? 1 : 0;
+  if (crossing && at > crossing.start) next.push({ ...crossing, end: at });
   next.push({ id: makeId(), cameraId, start: at, end: null, createdBy: author, createdAt });
   return { rows: next, removed, trimmed };
 }

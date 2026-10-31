@@ -102,7 +102,10 @@ export class AnnotationService {
     return this.db.$transaction(async tx => {
       await this.lockStream(tx,workspaceId,taskId,current.kind);
       const annotation = await tx.annotation.update({ where: { id: annotationId }, data: input });
-      await tx.auditLog.create({ data: { workspaceId, actorId: userId, action: 'ANNOTATION_UPDATED', subjectId: annotationId } });
+      await tx.auditLog.create({ data: { workspaceId, actorId: userId, action: 'ANNOTATION_UPDATED', subjectId: annotationId,
+        details: { before: { taskId: current.taskId, kind: current.kind, labelId: current.labelId,
+          start: current.start, end: current.end, placement: current.placement, quality: current.quality,
+          createdBy: current.createdBy, createdAt: current.createdAt.toISOString() } } } });
       return annotation;
     });
   }
@@ -114,7 +117,10 @@ export class AnnotationService {
     return this.db.$transaction(async tx => {
       await this.lockStream(tx,workspaceId,taskId,current.kind);
       await tx.annotation.delete({ where: { id: annotationId } });
-      await tx.auditLog.create({ data: { workspaceId, actorId: userId, action: 'ANNOTATION_DELETED', subjectId: annotationId } });
+      await tx.auditLog.create({ data: { workspaceId, actorId: userId, action: 'ANNOTATION_DELETED', subjectId: annotationId,
+        details: { before: { taskId: current.taskId, kind: current.kind, labelId: current.labelId,
+          start: current.start, end: current.end, placement: current.placement, quality: current.quality,
+          createdBy: current.createdBy, createdAt: current.createdAt.toISOString() } } } });
       return { ok: true };
     });
   }

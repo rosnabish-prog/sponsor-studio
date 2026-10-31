@@ -22,10 +22,12 @@ import { hasFinalResult, mergeTodayFixtureUpdates } from '../src/domain/fixtures
 import { StudioModal } from '../src/components/StudioModals';
 import { readOriginalPng, MAX_ORIGINAL_PNG_BYTES } from '../src/domain/logoUpload';
 import { copyCatalogEntry, reorderById } from '../src/domain/catalogEditing';
-import { hasRecordedCameraAfter, resumeCameraFromTimestamp, selectCameraAngle } from '../src/domain/cameraSwitch';
+import { hasRecordedCameraAfter, nextSavedCameraStart, resumeCameraFromTimestamp, selectCameraAngle } from '../src/domain/cameraSwitch';
 import { captureStudioSpacebar } from '../src/domain/studioKeyboard';
 import { VIDEO_PLAYBACK_RATES, supportedPlaybackRate } from '../src/domain/videoPlayback';
 import { nextSavedSponsorStart, retagSponsorFromTimestamp } from '../src/domain/sponsorRetag';
+import { preserveAnnotationsOnRewind } from '../src/domain/annotationRewind';
+import { assertNoBulkAnnotationDeletion } from '../src/api/sync';
 import { AttributesScreen, SponsorLibraryScreen, TeamScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
@@ -361,29 +363,53 @@ test('camera selections switch without a manual stop and keep one live interval'
   assert.deepEqual(normalized.rows.filter(row=>row.cameraId!=='replay').map(row=>row.end),[30,30]);
 });
 
-test('resuming a SAVED camera starts LIVE at the playhead and preserves only earlier camera history',()=>{
+test('resuming a SAVED camera edits only the affected interval and preserves future labels',()=>{
   const make=(id:string,cameraId:string,start:number,end:number|null)=>({id,cameraId,start,end,createdBy:'analyst',createdAt:'then'});
   const saved=[make('wide-old','wide',10,30),make('close-old','close',30,50),make('replay-old','replay',52,60)];
   assert.equal(hasRecordedCameraAfter(saved,20),true);
   assert.equal(hasRecordedCameraAfter(saved,61),false);
   const resumed=resumeCameraFromTimestamp(saved,'wide',20,'analyst','now',()=> 'wide-live');
   assert.deepEqual(resumed.rows.map(row=>[row.id,row.cameraId,row.start,row.end]),[
+    ['close-old','close',30,50],['replay-old','replay',52,60],
     ['wide-old','wide',10,20],['wide-live','wide',20,null],
   ]);
-  assert.equal(resumed.removed,2);
+  assert.equal(resumed.removed,0);
   assert.equal(resumed.trimmed,1);
   assert.equal(saved[0].end,30,'source saved interval is not mutated');
+  assert.equal(nextSavedCameraStart(resumed.rows,20),30);
   assert.equal(resumed.rows.filter(row=>row.end===null).length,1);
   const switched=selectCameraAngle(resumed.rows,'close',26,'analyst','now',()=> 'close-live');
   assert.deepEqual(switched.rows.map(row=>[row.cameraId,row.start,row.end]),[
+    ['close',30,50],['replay',52,60],
     ['wide',10,20],['wide',20,26],['close',26,null],
   ]);
   const boundary=resumeCameraFromTimestamp(saved,'close',30,'analyst','now',()=> 'new-close');
   assert.deepEqual(boundary.rows.map(row=>[row.cameraId,row.start,row.end]),[
-    ['wide',10,30],['close',30,null],
+    ['wide',10,30],['replay',52,60],['close',30,null],
   ]);
+  assert.equal(boundary.removed,1,'at the exact start only the selected interval is replaced');
   const zero=resumeCameraFromTimestamp([make('a','wide',5,15)],'replay',5,'analyst','now',()=> 'new');
   assert.deepEqual(zero.rows.map(row=>[row.cameraId,row.start,row.end]),[['replay',5,null]]);
+  const blocked=resumeCameraFromTimestamp(resumed.rows,'wide',25,'analyst','now',()=> 'should-not-appear');
+  assert.equal(blocked.rows,resumed.rows,'existing LIVE camera labels cannot be silently removed');
+});
+
+test('rewinding never deletes saved labels or unfinished work, and bulk removal is blocked',()=>{
+ const rows=[
+  {id:'saved',start:10,end:20,createdBy:'analyst'},
+  {id:'live',start:30,end:null,createdBy:'analyst'},
+  {id:'future',start:55,end:null,createdBy:'analyst'},
+  {id:'coworker',start:25,end:null,createdBy:'other'},
+ ];
+ const rewound=preserveAnnotationsOnRewind(rows,'analyst',45);
+ assert.equal(rewound.closed,1);
+ assert.deepEqual(rewound.rows.map(row=>[row.id,row.start,row.end]),[
+  ['saved',10,20],['live',30,45],['future',55,null],['coworker',25,null],
+ ]);
+ assert.equal(rows[1].end,null,'original LIVE labels remain intact until a successful save');
+ const original={...task,sponsors:[{...task.sponsors[0]},{...task.sponsors[0],id:'another'}]};
+ assert.throws(()=>assertNoBulkAnnotationDeletion(original,{...original,sponsors:[]}),/Safety stop/);
+ assert.doesNotThrow(()=>assertNoBulkAnnotationDeletion(original,{...original,sponsors:original.sponsors.slice(1)}));
 });
 
 test('studio assignments explain each role and workspace creation is hidden', () => {

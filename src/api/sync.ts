@@ -23,6 +23,13 @@ function annotations(task:TaskSummary):{kind:'SPONSOR'|'EVENT'|'CAMERA';item:Stu
   ];
 }
 
+/** A single edit must never silently turn into a bulk deletion of saved labels. */
+export function assertNoBulkAnnotationDeletion(before:TaskSummary,after:TaskSummary) {
+  const incoming=new Set(annotations(after).map(row=>row.item.id));
+  const removed=annotations(before).filter(row=>!incoming.has(row.item.id));
+  if(removed.length>1)throw new Error(`Safety stop: ${removed.length} annotations would be deleted from ${before.number}. No deletions were submitted.`);
+}
+
 function attributes(a:StudioAnnotation) {
   return {end:a.end,placement:'placement' in a?a.placement??null:null,quality:'quality' in a?a.quality??null:null};
 }
@@ -56,6 +63,7 @@ export async function persistStudio(
 
     const oldAnnotations=previous?annotations(previous):[];
     const newAnnotations=annotations(task);
+    if(previous)assertNoBulkAnnotationDeletion(previous,task);
     for (const old of oldAnnotations) {
       if (!newAnnotations.some(row=>row.item.id===old.item.id)) {
         await api.removeAnnotation(workspaceId,task.id,old.item.id);
