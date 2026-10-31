@@ -3,14 +3,20 @@
 This app has two *separate* recovery mechanisms:
 
 1. **Per-item revisions** — `AnnotationRevision` records every create, edit, soft-delete, and restore. The Studio's **Annotation history** panel can restore one selected annotation ID to an earlier revision without touching neighboring intervals, later camera angles, or other annotation streams. A deleted annotation is hidden (`deletedAt`) rather than physically removed. A task that has ever had annotations cannot be deleted through the ordinary API, protecting its revision history.
-2. **Database archives** — the production Docker Compose overlay starts a `backups` service that takes a consistent `pg_dump` custom-format archive at startup, then every 24 hours. Archives live in a **separate named volume** (`sponsor_studio_backups`), are restricted to the container user (`umask 077`), are verified with `pg_restore --list`, and older archives are pruned after 30 days (never less than 7). Failure logs an error and retries after an hour.
+2. **Database archives (optional)** — when explicitly started, the production Docker Compose `backups` service takes a consistent `pg_dump` custom-format archive at startup, then every 24 hours. Archives live in a **separate named volume** (`sponsor_studio_backups`), are restricted to the container user (`umask 077`), are verified with `pg_restore --list`, and older archives are pruned after 30 days (never less than 7). Failure logs an error and retries after an hour.
 
 ## Deploy and verify
 
-These are **not active until the updated production stack is deployed**. Existing production installations must run the new Prisma migration **before** starting updated code. Use the established deployment process with `compose.yaml` and `compose.prod.yaml`.
+**Automatic EC2 deployment currently skips this service.** The operator chose
+not to require backups for automatic releases. The Compose service remains
+available for an explicitly initiated backup setup, but the EC2 deploy script
+starts only `postgres`, `migrations`, `api`, `web`, and `caddy` and does not run
+`pg_dump`. No new deployment backup should be assumed to exist.
+
+To opt in to backups, start and verify the optional backup service using the production Compose files. The automatic EC2 deployment workflow does not enable this service.
 
 ```sh
-docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+docker compose -f compose.yaml -f compose.prod.yaml up -d backups
 docker compose -f compose.yaml -f compose.prod.yaml logs --tail=100 backups
 docker compose -f compose.yaml -f compose.prod.yaml exec backups ls -lh /backups
 ```

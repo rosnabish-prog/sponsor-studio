@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Invoked by the scoped SponsorStudioDeploy SSM document as the sponsor-deploy user.
+# Invoked by the scoped SponsorStudioDeploy SSM document as ec2-user.
 # Never deletes Docker volumes, replaces database data, or silently changes Compose projects.
 set -Eeuo pipefail
 umask 077
 
 log() { printf '[sponsor-studio-deploy] %s\n' "$*"; }
 fail() { printf '[sponsor-studio-deploy] ERROR: %s\n' "$*" >&2; exit 1; }
-trap 'code=$?; printf "[sponsor-studio-deploy] Failed (exit %s). Existing database volumes and backup archives were not deleted. Investigate before retrying.\n" "$code" >&2' ERR
+trap 'code=$?; printf "[sponsor-studio-deploy] Failed (exit %s). Existing database volumes were not deleted. No deployment backup was taken; investigate before retrying.\n" "$code" >&2' ERR
 
 if [[ $# -ne 1 || ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
   fail 'Expected exactly one full 40-character Git commit SHA.'
@@ -16,7 +16,7 @@ app_dir="${SPONSOR_STUDIO_DIR:-/home/ec2-user/sponsor-studio}"
 health_url="${SPONSOR_STUDIO_HEALTH_URL:-https://sponsor-studio.seebot.ai/api/health}"
 expected_project="sponsor-studio"
 
-[[ "$(id -u)" -ne 0 ]] || fail 'Run as the dedicated sponsor-deploy user, not root.'
+[[ "$(id -u)" -ne 0 ]] || fail 'Run as ec2-user, not root.'
 for program in git docker curl python3 flock; do
   command -v "$program" >/dev/null 2>&1 || fail "Missing required command: $program"
 done
@@ -51,17 +51,26 @@ git fetch --no-tags origin development
 git cat-file -e "${target_sha}^{commit}" || fail 'Requested commit is unavailable after fetching development.'
 git merge-base --is-ancestor "$target_sha" origin/development || fail 'Requested commit is not on the current origin/development branch.'
 git merge-base --is-ancestor "$previous_sha" "$target_sha" || fail 'Deployment would rewind/diverge from the currently deployed code.'
+if [[ -n "$(git diff --name-only "$previous_sha" "$target_sha" -- apps/api/prisma apps/api/prisma.config.ts)" ]]; then
+  if [[ "${SPONSOR_STUDIO_ALLOW_SCHEMA_CHANGES:-false}" != true ]]; then
+    fail 'Prisma schema/migration files changed. Automatic deployment is blocked because backups are disabled. Review this release and use SPONSOR_STUDIO_ALLOW_SCHEMA_CHANGES=true only during a manually supervised deployment.'
+  fi
+  log 'WARNING: Prisma schema/migration changes explicitly approved for this manual deployment. No backup will be taken.'
+fi
 git merge --ff-only "$target_sha"
 
 "${compose[@]}" config --quiet || fail 'Updated Compose configuration is invalid.'
 log 'Building application and migration images before changing running containers.'
 "${compose[@]}" build web api migrations
 
-log 'Taking and verifying a full PostgreSQL backup before migration/restart.'
-"${compose[@]}" run --rm --no-deps --entrypoint /bin/sh backups /scripts/backup-postgres.sh
-
-log 'Starting the updated stack (Prisma migrations must finish before the API).'
-"${compose[@]}" up -d --no-build --wait --wait-timeout 240
+log 'No database backup requested. Existing PostgreSQL volumes will be preserved.'
+if [[ "${SPONSOR_STUDIO_ALLOW_SCHEMA_CHANGES:-false}" != true ]]; then
+  log 'Verifying Prisma has no pending or failed migrations before restarting the app.'
+  "${compose[@]}" run --rm --no-deps --entrypoint /bin/sh migrations \
+    -c 'cd apps/api && ../../node_modules/.bin/prisma migrate status' || fail 'Prisma database migration status is not clean; automated rollout stopped.'
+fi
+log 'Starting the app services only; the optional backups service will not be started.'
+"${compose[@]}" up -d --no-build --wait --wait-timeout 240 postgres migrations api web caddy
 
 log 'Checking the API inside its container.'
 "${compose[@]}" exec -T api node -e "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

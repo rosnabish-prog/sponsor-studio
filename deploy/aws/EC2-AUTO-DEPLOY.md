@@ -8,10 +8,11 @@ is `deploy/aws/ssm-deploy-document.json`.
 
 > **Production warning:** Every successful push to `development` can replace the
 > application used by working annotators. Restrict who may push to this branch.
-> Deploying a database migration is not generally reversible; this pipeline
-> **does not automatically roll back schema or restore a database**. It fails,
-> reports the error, and preserves the database and backup volumes for a
-> controlled recovery. Do not turn it on until the recovery process is tested.
+> At the operator's request, the automatic deployment **does not take a database
+> backup**. A bad deployment or unexpected database failure may therefore cause
+> permanent data loss. The pipeline blocks changes to Prisma schema/migration
+> files unless an operator explicitly approves a supervised manual deployment.
+> It never automatically rolls back a database schema or restores database data.
 
 ## 1. Inspect the running installation before changing it
 
@@ -100,10 +101,17 @@ that existing Caddyfile on EC2; no overwrite is needed.
    The check does not pull code, run migrations, change containers or read
    secret values into its output. If it fails, fix the identified prerequisite
    before enabling automatic deployment.
-7. Verify that the scheduled backup container works and that archives are
-   copied off the EC2 host. The deployment takes a verified **additional**
-   database archive before each migration/restart. See
-   [backup and recovery instructions](../backups/README.md).
+7. Backups are **optional and disabled for automatic deployment** by explicit
+   operator choice. The `backups` Compose service remains available for later
+   use, but the deployment script does not start it and does not take a new
+   database archive. Existing volumes and any older archives are preserved.
+   See [backup and recovery instructions](../backups/README.md) if this policy
+   changes. Automatic rollout of Prisma schema/migration changes is blocked;
+   ordinary UI/API code changes may still deploy. The deployment also runs a
+   read-only `prisma migrate status` check and stops if the live database has
+   unapplied, failed, or diverged migrations. For a manual schema-changing
+   deployment, the override is intentionally not available through GitHub's
+   fixed SSM document.
 
 ## 3. Configure AWS Systems Manager
 
@@ -189,10 +197,12 @@ workflow requests short-lived AWS credentials via OIDC.
    script must pass on the existing production host.
 2. Run a **controlled first deployment** in a maintenance window using the
    target commit SHA and the same script (as `ec2-user`), or
-   validate the SSM document manually. This performs a backup and may restart
-   services; it is not a dry run.
-3. Check that the newest backup is verified, the existing tasks and
-   annotations are still present, and the HTTPS health endpoint succeeds.
+   validate the SSM document manually. This may restart services and **will not
+   take a database backup**; it is not a dry run. If schema/migration files
+   differ, the script stops until an operator intentionally invokes it with
+   `SPONSOR_STUDIO_ALLOW_SCHEMA_CHANGES=true` after reviewing the risks.
+3. Check that existing tasks and annotations are still present and the HTTPS
+   health endpoint succeeds.
 4. Set `EC2_AUTO_DEPLOY_ENABLED=true`.
 5. Push a small reviewed change to `development`. The
    [production deployment workflow](../../.github/workflows/deploy-ec2-production.yml)
@@ -215,15 +225,20 @@ explicit, versioned Prisma schema migrations.
 - Concurrent SSM deployment requests: the host-level lock allows only one
   active deployment script, even outside GitHub's workflow concurrency guard.
 - Docker image build failure: old containers remain running.
-- Database backup failure: migration and restart are blocked.
+- No predeployment backup is created. The optional `backups` service is excluded
+  from the deploy command; existing database and backup volumes are not removed.
+- Prisma schema/migration differences from the current checkout require a
+  manually supervised override; automatic SSM deployments cannot enable it.
+- Pending/failed/diverged Prisma migrations in the live database block the
+  automated restart, even when the Git checkout itself has no schema changes.
 - Migration, restart, or health-check failure: GitHub reports failure. **Do
   not automatically revert database migrations or restore a whole database**;
-  assess the schema compatibility and use a reviewed recovery plan. The latest
-  verified backup is retained in the backup volume.
+  assess the schema compatibility and use a reviewed recovery plan. Without a
+  pre-existing backup, database recovery may be impossible.
 - For recovery of an individual sponsor, camera, or event annotation, use the
   item-specific revision and isolated restore procedures in
   [the backup guide](../backups/README.md).
 
 Recommended before routine production use: protect the `development` branch
-with required reviews/checks, configure offsite encrypted database backups,
-test an isolated restore, and configure CloudWatch or other failure alerts.
+with required reviews/checks, reconsider offsite encrypted database backups,
+and configure CloudWatch or other failure alerts.
