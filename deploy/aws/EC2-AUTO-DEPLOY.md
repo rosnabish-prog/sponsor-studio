@@ -31,27 +31,31 @@ database volume. The deployment script also requires an already running
 PostgreSQL container in that exact Compose project; it refuses first-time
 database creation.
 
-The documented defaults are:
+The operator-supplied deployment target is:
 
-- Linux checkout: `/opt/sponsor-studio`, on branch `development`.
-- Unix deploy account: `sponsor-deploy` (member of the Docker group).
+- AWS region: `ap-south-1` (Mumbai). The exact account and instance IDs are
+  configured in AWS IAM and GitHub repository variables, not committed here.
+- Compose project: `sponsor-studio` (this name is enforced by the script).
+- Linux checkout: `/home/ec2-user/sponsor-studio`, on branch `development`.
+- Unix deploy account: `ec2-user` (must have Docker access).
 - Public health URL: `https://sponsor-studio.seebot.ai/api/health`.
 - Production Compose files: `compose.yaml` and `compose.prod.yaml`.
 
-If production uses a **different** checkout directory, change both the SSM
-document's script path and the script's `SPONSOR_STUDIO_DIR` configuration
-before enabling deployment. Do not create a second checkout/project and assume
-it is the existing production installation.
+These values came from the production operator and have **not** yet been
+verified against the running EC2 instance. The submitted Caddyfile contains
+the expected `sponsor-studio.seebot.ai` → `web:80` reverse proxy. Preserve
+that existing Caddyfile on EC2; no overwrite is needed.
 
 ## 2. Prepare the EC2 instance
 
 1. Ensure a current Docker Engine and Compose v2 plugin, Git, Bash, Python 3,
    `curl`, `flock` (from `util-linux`), and `sudo` are installed.
-2. Ensure the existing `development` checkout is at `/opt/sponsor-studio`, is
-   owned by the dedicated `sponsor-deploy` account, and is clean (`git status`).
+2. Ensure the existing `development` checkout is at
+   `/home/ec2-user/sponsor-studio`, is accessible to `ec2-user`, and is clean
+   (`git status`).
    If it does not exist, arrange a first-time installation **separately**;
    this deployment script deliberately refuses to initialize production data.
-3. Give `sponsor-deploy` access to the Docker daemon (typically via the
+3. Confirm `ec2-user` has access to the Docker daemon (typically via the
    `docker` group). Docker access is effectively root-level authority; restrict
    login access to this account. The SSM document executes the script as this
    user, not directly as root.
@@ -60,13 +64,13 @@ it is the existing production installation.
    missing, use `deploy/aws/Caddyfile.example` as a starting point **only after
    confirming** DNS, proxy routing, and TLS for the real production domain.
 5. Put the **existing** production database password and the existing Compose
-   project name in `/opt/sponsor-studio/.env`. Example configuration (values
+   project name in `/home/ec2-user/sponsor-studio/.env`. Example configuration (values
    are placeholders, do not paste these literally):
 
    ```dotenv
-   COMPOSE_PROJECT_NAME=EXISTING_PROJECT_NAME_FROM_DOCKER_COMPOSE_LS
+   COMPOSE_PROJECT_NAME=sponsor-studio
    DB_PASSWORD=EXISTING_DATABASE_PASSWORD
-   AWS_REGION=YOUR_AWS_REGION
+   AWS_REGION=ap-south-1
    S3_VIDEO_BUCKET=YOUR_VIDEO_BUCKET_IF_USED
    CLOUDFRONT_VIDEO_DOMAIN=YOUR_VIDEO_DOMAIN_IF_USED
    CLOUDFRONT_KEY_PAIR_ID=YOUR_KEY_ID_IF_USED
@@ -85,6 +89,17 @@ it is the existing production installation.
    postgres` points at the **existing** database. Confirm the existing site
    answers `/api/health` over HTTPS. EC2 needs outbound access to GitHub,
    Docker image registries, AWS Systems Manager, and the health URL.
+   After the updated repository files have been safely fetched to the existing
+   checkout, run this **read-only** check before any rollout:
+
+   ```sh
+   cd /home/ec2-user/sponsor-studio
+   bash scripts/check-ec2-production.sh
+   ```
+
+   The check does not pull code, run migrations, change containers or read
+   secret values into its output. If it fails, fix the identified prerequisite
+   before enabling automatic deployment.
 7. Verify that the scheduled backup container works and that archives are
    copied off the EC2 host. The deployment takes a verified **additional**
    database archive before each migration/restart. See
@@ -96,12 +111,13 @@ it is the existing production installation.
    `AmazonSSMManagedInstanceCore`, and verify the SSM Agent is online in
    **Systems Manager → Fleet Manager / Managed nodes**. Allow outbound access
    to regional SSM endpoints (or configure the corresponding VPC endpoints).
-2. In the AWS account/region containing the EC2 instance, create the restricted
+2. In the production AWS account, region `ap-south-1`, create the restricted
    **Command** document named exactly `SponsorStudioDeploy` from the tracked
    JSON file. With AWS CLI credentials that can administer SSM documents:
 
    ```sh
    aws ssm create-document \
+     --region ap-south-1 \
      --name SponsorStudioDeploy \
      --document-type Command \
      --document-format JSON \
@@ -110,59 +126,39 @@ it is the existing production installation.
 
    If this document already exists, inspect its current contents/version
    instead of overwriting it. The document accepts only a 40-character commit
-   SHA and runs the fixed deployment script as `sponsor-deploy`.
+   SHA and runs the fixed deployment script as `ec2-user`.
 
 3. In IAM, create GitHub's OIDC identity provider with URL
    `https://token.actions.githubusercontent.com` and audience
    `sts.amazonaws.com` (skip if already configured).
-4. Create a dedicated IAM role (example name `SponsorStudioDevelopmentDeploy`)
-   with this **trust policy**. Replace `AWS_ACCOUNT_ID` with the real account ID:
+4. Create the dedicated IAM role `SponsorStudioDevelopmentDeploy` using the
+   [OIDC trust policy template](github-oidc-trust-policy.template.json).
+   Substitute your AWS account ID in a **local copy outside the public repo**,
+   then create the role with that filled-in copy:
 
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [{
-       "Effect": "Allow",
-       "Principal": {
-         "Federated": "arn:aws:iam::AWS_ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
-       },
-       "Action": "sts:AssumeRoleWithWebIdentity",
-       "Condition": {
-         "StringEquals": {
-           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-           "token.actions.githubusercontent.com:sub": "repo:rosnabish-prog/sponsor-studio:ref:refs/heads/development"
-         }
-       }
-     }]
-   }
+   ```sh
+   aws iam create-role \
+     --role-name SponsorStudioDevelopmentDeploy \
+     --assume-role-policy-document file:///path/to/filled-oidc-trust.json
    ```
 
-5. Give that role **only** permission to send the fixed document to the
-   specific instance and read the result. Replace `AWS_REGION`,
-   `AWS_ACCOUNT_ID`, and `EC2_INSTANCE_ID`:
+5. Attach only the scoped permissions in the
+   [SSM deploy policy template](github-ssm-deploy-policy.template.json).
+   In a local copy, substitute the real AWS Region, account ID and instance
+   ID. It must permit the custom document **only on the intended EC2
+   instance**, plus readback of command status:
 
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Sid": "SendOnlySponsorStudioDeployToOneInstance",
-         "Effect": "Allow",
-         "Action": "ssm:SendCommand",
-         "Resource": [
-           "arn:aws:ssm:AWS_REGION:AWS_ACCOUNT_ID:document/SponsorStudioDeploy",
-           "arn:aws:ec2:AWS_REGION:AWS_ACCOUNT_ID:instance/EC2_INSTANCE_ID"
-         ]
-       },
-       {
-         "Sid": "ReadDeploymentResult",
-         "Effect": "Allow",
-         "Action": "ssm:GetCommandInvocation",
-         "Resource": "*"
-       }
-     ]
-   }
+   ```sh
+   aws iam put-role-policy \
+     --role-name SponsorStudioDevelopmentDeploy \
+     --policy-name SponsorStudioProductionSSM \
+     --policy-document file:///path/to/filled-ssm-policy.json
    ```
+
+   If the role already exists, inspect it before making changes; `create-role`
+   is intended only for the first setup. All of these IAM commands require
+   appropriately authorized AWS administrative credentials and are **not**
+   executed by GitHub Actions.
 
    Do not grant `AdministratorAccess`, broad `ssm:SendCommand` permissions, or
    AWS access keys to GitHub. Restrict this IAM role to this repo/branch.
@@ -178,9 +174,9 @@ Variables**, set:
 
 | Variable | Example / requirement |
 | --- | --- |
-| `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::AWS_ACCOUNT_ID:role/SponsorStudioDevelopmentDeploy` |
-| `AWS_REGION` | The region hosting this EC2 instance, e.g. `us-east-1` |
-| `EC2_INSTANCE_ID` | The exact production instance ID, e.g. `i-0123456789abcdef0` |
+| `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::AWS_ACCOUNT_ID:role/SponsorStudioDevelopmentDeploy` (replace the account ID) |
+| `AWS_REGION` | `ap-south-1` |
+| `EC2_INSTANCE_ID` | Your actual production `i-...` instance ID |
 | `EC2_AUTO_DEPLOY_ENABLED` | Leave **unset** until every preflight passes; then set `true` |
 
 No long-lived AWS access keys or SSH private keys belong in GitHub. The
@@ -189,9 +185,10 @@ workflow requests short-lived AWS credentials via OIDC.
 ## 5. Validate, then explicitly enable automatic production deployment
 
 1. Confirm the running Compose project, database volume, `.env`, Caddyfile,
-   SSM managed-node status, OIDC role, and SSM document.
+   SSM managed-node status, OIDC role, and SSM document. The read-only preflight
+   script must pass on the existing production host.
 2. Run a **controlled first deployment** in a maintenance window using the
-   target commit SHA and the same script (as the dedicated deploy user), or
+   target commit SHA and the same script (as `ec2-user`), or
    validate the SSM document manually. This performs a backup and may restart
    services; it is not a dry run.
 3. Check that the newest backup is verified, the existing tasks and

@@ -12,8 +12,9 @@ if [[ $# -ne 1 || ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
   fail 'Expected exactly one full 40-character Git commit SHA.'
 fi
 target_sha="$1"
-app_dir="${SPONSOR_STUDIO_DIR:-/opt/sponsor-studio}"
+app_dir="${SPONSOR_STUDIO_DIR:-/home/ec2-user/sponsor-studio}"
 health_url="${SPONSOR_STUDIO_HEALTH_URL:-https://sponsor-studio.seebot.ai/api/health}"
+expected_project="sponsor-studio"
 
 [[ "$(id -u)" -ne 0 ]] || fail 'Run as the dedicated sponsor-deploy user, not root.'
 for program in git docker curl python3 flock; do
@@ -38,6 +39,7 @@ compose=(docker compose -f compose.yaml -f compose.prod.yaml)
 "${compose[@]}" version >/dev/null
 "${compose[@]}" config --quiet || fail 'Invalid production Compose configuration (check DB_PASSWORD and other environment variables).'
 project_name="$("${compose[@]}" config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+[[ "$project_name" == "$expected_project" ]] || fail "Expected Compose project $expected_project, but resolved $project_name. Refusing to switch database volumes."
 log "Using existing Docker Compose project: $project_name"
 postgres_container="$("${compose[@]}" ps -q postgres)"
 [[ -n "$postgres_container" ]] || fail 'No existing PostgreSQL container in this Compose project. Refusing to start a new/empty database.'

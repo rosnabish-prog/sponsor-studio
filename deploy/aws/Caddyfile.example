@@ -1,4 +1,3 @@
 sponsor-studio.seebot.ai {
-    encode zstd gzip
     reverse_proxy web:80
 }

@@ -56,7 +56,10 @@ jobs:
       - name: Check deployment script and SSM document syntax
         run: |
           bash -n scripts/deploy-ec2.sh
+          bash -n scripts/check-ec2-production.sh
           python -m json.tool deploy/aws/ssm-deploy-document.json > /dev/null
+          python -m json.tool deploy/aws/github-oidc-trust-policy.template.json > /dev/null
+          python -m json.tool deploy/aws/github-ssm-deploy-policy.template.json > /dev/null
       - name: Install Chromium for live integration test
         run: npx playwright install --with-deps chromium
       - name: Start API and test frontend

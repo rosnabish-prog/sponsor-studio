@@ -15,7 +15,7 @@
       "inputs": {
         "timeoutSeconds": "1800",
         "runCommand": [
-          "sudo -u sponsor-deploy -H /bin/bash /opt/sponsor-studio/scripts/deploy-ec2.sh '{{ CommitSha }}'"
+          "sudo -u ec2-user -H /bin/bash /home/ec2-user/sponsor-studio/scripts/deploy-ec2.sh '{{ CommitSha }}'"
         ]
       }
     }
