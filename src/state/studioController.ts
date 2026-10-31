@@ -16,6 +16,7 @@ import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } f
 import { hasRecordedCameraAfter, resumeCameraFromTimestamp, selectCameraAngle } from '../domain/cameraSwitch';
 import { captureStudioSpacebar } from '../domain/studioKeyboard';
 import { supportedPlaybackRate } from '../domain/videoPlayback';
+import { retagSponsorFromTimestamp, nextSavedSponsorStart } from '../domain/sponsorRetag';
 
 export function initializeStudioController(mount: StudioMount) {
 const uid=()=> 'id_'+Math.random().toString(36).slice(2,10);
@@ -307,6 +308,22 @@ window.editRecordedAnnotation=(key,id)=>{
   refreshStudio();notify('Drag either edge of the highlighted timeline segment, then Save.');
  },{actionLabel:'CONTINUE TO EDIT',danger:false});
 };
+window.retagRecordedSponsor=(id,at)=>{
+ const task=currentTask(),row=task?.sponsors.find(entry=>entry.id===id);
+ if(!task||!row||row.end===null||!canEdit(task,'sponsors')||!Number.isFinite(at)||at<row.start||at>=row.end)return;
+ if(task.sponsors.some(entry=>entry.sponsorId===row.sponsorId&&entry.end===null))return notify('End the current LIVE sponsor tag before re-tagging saved footage.');
+ const name=labelFor(task,'sponsors',row.sponsorId);
+ videoEl?.pause();
+ confirmInApp('Re-tag sponsor from here',`Start ${name} LIVE at ${fmt(at)}? The saved interval (${fmt(row.start)}–${fmt(row.end)}) will end at ${fmt(at)}. Earlier tags and later separate appearances are kept.`,()=>{
+  const current=currentTask();
+  if(!current||!canEdit(current,'sponsors'))return;
+  const next=retagSponsorFromTimestamp(current.sponsors,id,at,logged,tstamp(),uid);
+  if(!next)return notify('This saved interval changed. Seek to it and try again.');
+  current.sponsors=next;
+  editingInterval=null;
+  save();refreshStudio();notify(`${name} LIVE from ${fmt(at)}.`);
+ },{actionLabel:'RE-TAG FROM HERE',danger:false});
+};
 window.cancelTimelineEdit=()=>{editingInterval=null;refreshStudio()};
 window.saveTimelineEdit=(key,id,start,end)=>{
  const task=currentTask(),row=task?.[key].find(entry=>entry.id===id);
@@ -318,14 +335,16 @@ window.saveTimelineEdit=(key,id,start,end)=>{
 window.tagSponsor=id=>{
  const t=currentTask();if(!t||!canEdit(t,'sponsors'))return;
  const at=seconds(t),active=t.sponsors.find(x=>x.sponsorId===id&&x.end==null);
- if(!active){const recorded=recordedAt(t.sponsors.filter(row=>row.sponsorId===id),at);if(recorded)return window.editRecordedAnnotation?.('sponsors',recorded.id);}
+ if(!active){const recorded=recordedAt(t.sponsors.filter(row=>row.sponsorId===id),at);if(recorded)return window.retagRecordedSponsor?.(recorded.id,at);}
  if(active){
   if(sameVideoTimestamp(at,active.start)){
    t.sponsors=t.sponsors.filter(x=>x.id!==active.id);
    save();refreshStudio();notify('Sponsor event removed — same timestamp');return;
   }
   if(at<active.start)return notify('End time cannot precede start time');
-  active.end=at;
+  const nextStart=nextSavedSponsorStart(t.sponsors,id,active.start);
+  active.end=nextStart!==null&&at>nextStart?nextStart:at;
+  if(active.end!==at)notify(`Sponsor tag ended at ${fmt(active.end)} to preserve the next saved appearance.`);
  }else{
   t.sponsors.push({id:uid(),sponsorId:id,start:at,end:null,createdBy:logged,createdAt:tstamp()});
  }

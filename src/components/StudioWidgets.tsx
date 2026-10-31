@@ -63,8 +63,8 @@ export function StudioRail({ model }: StudioProps) {
     const recorded = !active&&model.task.sponsors.some(row=>row.sponsorId===sponsor.id&&row.end!==null&&row.start<=model.tick&&model.tick<row.end);
     return <button key={sponsor.id} className={`rail-brand ${active ? 'isactive' : ''} ${recorded?'isrecorded':''}`} type="button"
       onClick={() => window.tagSponsor?.(sponsor.id)} disabled={!model.canSponsor}
-      aria-label={`${sponsor.name}${sponsor.hotkey ? `, ${displayHotkey(sponsor.hotkey)}` : ''} · ${active ? 'LIVE, click to stop' : recorded ? 'SAVED at this time, click to edit' : 'OFF, click to start'}`} aria-pressed={active||recorded}
-      title={`${sponsor.name}${sponsor.hotkey ? ` · ${displayHotkey(sponsor.hotkey)}` : ''} · ${active ? 'LIVE' : recorded ? 'SAVED — click to edit' : 'OFF'}`}>
+      aria-label={`${sponsor.name}${sponsor.hotkey ? `, ${displayHotkey(sponsor.hotkey)}` : ''} · ${active ? 'LIVE, click to stop' : recorded ? 'SAVED at this time, click to re-tag from here' : 'OFF, click to start'}`} aria-pressed={active||recorded}
+      title={`${sponsor.name}${sponsor.hotkey ? ` · ${displayHotkey(sponsor.hotkey)}` : ''} · ${active ? 'LIVE' : recorded ? 'SAVED — click to re-tag from here' : 'OFF'}`}>
       <span className="rail-logo"><BrandLogo sponsor={sponsor} /></span>
       {sponsor.hotkey && <kbd className="hotkey-hint rail-hotkey">{displayHotkey(sponsor.hotkey)}</kbd>}
       <span className={`rail-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
@@ -107,13 +107,20 @@ function TimelineTrack({ name, items, kind, color, model, duration, onContextMen
         const start = Math.max(0, Math.min(editing?draft.start:item.start, duration));
         const end = Math.max(0, Math.min(editing?draft.end:item.end == null ? Math.max(item.start, model.task.observedTime || 0, model.tick) : item.end, duration));
         const point = kind === 'event' && (item as EventAnnotation).kind === 'point';
-        return <span key={item.id} title={`${name}: ${fmt(start)}${point ? '' : ` – ${fmt(end)}`}${canDelete ? ' · Right-click to delete' : ''}`}
+        return <span key={item.id} title={`${name}: ${fmt(start)}${point ? '' : ` – ${fmt(end)}`}${canDelete ? kind==='sponsor'&&item.end!==null?' · Click to re-tag · Right-click to edit or delete':' · Right-click to edit or delete' : ''}`}
           onContextMenu={(event: MouseEvent<HTMLSpanElement>) => {
             if(!canDelete)return;
             event.preventDefault();event.stopPropagation();
             onContextMenu({key:kind==='sponsor'?'sponsors':kind==='event'?'events':'cameras',id:item.id,name,x:event.clientX,y:event.clientY});
           }}
-          onClick={event=>{event.stopPropagation();window.seekVideo?.(item.start);}}
+          onClick={event=>{
+            event.stopPropagation();
+            if((event.target as Element).closest('.timeline-resize-handle'))return;
+            const rect=event.currentTarget.getBoundingClientRect();
+            const at=rect.width>0&&!point?start+Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width))*(end-start):item.start;
+            window.seekVideo?.(at);
+            if(!draft&&kind==='sponsor'&&item.end!==null&&canDelete&&at<item.end)window.retagRecordedSponsor?.(item.id,at);
+          }}
           className={`block ${kind} ${item.end == null ? 'open' : ''} ${point ? 'dotpoint' : ''} ${editing ? 'timeline-block-editing':''}`}
           style={{ left: `${100 * start / duration}%`, width: `${point ? .15 : Math.max(.15, 100 * (end - start) / duration)}%`, ...(color ? {'--segment-color':color} as CSSProperties : {}) }}>
           {editing && !point && <>
@@ -244,6 +251,7 @@ declare global {
     setExposureAttribute?: (id: string, field: 'placement' | 'quality', value: string) => void;
     deleteLog?: (key: 'sponsors' | 'events' | 'cameras', id: string) => void;
     editRecordedAnnotation?: (key: 'sponsors'|'events'|'cameras', id:string)=>void;
+    retagRecordedSponsor?: (id:string, at:number)=>void;
     saveTimelineEdit?: (key:'sponsors'|'events'|'cameras',id:string,start:number,end:number)=>void;
     cancelTimelineEdit?: ()=>void;
   }

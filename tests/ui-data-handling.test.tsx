@@ -25,6 +25,7 @@ import { copyCatalogEntry, reorderById } from '../src/domain/catalogEditing';
 import { hasRecordedCameraAfter, resumeCameraFromTimestamp, selectCameraAngle } from '../src/domain/cameraSwitch';
 import { captureStudioSpacebar } from '../src/domain/studioKeyboard';
 import { VIDEO_PLAYBACK_RATES, supportedPlaybackRate } from '../src/domain/videoPlayback';
+import { nextSavedSponsorStart, retagSponsorFromTimestamp } from '../src/domain/sponsorRetag';
 import { AttributesScreen, SponsorLibraryScreen, TeamScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
@@ -201,6 +202,59 @@ test('Studio offers direct playback speeds from quarter-speed through double-spe
   assert.match(speedControl,/aria-label="Video playback speed"/);
   for(const rate of VIDEO_PLAYBACK_RATES)assert.match(speedControl,new RegExp(`<option value="${rate}"`));
   assert.match(speedControl,/<option value="1" selected="">1×<\/option>/,'normal speed stays selected by default');
+});
+
+test('re-tagging a saved sponsor splits only the selected interval and starts a new LIVE tag', () => {
+  const saved=[
+    {id:'early',sponsorId:'gatorade',start:230,end:260,createdBy:'analyst',createdAt:'then',placement:'LED'},
+    {id:'later',sponsorId:'gatorade',start:380,end:410,createdBy:'analyst',createdAt:'then'},
+    {id:'other',sponsorId:'other',start:210,end:400,createdBy:'analyst',createdAt:'then'},
+  ];
+  const result=retagSponsorFromTimestamp(saved,'early',240,'reviewer','now',()=> 're-tagged');
+  assert.deepEqual(result?.map(row=>[row.id,row.sponsorId,row.start,row.end]),[
+    ['later','gatorade',380,410],['other','other',210,400],
+    ['early','gatorade',230,240],['re-tagged','gatorade',240,null],
+  ]);
+  assert.equal(result?.at(-1)?.placement,'LED','the resumed tag preserves sponsor metadata');
+  assert.equal(saved[0].end,260,'saved source is not modified in place');
+  assert.equal(nextSavedSponsorStart(result!,'gatorade',240),380,'later saved tags are protected');
+  assert.equal(nextSavedSponsorStart(result!,'gatorade',400),null);
+  assert.equal(retagSponsorFromTimestamp(saved,'early',230,'reviewer','now',()=> 'fresh')?.some(row=>row.id==='early'),false,'re-tagging at interval start replaces the entire original');
+  assert.equal(retagSponsorFromTimestamp(saved,'early',260,'reviewer','now',()=> 'bad'),null,'cannot split after the interval ends');
+  assert.equal(retagSponsorFromTimestamp(result!,'later',390,'reviewer','now',()=> 'bad'),null,'a second concurrent live tag is refused');
+  const html=renderToStaticMarkup(<StudioRail model={{...studio,tick:240,task:{...task,sponsors:[{id:'early',sponsorId:'s1',start:230,end:260,createdBy:'a1',createdAt:'then'}]}}} />);
+  assert.match(html,/SAVED at this time, click to re-tag from here/);
+  assert.doesNotMatch(html,/SAVED at this time, click to edit/);
+  const timeline=renderToStaticMarkup(<StudioTimeline model={{...studio,tick:240,task:{...task,sponsors:[{id:'early',sponsorId:'s1',start:230,end:260,createdBy:'a1',createdAt:'then'}]}}} />);
+  assert.match(timeline,/Click to re-tag/,'saved timeline segments offer the same re-tag action');
+});
+
+test('clicking a saved sponsor timeline segment re-tags at the clicked timestamp', async () => {
+  const dom=new JSDOM('<div id="mount"></div>',{url:'http://localhost/'});
+  const oldWindow=globalThis.window,oldDocument=globalThis.document;
+  const oldAct=(globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT;
+  (globalThis as unknown as {window:Window}).window=dom.window as unknown as Window;
+  (globalThis as unknown as {document:Document}).document=dom.window.document;
+  (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
+  const calls:{kind:string;id?:string;at:number}[]=[];
+  dom.window.seekVideo=(at:number)=>calls.push({kind:'seek',at});
+  dom.window.retagRecordedSponsor=(id:string,at:number)=>calls.push({kind:'re-tag',id,at});
+  const root=createRoot(dom.window.document.getElementById('mount')!);
+  try {
+    const sample={...studio,task:{...task,sponsors:[{...task.sponsors[0],start:230,end:260}]},tick:240};
+    await act(async()=>root.render(<StudioTimeline model={sample}/>));
+    const segment=dom.window.document.querySelector('.block.sponsor') as HTMLElement;
+    assert.ok(segment);
+    segment.getBoundingClientRect=()=>({left:100,width:100,right:200,top:0,bottom:20,height:20,x:100,y:0,toJSON(){return {};}});
+    await act(async()=>segment.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,clientX:150})));
+    assert.deepEqual(calls,[{kind:'seek',at:245},{kind:'re-tag',id:'one',at:245}]);
+  } finally {
+    await act(async()=>root.unmount());
+    (globalThis as unknown as {window:Window}).window=oldWindow;
+    (globalThis as unknown as {document:Document}).document=oldDocument;
+    (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=oldAct;
+    dom.window.close();
+  }
 });
 
 test('timelines contain only annotated tracks, one shared cursor, and a layer filter', () => {
@@ -415,7 +469,7 @@ test('timeline ends near annotations and allows control-scroll zoom', () => {
 test('recorded annotations are visible at the playhead, and admin task deletion is gated', () => {
   const at={...studio,tick:20,task:{...studio.task,sponsors:[{...task.sponsors[0],start:2,end:30}],cameras:[{id:'c',cameraId:'camera',start:10,end:40,createdBy:'a1',createdAt:'now'}]}};
   const rail=renderToStaticMarkup(<StudioRail model={at}/>);
-  assert.match(rail,/SAVED at this time, click to edit/);
+  assert.match(rail,/SAVED at this time, click to re-tag from here/);
   assert.match(rail,/● SAVED/);
   assert.match(renderToStaticMarkup(<StudioControls model={at}/>),/SAVED at this time, tap to resume LIVE with confirmation/);
   const cameraAt={...at,selectedTab:'cameras' as const};

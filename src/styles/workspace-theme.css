@@ -407,9 +407,9 @@ input[type='checkbox'],input[type='radio'] {accent-color:var(--orange)!important
 }
 .app-focus .video-controls>button:hover,.app-focus .video-controls .rate:hover {border-color:var(--orange)!important;}
 .app-focus .video-controls select.rate-select {
- width:98px!important;min-width:98px;flex:0 0 98px;height:34px;
- padding:6px 43px 6px 12px!important;
- background-position:right 17px center!important;
+ box-sizing:border-box!important;width:80px!important;min-width:80px!important;max-width:80px!important;flex:0 0 80px!important;height:34px;
+ padding:6px 26px 6px 10px!important;
+ background-position:right 10px center!important;background-size:10px 7px!important;
  font:700 12px 'IBM Plex Mono',monospace!important;
 }
 .app-focus .video-controls input.seek{accent-color:var(--orange)!important;}
