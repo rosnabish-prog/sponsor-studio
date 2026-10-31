@@ -29,6 +29,7 @@ import { nextSavedSponsorStart, retagSponsorFromTimestamp } from '../src/domain/
 import { preserveAnnotationsOnRewind } from '../src/domain/annotationRewind';
 import { assertNoBulkAnnotationDeletion } from '../src/api/sync';
 import { editSingleInterval } from '../src/domain/isolatedInterval';
+import { annotationChanges, lastAnnotatedTimestamp, nextBoundary, sameAnnotationContent, serverSnapshotMatchesRow, snapshotAnnotations } from '../src/domain/annotationUndo';
 import { AttributesScreen, SponsorLibraryScreen, TeamScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
 import type { TaskSummary, StudioData } from '../src/types/models';
@@ -188,7 +189,7 @@ const studio:StudioScreenModel={
     id:task.id,workspaceId:'w1',number:task.number,name:task.name,duration:task.duration,status:'done',
     sponsorAnalyst:'Worker',contextAnalyst:'Worker',canSponsor:true,canContext:true,
     selectedTab:'all',tick:20,sponsorCount:0,logCount:2,cameraLabel:'CAMERA NOT SELECTED',
-    seekStep:5,playbackRate:1,videoDimensions:'',videoError:'',playing:false,railTitle:'SPONSORS',railHint:'',
+    seekStep:5,playbackRate:1,undoCount:2,sponsorsHidden:false,lastAnnotatedAt:30,pendingBackfillIds:[],videoDimensions:'',videoError:'',playing:false,railTitle:'SPONSORS',railHint:'',
     submitted:task.submitted,task,sponsors:data.sponsorGroups[0].sponsors,events:data.eventGroups[0].items,
     cameras:data.cameraGroups[0].items,isLocalVideo:false,
 };
@@ -222,6 +223,49 @@ test('changing a sponsor or event interval cannot touch another label or another
   assert.equal(editSingleInterval(sponsors,'one',0,25,(a,b)=>a.sponsorId===b.sponsorId),'updated');
   assert.equal(JSON.stringify({sibling:sponsors.slice(1),events}),before);
   assert.equal(editSingleInterval(sponsors,'one',0,32,(a,b)=>a.sponsorId===b.sponsorId),'overlap');
+});
+
+test('an empty gap before a future tag has an independent boundary and does not change the future tag',()=>{
+ const rows=[
+  {id:'first',sponsorId:'brand',start:120,end:180,createdBy:'a1',createdAt:'now'},
+  {id:'future',sponsorId:'brand',start:660,end:690,createdBy:'a1',createdAt:'now'},
+ ];
+ const future=JSON.stringify(rows[1]);
+ assert.equal(nextBoundary(rows,180),660);
+ assert.equal(nextBoundary(rows,190),660);
+ rows.push({id:'gap',sponsorId:'brand',start:190,end:600,createdBy:'a1',createdAt:'now'});
+ assert.equal(JSON.stringify(rows[1]),future);
+ assert.equal(nextBoundary(rows,190),660);
+ const activeFuture=[...rows,{id:'later-live',sponsorId:'brand',start:750,end:null,createdBy:'a1',createdAt:'now'}];
+ assert.equal(nextBoundary(activeFuture,700),750,'LIVE intervals also bound earlier gap drafts');
+});
+
+test('10-step undo tracking compares individual annotation IDs without modifying unrelated tracks',()=>{
+ const original=snapshotAnnotations(task);
+ const mutated=JSON.parse(JSON.stringify(task)) as TaskSummary;
+ mutated.sponsors[0].end=25;
+ const changes=annotationChanges(original,snapshotAnnotations(mutated));
+ assert.deepEqual(changes.map(change=>`${change.track}:${change.id}`),['sponsors:one']);
+ assert.equal(changes[0].before?.end,30);
+ assert.equal(changes[0].after?.end,25);
+ assert.equal(sameAnnotationContent(changes[0].after,{...changes[0].after!,revision:8}),true);
+ assert.equal(sameAnnotationContent(changes[0].after,changes[0].before),false);
+ assert.equal(serverSnapshotMatchesRow({labelId:'s1',start:2,end:25,placement:null,quality:null},changes[0].after!),true);
+ assert.equal(serverSnapshotMatchesRow({labelId:'s1',start:2,end:40,placement:null,quality:null},changes[0].after!),false);
+ assert.equal(lastAnnotatedTimestamp(task),45);
+ assert.equal(lastAnnotatedTimestamp({...task,sponsors:[],events:[],cameras:[]}),null);
+});
+
+test('studio exposes Hide All, session undo, jump to last label and step-based seek controls',()=>{
+ const html=renderToStaticMarkup(<AnnotationStudioScreen model={studio} isAdmin={false}/>);
+ assert.match(html,/HIDE ALL/);
+ assert.match(html,/UNDO LAST CHANGE/);
+ assert.match(html,/2\/10/);
+ assert.match(html,/LAST ANNOTATED/);
+ assert.match(html,/Seek backward/);
+ assert.match(html,/Seek forward/);
+ assert.match(html,/5 SEC/);
+ assert.match(renderToStaticMarkup(<AnnotationStudioScreen model={{...studio,sponsorsHidden:true}} isAdmin={false}/>),/UNHIDE ALL/);
 });
 
 test('Studio offers direct playback speeds from quarter-speed through double-speed', () => {

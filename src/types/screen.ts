@@ -54,6 +54,10 @@ export interface StudioScreenModel {
   cameraLabel: string;
   seekStep: number;
   playbackRate: number;
+  undoCount: number;
+  sponsorsHidden: boolean;
+  lastAnnotatedAt: number | null;
+  pendingBackfillIds: string[];
   videoDimensions: string;
   videoError: string;
   playing: boolean;
