@@ -1,10 +1,5 @@
 # Sponsor Studio AWS deployment outline
 
-For the existing single-EC2 Docker Compose production installation, see
-[Automatic deployment from `development` to EC2](EC2-AUTO-DEPLOY.md).
-That is an alternative to the ECS/Fargate architecture below. The EC2 workflow
-is disabled until its explicit GitHub safety switch is enabled.
-
 No AWS resources have been created by this repository. Production infrastructure must be deployed into the customer's own AWS account under a scoped deployment role; never commit access keys, CloudFront private keys, password reset links, or production database credentials.
 
 Recommended production layout:

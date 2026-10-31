@@ -11,5 +11,3 @@ playwright-report/
 apps/api/src/generated/
 # Site-specific HTTPS configuration lives on the EC2 host.
 /Caddyfile
-# Advisory deployment lock for the production checkout.
-/.deploy.lock

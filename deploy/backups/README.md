@@ -7,13 +7,8 @@ This app has two *separate* recovery mechanisms:
 
 ## Deploy and verify
 
-**Automatic EC2 deployment currently skips this service.** The operator chose
-not to require backups for automatic releases. The Compose service remains
-available for an explicitly initiated backup setup, but the EC2 deploy script
-starts only `postgres`, `migrations`, `api`, `web`, and `caddy` and does not run
-`pg_dump`. No new deployment backup should be assumed to exist.
-
-To opt in to backups, start and verify the optional backup service using the production Compose files. The automatic EC2 deployment workflow does not enable this service.
+To enable backups manually, start and verify the optional service using the
+production Compose files. This is independent of application deployment.
 
 ```sh
 docker compose -f compose.yaml -f compose.prod.yaml up -d backups
