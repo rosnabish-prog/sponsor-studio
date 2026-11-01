@@ -62,6 +62,7 @@ export function ExposureTrend({ data, focusId, windowSeconds = 300 }: { data: In
     return {brand,seconds,percent:100*seconds/Math.max(1,hoverBucket.end-hoverBucket.start)};
   }).filter(entry => entry.seconds>0 || entry.brand.id===focusId).sort((a,b)=>b.seconds-a.seconds) : [];
   const totalAtHover = hoverBucket ? 100*overlap(hoverBucket.start,hoverBucket.end,totalRanges)/Math.max(1,hoverBucket.end-hoverBucket.start) : 0;
+  const momentsAtHover = hoverBucket ? data.highValueEvents.filter(event => event.start < hoverBucket.end && event.end >= hoverBucket.start).slice(0,8) : [];
   function selectHoverWindow(event: MouseEvent<SVGSVGElement>) {
     const rect=event.currentTarget.getBoundingClientRect();
     const scale=Math.min(rect.width/width,rect.height/height);
@@ -76,6 +77,7 @@ export function ExposureTrend({ data, focusId, windowSeconds = 300 }: { data: In
   return <div className="exposure-curve-wrap">
     <div className="exposure-curve-legend">
       {series.map(item => <span key={item.name}><i style={{background:item.color}} />{item.name}</span>)}
+      {data.highValueEvents.length>0&&<span><i style={{background:'#e6b36a'}} />High-value event markers</span>}
       {!focus && data.active.length > 3 && <small>Showing top 3 brands + total coverage</small>}
     </div>
     <div className="exposure-chart-stage">
@@ -86,6 +88,10 @@ export function ExposureTrend({ data, focusId, windowSeconds = 300 }: { data: In
         <text x={left-12} y={y(share)+4} textAnchor="end" fill="#a1a3aa" fontSize="11">{Number(share.toFixed(1))}%</text>
       </g>;})}
       {[0,.25,.5,.75,1].map(fraction => <text key={fraction} x={x(fraction*data.videoSeconds)} y={height-12} textAnchor={fraction===0?'start':fraction===1?'end':'middle'} fill="#a1a3aa" fontSize="11">{fmt(fraction*data.videoSeconds)}</text>)}
+      {data.highValueEvents.slice(0,60).map(event=><g key={event.id}>
+        <line x1={x(event.start)} x2={x(event.start)} y1={top} y2={height-bottom} stroke="#e6b36a" strokeOpacity=".56" strokeWidth="1.5" strokeDasharray="2 7" />
+        <circle cx={x(event.start)} cy={top+1} r="3.2" fill="#f5bd72"><title>{`${event.name} · ${fmt(event.start)} · ${event.brands.length} brands tagged during event`}</title></circle>
+      </g>)}
       {series.map(item => {
         const p = points(item.values);
         const line = curve(p);
@@ -103,6 +109,7 @@ export function ExposureTrend({ data, focusId, windowSeconds = 300 }: { data: In
     {hoverBucket && <div className="exposure-hover-card" role="tooltip" data-chart-tooltip="sponsors">
       <strong>{fmt(hoverBucket.start)} – {fmt(hoverBucket.end)}</strong>
       <span className="exposure-hover-total">At least one sponsor visible: {totalAtHover.toFixed(1)}% of this interval</span>
+      {momentsAtHover.length>0&&<span className="exposure-hover-total">Key moments: {momentsAtHover.map(event=>`${event.name} ${fmt(event.start)}`).join(' · ')}</span>}
       {visibleInBucket.length ? <div className="exposure-hover-brands">{visibleInBucket.map(entry => <div className="exposure-hover-brand" key={entry.brand.id}>
         <span className="exposure-hover-brand-name">{entry.brand.logo ? <img src={entry.brand.logo} alt="" /> : <i style={{background:entry.brand.color||'#ff9b36'}} />}<b>{entry.brand.name}</b></span>
         <span>{entry.percent.toFixed(1)}% <small>· {fmt(entry.seconds)}</small></span>
