@@ -8,6 +8,7 @@ import { readStudioRoute, writeStudioRoute } from '../src/state/routes';
 import { annotatedEndpoint, labelingProgress, measuredCoverage } from '../src/domain/labelingProgress';
 import { recoverVideo } from '../src/state/videoRecovery';
 import { computeInsights } from '../src/domain/analytics';
+import { computeContextIntelligence } from '../src/domain/contextIntelligence';
 import { ExposureReport } from '../src/components/ReportWidgets';
 import { ExposureTrend } from '../src/components/ExposureTrend';
 import { MatchesScreen } from '../src/components/MatchScreens';
@@ -51,6 +52,64 @@ const data:StudioData = {
   cameraGroups:[{id:'c1',name:'Cameras',items:[{id:'camera',name:'Wide'}]}],
   tasks:[task],
 };
+
+test('context intelligence measures close-up visibility, moment phases, brand overlap and camera-cut continuity without double counting',()=>{
+  const base={createdBy:'a1',createdAt:'2026-10-29'};
+  const measured:TaskSummary={...task,duration:120,observedTime:120,
+    sponsors:[
+      {id:'a1',sponsorId:'s1',start:0,end:20,...base},
+      {id:'a2',sponsorId:'s1',start:30,end:60,properties:{clarity:'unclear'},...base},
+      {id:'a3',sponsorId:'s1',start:85,end:90,...base},
+      {id:'b1',sponsorId:'s2',start:10,end:40,...base},
+      {id:'c1',sponsorId:'s3',start:15,end:20,...base},
+    ],
+    events:[{id:'goal',eventId:'goal',kind:'range',start:35,end:45,...base}],
+    cameras:[
+      {id:'close',cameraId:'close',start:0,end:50,...base},
+      {id:'wide',cameraId:'wide',start:50,end:80,...base},
+      {id:'replay',cameraId:'replay',start:80,end:100,...base},
+    ],
+  };
+  const sources={sponsors:data.sponsorGroups[0].sponsors,
+    events:[{id:'goal',name:'Goal',kind:'range' as const,highValue:true}],
+    cameras:[{id:'close',name:'Close-up / zoomed'},{id:'wide',name:'Wide - Center'},{id:'replay',name:'Replay angle'}]};
+  const details=computeContextIntelligence(measured,sources);
+  assert.equal(details.cameraTaggedSeconds,100);
+  assert.equal(details.closeup.seconds,50);
+  assert.equal(details.closeup.visibleSeconds,50);
+  assert.equal(details.closeup.combinedBrandSeconds,75);
+  assert.equal(details.replay.visibleSeconds,5);
+  assert.equal(details.maximumConcurrent,3);
+  assert.equal(details.multiBrandSeconds,20);
+  assert.equal(details.parallelSeconds.reduce((a,b)=>a+b,0),120);
+  assert.equal(details.momentPhases[0].visibleSeconds,10);
+  assert.equal(details.momentPhases[1].visibleSeconds,10);
+  assert.equal(details.momentPhases[2].visibleSeconds,10);
+  assert.equal(details.momentRows[0].closeupSponsorSeconds,10);
+  assert.equal(details.cuts,2);
+  assert.equal(details.cutRetention.find(brand=>brand.id==='s1')?.retained,1);
+  assert.equal(details.brandContexts.find(brand=>brand.id==='s1')?.median,20);
+  assert.equal(details.brandContexts.find(brand=>brand.id==='s1')?.flaggedClaritySeconds,30);
+  const html=renderToStaticMarkup(<ExposureReport task={measured} source={sources} focusId=""/>);
+  assert.match(html,/BROADCAST CONTEXT SNAPSHOT/);
+  assert.match(html,/KEY MOMENTS · BEFORE, DURING &amp; AFTER/);
+  assert.match(html,/CLOSE-UP &amp; REPLAY VISIBILITY/);
+  assert.match(html,/CAMERA-CUT CONTINUITY/);
+  assert.match(html,/BRAND CONTEXT &amp; EXPOSURE QUALITY/);
+  assert.match(html,/EXPOSURE CONTEXT MAP/);
+  assert.match(html,/BRAND × CAMERA VISIBILITY MATRIX/);
+  assert.match(html,/BRAND EXPOSURE HEATMAP · BY MOMENT PHASE/);
+  assert.match(html,/Close-up \/ zoomed/);
+  assert.match(html,/intel-map-span/);
+  assert.match(html,/intel-heatmap/);
+  const viewerHtml=renderToStaticMarkup(<ExposureReport task={measured} source={sources} focusId="" viewer/>);
+  assert.match(viewerHtml,/EXPOSURE CONTEXT MAP/);
+  assert.doesNotMatch(viewerHtml,/Open studio|OPEN AT TIME|Open footage/);
+  const empty=computeContextIntelligence({...measured,sponsors:[],events:[],cameras:[]},sources);
+  assert.equal(empty.closeup.rate,0);
+  assert.equal(empty.cutRetentionOpportunities,0);
+  assert.equal(empty.parallelSeconds[0],120);
+});
 
 test('recorded camera edit preserves every unrelated timeline row and is a no-op at the original time',()=>{
   const base={createdAt:'2026-10-29',createdBy:'a1'};
