@@ -2,9 +2,11 @@ import { useState } from 'react';
 import type { ReportsScreenModel } from '../types/screen';
 import type { TaskSummary } from '../types/models';
 import { computeInsights, type InsightData, type InsightSources } from '../domain/analytics';
+import { computeContextIntelligence } from '../domain/contextIntelligence';
 import { formatTimestamp as fmt } from '../domain/intervals';
 import { BrandLogo } from './StudioWidgets';
 import { ExposureTrend, exposureWindows, type TimeWindow } from './ExposureTrend';
+import { ExposureContextMap, CameraBrandHeatmap, MomentBrandHeatmap, CameraVisibilityBars } from './ContextVisuals';
 
 const percent = (n: number) => `${(Number.isFinite(n) ? n : 0).toFixed(1)}%`;
 function Section({ title, note, aside, children, className = '' }: { title: string; note: string; aside?: React.ReactNode; children: React.ReactNode; className?: string }) {
@@ -32,12 +34,17 @@ function Breakdown({ rows, total, quality = false }: { rows: { key: string; labe
   </div>)}</>;
 }
 
-export function ExposureReport({ task, source, focusId }: { task: TaskSummary; source: InsightSources; focusId: string }) {
+export function ExposureReport({ task, source, focusId, viewer = false }: { task: TaskSummary; source: InsightSources; focusId: string; viewer?: boolean }) {
   const [windowSeconds, setWindowSeconds] = useState<TimeWindow>(300);
   const d = computeInsights(task, source);
+  const context = computeContextIntelligence(task, source, d);
   const focus = d.active.find(brand => brand.id === focusId);
   const incomplete = !(task.submitted?.sponsors && task.submitted?.context);
   const peak = Math.max(1, ...d.active.map(brand => brand.seconds));
+  const peakWindows = d.buckets.map(bucket => {
+    const visible = focus ? focus.own.reduce((total, interval) => total + Math.max(0, Math.min(interval.end, bucket.end) - Math.max(interval.start, bucket.start)), 0) : bucket.covered;
+    return { ...bucket, visible, visiblePct: d.pct(visible, bucket.end - bucket.start) };
+  }).filter(bucket => bucket.visible > 0).sort((a, b) => b.visiblePct - a.visiblePct || b.visible - a.visible).slice(0, 5);
   const cards = [
     { label: 'TOTAL SPONSOR VISIBILITY', value: fmt(d.sumSeconds), note: 'Combined unique-brand seconds; multiple brands add separately' },
     { label: 'EXPOSURE FREQUENCY', value: String(d.frequency), note: 'Distinct positive-duration sponsor appearances' },
@@ -51,6 +58,8 @@ export function ExposureReport({ task, source, focusId }: { task: TaskSummary; s
     d.eventOpen && `${d.eventOpen} key-event interval(s) still open`,
     d.cameraOpen && `${d.cameraOpen} camera interval(s) still open`,
     d.cameraCovered === 0 && 'No camera-angle coverage recorded',
+    context.cameraCoverage < 99 && `Camera-angle coverage is ${percent(context.cameraCoverage)}; comparisons by view use only tagged camera footage`,
+    !context.closeup.seconds && 'No camera interval labelled close-up or zoomed; zoom-view exposure cannot be calculated',
     !d.periodMapped && 'Match half boundaries not mapped',
     d.placementUnclassified > 0 && 'Some sponsor exposures have no placement type',
     d.qualityUnclassified > 0 && 'Some sponsor exposures have no visibility quality',
@@ -61,6 +70,14 @@ export function ExposureReport({ task, source, focusId }: { task: TaskSummary; s
       <span className={`insight-quality ${incomplete ? 'draft' : 'complete'}`}>{incomplete ? 'PRELIMINARY · ANNOTATION IN PROGRESS' : 'SUBMITTED DATA'}</span>
     </div>
     <div className="insight-stat-grid">{cards.map(card => <article className="insight-stat" key={card.label}><span>{card.label}</span><strong>{card.value}</strong><p>{card.note}</p></article>)}</div>
+    <Section title="BROADCAST CONTEXT SNAPSHOT" note="Adds camera-view context and concurrent visibility to the core exposure measurements. Camera types come from analyst labels.">
+      <div className="intel-context-kpis">
+        <article><span>CLOSE-UP VIEW · SPONSOR VISIBLE</span><strong>{context.closeup.seconds ? fmt(context.closeup.visibleSeconds) : '—'}</strong><small>{context.closeup.seconds ? `${percent(context.closeup.rate)} of ${fmt(context.closeup.seconds)} close-up footage` : 'No close-up/zoomed camera label recorded'}</small></article>
+        <article><span>REPLAY VIEW · SPONSOR VISIBLE</span><strong>{context.replay.seconds ? fmt(context.replay.visibleSeconds) : '—'}</strong><small>{context.replay.seconds ? `${percent(context.replay.rate)} of ${fmt(context.replay.seconds)} replay footage` : 'No replay camera interval recorded'}</small></article>
+        <article><span>2+ BRANDS VISIBLE TOGETHER</span><strong>{fmt(context.multiBrandSeconds)}</strong><small>Maximum {context.maximumConcurrent} distinct brands at once</small></article>
+        <article><span>CAMERA ANGLE SWITCHES</span><strong>{context.cuts}</strong><small>{context.cameraTaggedSeconds ? `${context.cutsPerMinute.toFixed(1)} switches per annotated camera minute` : 'Camera annotation required'}</small></article>
+      </div>
+    </Section>
     <Section title="WHERE SPONSORS APPEAR IN THE MATCH" note={focus ? `${focus.name} was visible for ${fmt(focus.seconds)} (${percent(d.pct(focus.seconds,d.videoSeconds))} of the broadcast).` : d.active.length ? `${fmt(d.coveredSeconds)} of ${fmt(d.videoSeconds)} has recorded sponsor visibility across ${d.active.length} brands.` : 'No sponsor exposure has been recorded in this match.'} className="insight-trend"
       aside={<div className="insight-trend-filters">
         <label className="insight-select" htmlFor="exposureInterval">TIME INTERVAL<select id="exposureInterval" value={windowSeconds} onChange={event => setWindowSeconds(Number(event.target.value) as TimeWindow)}>
@@ -71,6 +88,13 @@ export function ExposureReport({ task, source, focusId }: { task: TaskSummary; s
       </div>}>
       <ExposureTrend data={d} focusId={focusId} windowSeconds={windowSeconds} />
       <div className="insight-trend-footer"><span>FIRST FRAME 00:00</span><span>{focus?.name.toUpperCase() || 'ANY SPONSOR VISIBLE'}</span><span>FINAL FRAME {fmt(d.videoSeconds)}</span></div>
+      <div className="intel-peak-windows"><strong>TOP 5-MINUTE VISIBILITY WINDOWS · {focus?.name.toUpperCase() || 'ANY SPONSOR'}</strong><div>{peakWindows.map(bucket=><div key={bucket.start} className="intel-peak-window">
+        {viewer ? <span>{fmt(bucket.start)}–{fmt(bucket.end)}</span> : <button type="button" onClick={()=>window.goToAnnotatedTime?.(task.id,bucket.start)} title="Open studio at the start of this exposure window">{fmt(bucket.start)}–{fmt(bucket.end)}</button>}
+        <b>{percent(bucket.visiblePct)}</b><small>{fmt(bucket.visible)} {focus ? 'brand' : 'sponsor'}-visible · {bucket.eventCount} events</small>
+      </div>)}{!peakWindows.length&&<span className="insight-muted">No measured visibility windows yet.</span>}</div></div>
+    </Section>
+    <Section title="EXPOSURE CONTEXT MAP" note={`A shared video-time map of sponsor presence, key moments, zoomed camera views, replays and camera coverage.${viewer ? '' : ' Select a segment to open the footage.'}`}>
+      <ExposureContextMap data={d} context={context} focusId={focusId} taskId={task.id} viewer={viewer} />
     </Section>
     <Section title="BRAND EXPOSURE LEADERBOARD" note="Only brands with measurable positive-duration exposure. Share of voice is brand seconds divided by combined brand seconds." aside={<span className="insight-count">{d.active.length} BRANDS RECORDED</span>}>
       <div className="tablewrap"><table className="table insight-table"><thead><tr><th>BRAND</th><th>VISIBLE TIME</th><th>% OF MATCH</th><th>VISIBILITY SHARE</th><th>APPEARANCES</th><th>AVG DURATION</th><th>LONGEST</th><th>EVENTS</th></tr></thead>
@@ -114,33 +138,83 @@ export function ExposureReport({ task, source, focusId }: { task: TaskSummary; s
       </div>)}{!d.brandHighValue.length && <Note>No sponsor overlap during the currently identified high-value event intervals.</Note>}</div>
       <p className="intel-unknown">Highlights use goal, celebration, penalty, trophy or award event names unless a custom event is explicitly marked high value. This is exposure context, not a sponsorship valuation.</p>
     </Section>
+    <Section title="KEY MOMENTS · BEFORE, DURING & AFTER" note="Ten seconds before and after each highlighted interval, plus its exact tagged duration. Independent phase windows may overlap when events occur close together." aside={<span className="insight-count">{context.momentRows.length} MOMENTS</span>}>
+      <div className="intel-moment-phases">{context.momentPhases.map(phase => <article key={phase.key}>
+        <div className="intel-phase-title"><span>{phase.label}</span><b>{phase.seconds ? percent(phase.coverage) : '—'}</b></div>
+        <strong>{phase.seconds ? fmt(phase.visibleSeconds) : '—'}</strong><small>BRAND-VISIBLE TIME / {fmt(phase.seconds)} MEASURED</small>
+        <div className="intel-breakdown-meter"><i style={{width:`${Math.min(100,phase.coverage)}%`}} /></div>
+        <p>{phase.brands.length ? phase.brands.slice(0,3).map(brand=>`${brand.name} ${fmt(brand.seconds)}`).join(' · ') : 'No measured brand overlap'}</p>
+      </article>)}</div>
+      <h4 className="intel-context-subtitle">BRAND EXPOSURE HEATMAP · BY MOMENT PHASE</h4>
+      <MomentBrandHeatmap context={context} />
+      <div className="intel-context-list">{context.momentRows.slice(0,30).map(event=><div className="intel-moment-detail" key={event.id}>
+        <div><b>{event.name}</b><span>{fmt(event.start)}–{fmt(event.end)} · {event.open?'OPEN':'SAVED'}</span></div>
+        <p>{event.brands.length ? event.brands.map(brand=>`${brand.name} (${fmt(brand.seconds)})`).join(' · ') : 'No overlapping sponsor tags'}</p>
+        <small>{event.cameraNames.length ? `Camera: ${event.cameraNames.join(', ')}` : 'Camera context not recorded'} · Close-up brand-visible: {fmt(event.closeupSponsorSeconds)}</small>
+        {!viewer && <button className="insight-jump" onClick={()=>window.goToAnnotatedTime?.(task.id,event.start)}>OPEN AT TIME</button>}
+      </div>)}{!context.momentRows.length&&<Note>No high-value event intervals recorded. Mark relevant event types as high value in the attribute catalog.</Note>}</div>
+    </Section>
     <div className="insight-columns">
       <Section title="KEY EVENT SPONSOR ASSOCIATIONS" note="Exactly which brands overlapped each recorded match action." aside={<span className="insight-count">{d.eventRows.length} EVENTS</span>}>
         <div className="insight-event-summaries">{d.eventGroups.map(group => <div className="insight-event-summary" key={group.name}><strong>{group.name}</strong><span>{group.withBrands} / {group.count} WITH SPONSORS</span><b>{fmt(group.seconds)}</b></div>)}
           {!d.eventGroups.length && <Note>No key events have been tagged.</Note>}</div>
         <div className="insight-events-list">{d.eventRows.slice(0, 80).map(event => <div className="insight-event-card" key={event.id}>
           <div className="insight-event-heading"><div><b>{event.name}</b><span>{fmt(event.start)} – {event.legacyPoint ? 'LEGACY POINT' : event.open ? 'OPEN' : fmt(event.end)}</span></div>
-            <button className="insight-jump" onClick={() => window.goToAnnotatedTime?.(task.id, event.start)}>OPEN AT TIME</button></div>
+            {!viewer && <button className="insight-jump" onClick={() => window.goToAnnotatedTime?.(task.id, event.start)}>OPEN AT TIME</button>}</div>
           <div className="insight-event-metrics"><strong>{event.brands.length} BRANDS OVERLAPPED</strong><span>{event.legacyPoint ? 'MOMENT TAG' : `${percent(event.coveragePct)} OF EVENT HAS A BRAND VISIBLE`}</span></div>
           <p>{event.brands.length ? event.brands.map(brand => brand.name).join(' · ') : 'No sponsor visibility overlaps this event'}</p>
         </div>)}{!d.eventRows.length && <Note>Tag events with start and end timestamps to reveal sponsor exposure during important moments.</Note>}</div>
       </Section>
-      <Section title="SIMULTANEOUS BRAND VISIBILITY" note="Brands that appeared together, counted as one exposure per brand.">
+      <Section title="SIMULTANEOUS BRAND VISIBILITY" note="Distinct brands sharing a frame. Each sponsor counts once, even when multiple copies of a logo appear.">
+        <div className="intel-parallel-distribution">{context.parallelSeconds.map((seconds,index)=><div key={index}>
+          <span>{['NO BRAND TAG','1 BRAND','2 BRANDS','3+ BRANDS'][index]}</span><b>{fmt(seconds)}</b>
+          <div className="intel-breakdown-meter"><i style={{width:`${Math.min(100,d.pct(seconds,d.videoSeconds))}%`}} /></div>
+        </div>)}</div>
         {d.pairs.slice(0, 8).map(pair => <div className="insight-pair" key={`${pair.a}:${pair.b}`}><span>{pair.a} <em>+</em> {pair.b}</span><b>{fmt(pair.seconds)}</b></div>)}
         {!d.pairs.length && <Note>No overlapping sponsor pairs recorded yet.</Note>}
         <div className="insight-coverage-note"><b>NO SPONSOR TAG RECORDED</b><strong>{fmt(Math.max(0, d.videoSeconds - d.coveredSeconds))}</strong><span>Footage without recorded sponsor visibility. This does not prove no sponsor appeared when annotation is incomplete.</span></div>
       </Section>
     </div>
-    <Section title="CAMERA-ANGLE PERFORMANCE" note="Tagging-time coverage and sponsor presence in each broadcast camera view." aside={<span className="insight-count">{percent(d.pct(d.cameraCovered, d.videoSeconds))} CAMERA TAGGED</span>}>
-      <div className="tablewrap"><table className="table insight-table"><thead><tr><th>CAMERA</th><th>CAMERA DURATION</th><th>% OF MATCH</th><th>BRAND EXPOSURE</th><th>BRANDS SEEN</th><th>TOP BRAND</th></tr></thead><tbody>
-        {d.cameras.filter(camera=>camera.seconds>0).map(camera => <tr key={camera.id}><td><b>{camera.name}</b></td><td>{fmt(camera.seconds)}</td><td>{percent(d.pct(camera.seconds, d.videoSeconds))}</td>
-          <td>{fmt(camera.sponsorSeconds)}</td><td>{camera.sponsorCount}</td><td>{camera.leader && camera.leader.seconds > 0 ? camera.leader.name : '—'}</td></tr>)}
-        {!d.cameras.some(camera=>camera.seconds>0) && <tr><td colSpan={6}>No measurable camera intervals recorded yet.</td></tr>}
+    <Section title="CAMERA-ANGLE PERFORMANCE" note="Shot frequency, average shot length, and actual sponsor-visible footage within each tagged camera context." aside={<span className="insight-count">{percent(context.cameraCoverage)} CAMERA TAGGED</span>}>
+      <CameraVisibilityBars context={context} />
+      <div className="tablewrap"><table className="table insight-table"><thead><tr><th>CAMERA</th><th>TAGGED TIME</th><th>SHOTS</th><th>AVG SHOT</th><th>BRAND-VISIBLE TIME</th><th>VIEW COVERAGE</th><th>COMBINED BRAND TIME</th><th>TOP BRAND</th></tr></thead><tbody>
+        {context.cameraRows.filter(camera=>camera.seconds>0).map(camera => <tr key={camera.id}><td><b>{camera.name}</b></td><td>{fmt(camera.seconds)}</td><td>{camera.shots}</td><td>{camera.shots?fmt(camera.seconds/camera.shots):'—'}</td>
+          <td>{fmt(camera.sponsorVisibleSeconds)}</td><td>{percent(camera.visibilityRate)}</td><td>{fmt(camera.combinedBrandSeconds)}</td><td>{camera.brandRows[0]?.name||'—'}</td></tr>)}
+        {!context.cameraRows.some(camera=>camera.seconds>0) && <tr><td colSpan={8}>No measurable camera intervals recorded yet.</td></tr>}
       </tbody></table></div>
+      <p className="intel-unknown">View coverage = seconds with at least one tagged sponsor ÷ seconds in that camera angle. Combined brand time counts different brands separately. Camera labels describe the broadcast shot, not the size of any logo.</p>
+    </Section>
+    <Section title="BRAND × CAMERA VISIBILITY MATRIX" note="Exact overlap seconds for each brand and annotated camera angle. Percentage uses that camera angle's tagged duration as its denominator.">
+      <CameraBrandHeatmap context={context} />
+    </Section>
+    <div className="insight-columns">
+      <Section title="CLOSE-UP & REPLAY VISIBILITY" note="Where sponsors appear during close-up, zoomed and replay camera annotations. This does not imply the logo itself was zoomed.">
+        {[context.closeup,context.replay].map(group=><div className="intel-view-card" key={group.name}>
+          <div className="intel-view-title"><b>{group.name.toUpperCase()}</b><strong>{group.seconds?fmt(group.visibleSeconds):'—'}</strong></div>
+          <p>{group.seconds ? `${percent(group.rate)} of tagged ${group.name.toLowerCase()} time has at least one sponsor` : 'No matching camera angle recorded'}</p>
+          <div className="intel-breakdown-meter"><i style={{width:`${Math.min(100,group.rate)}%`}} /></div>
+          <div className="intel-view-brands">{group.brands.slice(0,6).map(brand=><div key={brand.id}><span>{brand.name}</span><b>{fmt(brand.seconds)} · {percent(brand.shareOfBrand)} of its exposure</b></div>)}
+            {!group.brands.length&&<Note>No measured sponsor overlap in this view.</Note>}</div>
+          {group.cameraNames.length>0&&<small>CAMERA LABELS: {group.cameraNames.join(' · ')}</small>}
+        </div>)}
+      </Section>
+      <Section title="CAMERA-CUT CONTINUITY" note="A brand is retained across a tagged cut if it appears within two seconds before and after the camera switch.">
+        <div className="intel-cut-summary"><div><span>VALID CAMERA CUTS</span><strong>{context.cuts}</strong></div><div><span>BRAND RETAINED</span><strong>{context.cutRetentionOpportunities?percent(context.pct(context.cutRetained,context.cutRetentionOpportunities)):'—'}</strong></div></div>
+        {context.cutRetention.slice(0,8).map(brand=><div key={brand.id} className="intel-cut-row"><span>{brand.name}</span><b>{brand.retained}/{brand.opportunities} cuts</b></div>)}
+        {!context.cutRetention.length&&<Note>No sponsor-visible camera transitions measured. Consecutive camera intervals must meet within 0.75 seconds.</Note>}
+        <p className="intel-unknown">Retention is a per-brand count, not an audience engagement metric. Missing camera coverage can make this incomplete.</p>
+      </Section>
+    </div>
+    <Section title="BRAND CONTEXT & EXPOSURE QUALITY" note="Compare event-linked exposure, close-up/replay context, first appearance, exposure consistency, and explicitly flagged clarity issues." aside={<span className="insight-count">{context.brandContexts.length} EXPOSED BRANDS</span>}>
+      <div className="tablewrap"><table className="table insight-table"><thead><tr><th>BRAND</th><th>FIRST SEEN</th><th>MEDIAN APPEARANCE</th><th>90TH PERCENTILE</th><th>SHORT ≤2 SEC</th><th>KEY MOMENTS</th><th>CLOSE-UP VIEW</th><th>REPLAY VIEW</th><th>FLAGGED CLARITY</th></tr></thead><tbody>
+        {context.brandContexts.map(brand=><tr key={brand.id}><td><b>{brand.name}</b></td><td>{brand.first===null?'—':fmt(brand.first)}</td><td>{fmt(brand.median)}</td><td>{fmt(brand.p90)}</td><td>{brand.shortAppearances} / {brand.appearances}</td><td>{fmt(brand.momentSeconds)} · {brand.momentCount} events</td><td>{context.closeup.seconds?fmt(brand.closeupSeconds):'—'}</td><td>{context.replay.seconds?fmt(brand.replaySeconds):'—'}</td><td>{fmt(brand.flaggedClaritySeconds)}</td></tr>)}
+        {!context.brandContexts.length&&<tr><td colSpan={9}>No measured sponsor intervals are available for a brand comparison yet.</td></tr>}
+      </tbody></table></div>
+      <p className="intel-unknown">Clarity flags are explicit non-default sponsor sub-attributes (for example “Unclear”). The implicit “Clearly visible” default is not a manually verified quality rating. Median and 90th percentile use merged appearance durations.</p>
     </Section>
     <section className="insight-notes"><div><h3>DATA QUALITY &amp; INTERPRETATION</h3>
       <p>Based only on manually tagged sponsor presence. All durations reference footage timestamps, not clock time or estimated audience exposure. Different brands visible simultaneously each contribute their own exposure seconds, so combined brand exposure may exceed video duration. A sponsor is counted once even when its logo is repeated in the frame.</p>
-      <p>Unannotated footage is not proof that sponsors were absent. These annotations cannot establish logo size, screen coverage, ad prominence, audience impressions, monetary valuation, or whether an advertised brand was noticed by a viewer.</p></div>
+      <p>Unannotated footage is not proof that sponsors were absent. Close-up and replay statistics refer to the tagged camera context, not whether the sponsor logo was zoomed or readable. These annotations cannot establish logo size, screen coverage, ad prominence, audience impressions, monetary valuation, or whether an advertised brand was noticed by a viewer.</p></div>
       <div><h4>ANNOTATION CHECKS</h4><p>Latest annotated timestamp: {fmt(d.endpoint)} of {fmt(d.videoSeconds)}.</p>
         {warnings.length ? warnings.map(warning => <div className="insight-warning" key={warning}>{warning}</div>) : <div className="insight-ok">No open tags or missing camera coverage detected</div>}</div></section>
   </div>;
@@ -190,10 +264,10 @@ export function resolveSources(task: TaskSummary, model: ReportsScreenModel): In
   };
 }
 
-export function ReportsBody({ model }: { model: ReportsScreenModel }) {
+export function ReportsBody({ model, viewer = false }: { model: ReportsScreenModel; viewer?: boolean }) {
   const task = model.selectedTask;
   if (!task) return null;
-  return <><MatchHero task={task} model={model} /><ExposureReport task={task} source={resolveSources(task, model)} focusId={model.focusId} />
+  return <><MatchHero task={task} model={model} /><ExposureReport task={task} source={resolveSources(task, model)} focusId={model.focusId} viewer={viewer} />
     <TournamentBenchmark tasks={model.visibleTasks} model={model} /></>;
 }
 
