@@ -1,0 +1,27 @@
+name: Capture Sponsor Studio development insights preview
+on:
+  push:
+    branches: [preview/insights-screenshot]
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node --import tsx .preview/insights-screenshot.tsx
+      - name: Start development preview
+        run: npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/sponsor-preview.log 2>&1 &
+      - run: node .preview/capture.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sponsor-studio-insights-screenshots
+          path: |
+            sponsor-studio-insights-full.png
+            sponsor-studio-insights-top.png
+          retention-days: 3
