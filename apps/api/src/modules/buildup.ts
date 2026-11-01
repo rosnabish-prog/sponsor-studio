@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { BadGatewayException, BadRequestException, Controller, Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Req, Res, ServiceUnavailableException, UseGuards } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Controller, Get, Injectable, Logger, NotFoundException, Param, ParseUUIDPipe, Req, Res, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthRequest, SessionGuard } from './auth';
 import { TaskService } from './tasks';
@@ -10,6 +10,7 @@ const CDN_HOST = 'onestoscout.b-cdn.net';
 
 @Injectable()
 export class BuildupService {
+  private readonly logger = new Logger(BuildupService.name);
   private links = new Map<string, { url:string; expires:number }>();
   constructor(private readonly tasks:TaskService) {}
 
@@ -35,9 +36,13 @@ export class BuildupService {
       const href = html.match(/<a\b[^>]*\bhref=["']([^"']+)["']/i)?.[1]?.replace(/&amp;/g,'&');
       if (!href) throw new Error('Missing video link');
       const url = new URL(href);
-      if (url.protocol !== 'https:' || url.hostname !== CDN_HOST || url.port || url.username || url.password || url.pathname !== `/Matches/MatchID_${matchId}.mov`) throw new Error('Invalid video link');
+      const returnedMatchId = url.pathname.match(/^\/Matches\/MatchID_([1-9]\d{0,14})\.mov$/)?.[1];
+      if (url.protocol !== 'https:' || url.hostname !== CDN_HOST || url.port || url.username || url.password || !returnedMatchId) throw new Error('Invalid video link');
       const expires = Number(url.searchParams.get('expires')) * 1000;
       if (!Number.isFinite(expires) || expires <= Date.now()) throw new Error('Expired video link');
+      // The BuildUp API sometimes maps a requested match to a differently numbered
+      // signed CDN file. Trust the validated provider link, but record the mapping.
+      if (returnedMatchId !== matchId) this.logger.warn(`BuildUp requested match ${matchId} resolved to video ${returnedMatchId}`);
       if (this.links.size >= 500) this.links.delete(this.links.keys().next().value!);
       this.links.set(matchId,{url:url.toString(),expires});
       return url.toString();
