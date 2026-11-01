@@ -14,7 +14,7 @@ import { MatchesScreen } from '../src/components/MatchScreens';
 import { AnnotationStudioScreen } from '../src/components/AnnotationStudioScreen';
 import { attachVideoAlignmentPause } from '../src/components/videoAlignmentScroll';
 import { AppShell } from '../src/components/AppShell';
-import { StudioControls, StudioRail, StudioTimeline } from '../src/components/StudioWidgets';
+import { StudioControls, StudioRail, StudioTimeline, StudioLogs } from '../src/components/StudioWidgets';
 import { WorkspaceScreen } from '../src/components/WorkspaceScreen';
 import { LabelingStatusScreen } from '../src/components/LabelingStatusScreen';
 import { displayHotkey, hotkeyFromKeyboard, normalizeHotkey } from '../src/domain/hotkeys';
@@ -84,12 +84,17 @@ test('sponsor clarity is inherited by legacy sponsors and default remains implic
     ...task.sponsors[0],properties:{clarity:'unclear'},
   }]}};
   const rail=renderToStaticMarkup(<StudioRail model={annotated}/>);
-  assert.match(rail,/Clarity: Unclear/);
-  assert.match(rail,/\+ Details/);
+  assert.match(rail,/aria-label="SUB attributes for Recorded Brand"/);
+  assert.match(rail,/>SUB<\/button>/);
+  assert.doesNotMatch(rail,/\+ Details|Clearly visible/);
   const defaultRail=renderToStaticMarkup(<StudioRail model={{...annotated,task:{...annotated.task,sponsors:[{
     ...task.sponsors[0],properties:{},
   }]}}}/>);
-  assert.doesNotMatch(defaultRail,/Clarity: Clearly visible/);
+  assert.match(defaultRail,/aria-label="SUB attributes for Recorded Brand"/);
+  assert.doesNotMatch(defaultRail,/Clearly visible/);
+  const logs=renderToStaticMarkup(<StudioLogs model={annotated}/>);
+  assert.doesNotMatch(logs,/\+ Properties|Clearly visible/);
+  assert.match(logs,/Clarity: Unclear/);
   const saved={...task.sponsors[0],start:60,end:180,properties:{clarity:'unclear'}};
   assert.deepEqual(sponsorPropertyIntervals(saved,legacy).map(({start,end})=>[start,end]),[[60,180]]);
   assert.deepEqual(sponsorPropertyIntervals({...saved,end:null},legacy).map(({start,end})=>[start,end]),[[60,null]]);
@@ -97,6 +102,46 @@ test('sponsor clarity is inherited by legacy sponsors and default remains implic
   const timeline=renderToStaticMarkup(<StudioTimeline model={{...annotated,task:{...annotated.task,sponsors:[saved]}}}/>);
   assert.match(timeline,/↳ Clarity: Unclear/);
   assert.match(timeline,/block property/);
+});
+
+test('SUB is under sponsor status and only non-default options can be toggled',async()=>{
+  const dom=new JSDOM('<div id="mount"></div>',{url:'http://localhost/'});
+  const oldWindow=globalThis.window,oldDocument=globalThis.document;
+  const oldAct=(globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT;
+  (globalThis as unknown as {window:Window}).window=dom.window as unknown as Window;
+  (globalThis as unknown as {document:Document}).document=dom.window.document;
+  (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
+  const changes:{id:string;propertyId:string;optionId:string}[]=[];
+  dom.window.setSponsorProperty=(id,propertyId,optionId)=>changes.push({id,propertyId,optionId});
+  const root=createRoot(dom.window.document.getElementById('mount')!);
+  const initial={...studio,selectedTab:'sponsors' as const};
+  try{
+    await act(async()=>root.render(<StudioRail model={initial}/>));
+    const brand=dom.window.document.querySelector('.rail-brand-wrap')!;
+    assert.ok(brand.querySelector('.rail-live-pill'));
+    const trigger=brand.querySelector('.rail-sub-trigger') as HTMLButtonElement;
+    assert.equal(trigger.textContent,'SUB');
+    assert.equal(trigger.disabled,false);
+    await act(async()=>trigger.click());
+    assert.equal(brand.querySelector('.sub-property-heading')?.textContent,'Clarity');
+    assert.deepEqual(Array.from(brand.querySelectorAll('.sub-property-choice')).map(button=>button.textContent),['Unclear']);
+    assert.doesNotMatch(brand.innerHTML,/Clearly visible/);
+    await act(async()=>(brand.querySelector('.sub-property-choice') as HTMLButtonElement).click());
+    assert.deepEqual(changes,[{id:'one',propertyId:'clarity',optionId:'unclear'}]);
+    const selectedModel={...initial,task:{...initial.task,sponsors:[{...task.sponsors[0],properties:{clarity:'unclear'}}]}};
+    await act(async()=>root.render(<StudioRail model={selectedModel}/>));
+    assert.equal((brand.querySelector('.sub-property-choice') as HTMLButtonElement).getAttribute('aria-pressed'),'true');
+    await act(async()=>(brand.querySelector('.sub-property-choice') as HTMLButtonElement).click());
+    assert.deepEqual(changes[1],{id:'one',propertyId:'clarity',optionId:'clearly-visible'});
+    const off=dom.window.document.querySelectorAll('.rail-sub-trigger')[2] as HTMLButtonElement;
+    assert.equal(off.disabled,true,'an untracked sponsor has no parent interval to modify');
+  }finally{
+    await act(async()=>root.unmount());
+    (globalThis as unknown as {window:Window}).window=oldWindow;
+    (globalThis as unknown as {document:Document}).document=oldDocument;
+    (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=oldAct;
+    dom.window.close();
+  }
 });
 
 test('Team tab distinguishes owners and permits only owners to remove members',()=>{

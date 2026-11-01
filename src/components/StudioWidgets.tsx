@@ -66,7 +66,10 @@ export function StudioRail({ model }: StudioProps) {
     const recorded = !active&&model.task.sponsors.some(row=>row.sponsorId===sponsor.id&&row.end!==null&&row.start<=model.tick&&model.tick<row.end);
     const appearance=model.task.sponsors.find(row=>row.sponsorId===sponsor.id&&row.end===null&&row.start<=model.tick) || model.task.sponsors.find(row=>row.sponsorId===sponsor.id&&row.end!==null&&row.start<=model.tick&&model.tick<row.end);
     const properties=sponsorProperties(sponsor);
-    return <div className="rail-brand-wrap" key={sponsor.id}><button className={`rail-brand ${active ? 'isactive' : ''} ${recorded?'isrecorded':''}`} type="button"
+    const choices=properties.map(property=>({...property,options:property.options.filter(option=>option.id!==property.defaultOptionId)})).filter(property=>property.options.length>0);
+    const subOpen=expanded===sponsor.id&&!!appearance;
+    const hasSelectedSub=!!appearance&&choices.some(property=>appearance.properties?.[property.id]&&appearance.properties[property.id]!==property.defaultOptionId);
+    return <div className={`rail-brand-wrap ${choices.length?'has-sub-attributes':''} ${subOpen?'sub-open':''}`} key={sponsor.id}><button className={`rail-brand ${active ? 'isactive' : ''} ${recorded?'isrecorded':''}`} type="button"
       onClick={() => window.tagSponsor?.(sponsor.id)} disabled={!model.canSponsor}
       aria-label={`${sponsor.name}${sponsor.hotkey ? `, ${displayHotkey(sponsor.hotkey)}` : ''} · ${active ? 'LIVE, click to stop' : recorded ? 'SAVED at this time, click to re-tag from here' : 'OFF, click to start'}`} aria-pressed={active||recorded}
       title={`${sponsor.name}${sponsor.hotkey ? ` · ${displayHotkey(sponsor.hotkey)}` : ''} · ${active ? 'LIVE' : recorded ? 'SAVED — click to re-tag from here' : 'OFF'}`}>
@@ -74,11 +77,21 @@ export function StudioRail({ model }: StudioProps) {
       {sponsor.hotkey && <kbd className="hotkey-hint rail-hotkey">{displayHotkey(sponsor.hotkey)}</kbd>}
       <span className={`rail-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
     </button>
-    {appearance&&properties.length>0&&<div className="rail-appearance-properties">
-      {sponsorPropertyIntervals(appearance,sponsor).map(property=><span className="property-value-badge" key={property.propertyId}>{property.propertyName}: {property.optionLabel} · {fmt(property.start)}–{property.end===null?'LIVE':fmt(property.end)}</span>)}
-      <button type="button" className="button ghost tiny" disabled={!model.canSponsor} onClick={()=>setExpanded(expanded===appearance.id?null:appearance.id)}>{expanded===appearance.id?'Close details':'+ Details'}</button>
-      {expanded===appearance.id&&properties.map(property=><label key={property.id}>{property.name}<select aria-label={`${property.name} for ${sponsor.name}`} value={appearance.properties?.[property.id]??property.defaultOptionId} disabled={!model.canSponsor} onChange={event=>window.setSponsorProperty?.(appearance.id,property.id,event.target.value)}>{property.options.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}</select></label>)}
-    </div>}
+    {choices.length>0&&<>
+      <button type="button" className={`rail-sub-trigger ${hasSelectedSub?'selected':''}`} disabled={!model.canSponsor||!appearance}
+        title={appearance?'Edit sub-attributes for this sponsor appearance':'Start or select a sponsor appearance before changing sub-attributes'}
+        aria-label={`SUB attributes for ${sponsor.name}`} aria-expanded={subOpen}
+        onClick={()=>setExpanded(subOpen?null:sponsor.id)}>SUB</button>
+      {subOpen&&<div className="rail-sub-menu" role="group" aria-label={`Sub-attributes for ${sponsor.name}`}>
+        {choices.map(property=><div key={property.id} className="sub-property-group"><span className="sub-property-heading">{property.name}</span>
+          {property.options.map(option=>{
+            const selected=appearance.properties?.[property.id]===option.id;
+            return <button key={option.id} type="button" className={`sub-property-choice ${selected?'selected':''}`}
+              aria-pressed={selected} disabled={!model.canSponsor} title={selected?'Tap again to return to the default':'Apply to this sponsor appearance'}
+              onClick={()=>window.setSponsorProperty?.(appearance.id,property.id,selected?property.defaultOptionId:option.id)}>{option.label}</button>;
+          })}</div>)}
+      </div>}
+    </>}
     </div>;
   })}</div>;
 }
@@ -261,10 +274,15 @@ export function StudioLogs({ model }: StudioProps) {
       </select></label>}
       {(()=>{const sponsor=model.sponsors.find(item=>item.id===row.sponsorId);if(!sponsor)return null;
         const properties=sponsorProperties(sponsor);
-        return properties.length>0&&<div className="recorded-properties">
+        const choices=properties.map(property=>({...property,options:property.options.filter(option=>option.id!==property.defaultOptionId)})).filter(property=>property.options.length>0);
+        return choices.length>0&&<div className="recorded-properties">
           {sponsorPropertyIntervals(row,sponsor).map(property=><span key={property.propertyId} className="property-value-badge">{property.propertyName}: {property.optionLabel} · {fmt(property.start)}–{property.end===null?'LIVE':fmt(property.end)}</span>)}
-          <button type="button" className="button ghost tiny" disabled={!model.canSponsor} onClick={()=>setExpandedProperties(expandedProperties===row.id?null:row.id)}>{expandedProperties===row.id?'Hide details':'+ Properties'}</button>
-          {expandedProperties===row.id&&properties.map(property=><label key={property.id}>{property.name}<select aria-label={`${property.name} for ${sponsor.name} interval`} value={row.properties?.[property.id]??property.defaultOptionId} disabled={!model.canSponsor} onChange={event=>window.setSponsorProperty?.(row.id,property.id,event.target.value)}>{property.options.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}</select></label>)}
+          <button type="button" className="button ghost tiny studio-control-button" disabled={!model.canSponsor} aria-expanded={expandedProperties===row.id} aria-label={`SUB attributes for ${sponsor.name} interval`} onClick={()=>setExpandedProperties(expandedProperties===row.id?null:row.id)}>SUB</button>
+          {expandedProperties===row.id&&choices.map(property=><div key={property.id} className="sub-property-group"><span className="sub-property-heading">{property.name}</span>{property.options.map(option=>{
+            const selected=row.properties?.[property.id]===option.id;
+            return <button key={option.id} type="button" className={`sub-property-choice ${selected?'selected':''}`} disabled={!model.canSponsor} aria-pressed={selected}
+              onClick={()=>window.setSponsorProperty?.(row.id,property.id,selected?property.defaultOptionId:option.id)}>{option.label}</button>;
+          })}</div>)}
         </div>;
       })()}</div> : <span className="muted small">—</span>}</td>
     <td><div className="studio-log-actions"><button type="button" className="button ghost tiny studio-control-button studio-log-icon" onClick={() => window.seekVideo?.(row.start)} title="Jump to time" aria-label={`Jump to ${fmt(row.start)}`}><Icon name="play" /></button>

@@ -1505,8 +1505,33 @@ select:not([multiple]):disabled{
 .property-choice>input{flex:1;min-width:0;}
 .property-choice label{display:flex;gap:5px;align-items:center;white-space:nowrap;}
 .property-choice input[type=radio]{width:auto;accent-color:#ff9b36;}
-.rail-brand-wrap{min-width:0;width:100%;}
+.rail-brand-wrap{min-width:0;width:100%;position:relative;}
+.rail-brand-wrap.sub-open{z-index:20;}
 .app-focus .sponsor-rail .rail-brand-wrap .rail-brand{width:100%;}
+.app-focus .sponsor-rail .rail-brand-wrap.has-sub-attributes .rail-live-pill{top:10px!important;transform:none!important;}
+.app-focus .sponsor-rail .rail-sub-trigger{
+ position:absolute;right:10px;top:41px;z-index:3;box-sizing:border-box;
+ width:61px;height:21px;padding:2px 5px;border:1px solid #5a5555;border-radius:999px;
+ background:#323135;color:#e3dfe5;font:800 9px/1 'IBM Plex Mono',monospace;
+ cursor:pointer;letter-spacing:.04em;text-align:center;
+}
+.app-focus .sponsor-rail .rail-sub-trigger.selected{background:#49311f;border-color:#eea250;color:#ffcd8e;}
+.app-focus .sponsor-rail .rail-sub-trigger:hover:not(:disabled){border-color:#ff9b36;background:#422e20;}
+.app-focus .sponsor-rail .rail-sub-trigger:disabled{opacity:.46;cursor:not-allowed;}
+.app-focus .sponsor-rail .rail-sub-trigger:focus-visible,.sub-property-choice:focus-visible{outline:2px solid #ff9b36;outline-offset:2px;}
+.rail-sub-menu{position:absolute;right:7px;top:67px;z-index:12;min-width:154px;max-width:min(240px,90vw);padding:9px;background:#252527;border:1px solid #565158;border-radius:10px;box-shadow:0 12px 30px #0009;}
+.sub-property-group{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;}
+.rail-sub-menu .sub-property-group{display:grid;gap:6px;}
+.sub-property-group+.sub-property-group{border-top:1px solid #414145;margin-top:9px;padding-top:9px;}
+.sub-property-heading{color:#c8c6cd;font:750 9px/1.4 'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.055em;}
+.sub-property-choice{display:inline-flex;justify-content:center;align-items:center;min-height:28px;padding:5px 10px;border:1px solid #545158;border-radius:7px;background:#343236;color:#eee;font:750 11px/1.2 'Manrope',sans-serif;cursor:pointer;}
+.sub-property-choice:hover:not(:disabled){border-color:#ff9b36;}
+.sub-property-choice.selected{background:#57391f;border-color:#ffa449;color:#ffd19b;}
+.sub-property-choice:disabled{opacity:.5;cursor:not-allowed;}
+@media(max-width:680px){
+ .app-focus .sponsor-rail .rail-brand-wrap.has-sub-attributes .rail-live-pill{top:9px!important;}
+ .app-focus .sponsor-rail .rail-sub-trigger{right:6px;width:55px;top:40px;}
+}
 .rail-appearance-properties{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:4px 6px 8px;}
 .rail-appearance-properties label{width:100%;display:grid;gap:4px;font-size:10px;color:#ddd;}
 .rail-appearance-properties select,.recorded-properties select{background:#292929;color:#fff;border:1px solid #535353;border-radius:6px;padding:5px 8px;max-width:100%;}
