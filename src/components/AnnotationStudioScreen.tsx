@@ -38,16 +38,22 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
   </div>;
 }
 
-function VideoPanel({ model }: { model: StudioScreenModel }) {
+function VideoMetadata({ model }: { model: StudioScreenModel }) {
   const { videoSrc, videoName, videoType, isLocalVideo } = model;
   const sourceState = isLocalVideo ? 'LOCAL VIDEO' : videoType === 's3' ? 'PRIVATE VIDEO · CLOUDFRONT' : videoType === 'buildup' ? 'BUILDUP VIDEO' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : 'NO VIDEO ATTACHED';
   const sourceNote = model.videoError || (isLocalVideo ? `${videoName || 'Video'} · Available in this browser session only. Select it again after refreshing.` : videoSrc ? `${videoName || 'Video'}${model.videoDimensions ? ` · ${model.videoDimensions}` : ''}` : 'Open a local video or configure a direct HTTPS source.');
-  return <div className="video-box">
+  return <>
     <div className="video-header"><span>LIVE TAGGING CONSOLE</span><div className="video-header-actions">
       <button type="button" className="button ghost tiny studio-control-button video-jump-last" onClick={()=>window.jumpToLastAnnotation?.()} disabled={model.lastAnnotatedAt===null} title="Jump to the end of the most recent saved annotation"><Icon name="clock" /> LAST ANNOTATED {model.lastAnnotatedAt!==null?formatTimestamp(model.lastAnnotatedAt):''}</button>
       <span id="videoSourceState">{sourceState}</span>
     </div></div>
     <div id="videoFileStatus" className="video-source-note" role="status" aria-live="polite">{sourceNote}</div>
+  </>;
+}
+
+function VideoPanel({ model }: { model: StudioScreenModel }) {
+  const { videoSrc, videoType } = model;
+  return <div className="video-box">
     <div className={`vidframe ${videoSrc ? 'video-native-frame' : ''}`}>
       {videoSrc ? <video id="matchVideo" preload="metadata" playsInline crossOrigin={videoType === 'buildup' ? 'use-credentials' : undefined} aria-label="Match video · original proportions" src={videoSrc} /> :
         <div className="fakepitch">
@@ -107,6 +113,7 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
       </div>
       </div>
         <VideoPanel model={model} />
+        <div id="controlsBody" className="studio-quick-tags"><StudioControls model={model} /></div>
         <div className="card cardpad studio-maincard">
           <div className="tag-toolbar">
             <div><h2>Fast-tag controls</h2><p className="sub">Events and camera angles are timed intervals. Tap once to start, again to stop; switching cameras closes the previous view.</p></div>
@@ -114,11 +121,11 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
               key={key} type="button" data-studio-tab={key} aria-pressed={model.selectedTab === key}
               className={model.selectedTab === key ? 'on' : ''} onClick={() => window.setStudioTab?.(key)}>{label}</button>)}</div>
           </div>
+          <VideoMetadata model={model} />
           <div className="studio-undo-toolbar"><button type="button" className="button ghost tiny studio-control-button studio-undo-button" onClick={()=>window.undoLastAnnotationChange?.()} disabled={!model.undoCount} title="Undo up to 10 recently saved annotation actions in this session (Ctrl+Z)">↶ UNDO LAST CHANGE <span>{model.undoCount}/10</span></button><small>Ctrl+Z · Changes restore only their original annotation IDs</small></div>
           <div className="contextline"><Icon name="clock" /> Current video timestamp <b id="currentT">{formatTimestamp(model.tick)}</b>
             <span style={{ marginLeft: 'auto' }}>{model.canSponsor ? 'Sponsor tagging enabled' : 'Sponsor tagging view only'} · {model.canContext ? 'Context tagging enabled' : 'Context view only'}</span>
           </div>
-          <div id="controlsBody"><StudioControls model={model} /></div>
           <div className="tline-wrap">
             <div className="sectionhead"><div><h3>Unified match timeline</h3><p className="sub">Review recorded intervals by layer. Sponsor property lanes inherit the exact start and end of their parent exposure.</p></div>
               <div className="tline-legend"><span><i className="key" style={{ background: '#ff9b36' }} />Sponsors</span><span><i className="key" style={{ background: '#dca25f' }} />Properties</span><span><i className="key" style={{ background: '#d7c7b5' }} />Events</span><span><i className="key" style={{ background: '#9cabb0' }} />Cameras</span></div></div>

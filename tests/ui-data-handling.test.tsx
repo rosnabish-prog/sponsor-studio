@@ -288,6 +288,20 @@ const studio:StudioScreenModel={
     cameras:data.cameraGroups[0].items,isLocalVideo:false,
 };
 
+test('studio places class buttons below video and moves video metadata under category tabs',()=>{
+  const html=renderToStaticMarkup(<AnnotationStudioScreen model={studio} isAdmin={false}/>);
+  const sequence=['class="video-controls"','id="controlsBody"','class="tag-toolbar"','class="video-header"','id="videoFileStatus"','class="studio-undo-toolbar"'];
+  let previous=-1;
+  for(const marker of sequence){
+    const offset=html.indexOf(marker);
+    assert.ok(offset>previous,`${marker} must follow the preceding section`);
+    previous=offset;
+  }
+  assert.match(html,/id="controlsBody"[\s\S]*KEY MATCH EVENTS[\s\S]*id="videoFileStatus"/);
+  assert.match(html,/data-studio-tab="all"/);
+  assert.match(html,/LAST ANNOTATED/);
+});
+
 test('editing a camera segment changes only its selected ID and preserves all later camera segments',()=>{
   const cameraRows=[
     {id:'a',cameraId:'wide',start:0,end:20},
