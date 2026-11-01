@@ -65,6 +65,8 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
   await page.locator('#taskduration').fill('90');
   // An annotation task must explicitly include the sponsor attribute list.
   await page.locator('#studioModalForm input[name="sgroups"][value="sg_main"]').check();
+  await page.locator('#studioModalForm input[name="egroups"][value="eg_basic"]').check();
+  await page.locator('#studioModalForm input[name="cgroups"][value="cg_basic"]').check();
   await page.locator('#studioModalForm').getByRole('button',{name:'Create task'}).click();
 
   try {
@@ -88,6 +90,73 @@ test('live React mode signs in, creates a workspace task and persists sponsor ta
   },workspaceId);
   await page.evaluate(id=>window.openTask?.(id),taskId);
   await expect(page.locator('.studio-grid')).toBeVisible();
+  // Actual chip interaction: editing saved context annotations must not require
+  // opening the timeline, must show LIVE, and must retain the original row ID.
+  await expect(page.getByText('LIVE TAGGING CONSOLE')).toHaveCount(0);
+  await expect(page.locator('.tline-wrap').getByRole('button',{name:/LAST ANNOTATED/})).toBeVisible();
+  await page.evaluate(()=>window.setStudioTab?.('cameras'));
+  const cameraChip=page.locator('.sponsor-rail .camera-chip').first();
+  await page.evaluate(()=>window.seekVideo?.(40));
+  await expect(cameraChip).toContainText('OFF');
+  await cameraChip.click();
+  await expect(cameraChip).toContainText('LIVE');
+  await page.evaluate(()=>window.seekVideo?.(70));
+  await cameraChip.click();
+  await expect.poll(async()=>page.evaluate(async ({w,t})=>{
+    const rows=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    return rows.find((a:{kind:string;start:number;end:number|null})=>a.kind==='CAMERA'&&a.start===40&&a.end===70)?.id??null;
+  },{w:workspaceId,t:taskId})).not.toBeNull();
+  const originalCameraId=await page.evaluate(async ({w,t})=>{
+    const rows=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    return rows.find((a:{kind:string;start:number;end:number|null})=>a.kind==='CAMERA'&&a.start===40&&a.end===70).id as string;
+  },{w:workspaceId,t:taskId});
+  await page.evaluate(()=>window.seekVideo?.(45));
+  await expect(cameraChip).toContainText('SAVED');
+  await cameraChip.click();
+  await expect(cameraChip).toContainText('LIVE');
+  await page.evaluate(()=>window.seekVideo?.(60));
+  await cameraChip.click();
+  await expect.poll(async()=>page.evaluate(async ({w,t,id})=>{
+    const rows=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    return rows.find((a:{id:string})=>a.id===id)?.end??null;
+  },{w:workspaceId,t:taskId,id:originalCameraId})).toBe(60);
+  await page.evaluate(()=>window.seekVideo?.(45));
+  await cameraChip.click();
+  await expect(cameraChip).toContainText('LIVE');
+  await cameraChip.click(); // No movement preserves the original interval.
+  await expect(cameraChip).toContainText('SAVED');
+  await expect.poll(async()=>page.evaluate(async ({w,t,id})=>{
+    const rows=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    return rows.find((a:{id:string})=>a.id===id)?.end??null;
+  },{w:workspaceId,t:taskId,id:originalCameraId})).toBe(60);
+
+  await page.evaluate(()=>window.setStudioTab?.('events'));
+  const eventChip=page.locator('.sponsor-rail .event-chip').first();
+  await page.evaluate(()=>window.seekVideo?.(90));
+  await eventChip.click();
+  await expect(eventChip).toContainText('LIVE');
+  await page.evaluate(()=>window.seekVideo?.(120));
+  await eventChip.click();
+  await expect.poll(async()=>page.evaluate(async ({w,t})=>{
+    const rows=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    return rows.some((a:{kind:string;start:number;end:number|null})=>a.kind==='EVENT'&&a.start===90&&a.end===120);
+  },{w:workspaceId,t:taskId})).toBe(true);
+  const originalEventId=await page.evaluate(async ({w,t})=>{
+    const rows=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    return rows.find((a:{kind:string;start:number;end:number|null})=>a.kind==='EVENT'&&a.start===90&&a.end===120).id as string;
+  },{w:workspaceId,t:taskId});
+  await page.evaluate(()=>window.seekVideo?.(100));
+  await expect(eventChip).toContainText('SAVED');
+  await eventChip.click();
+  await expect(eventChip).toContainText('LIVE');
+  await page.evaluate(()=>window.seekVideo?.(105));
+  await eventChip.click();
+  await expect.poll(async()=>page.evaluate(async ({w,t,id})=>{
+    const rows=await fetch(`/api/workspaces/${w}/tasks/${t}/annotations`,{credentials:'include'}).then(r=>r.json());
+    return rows.find((a:{id:string})=>a.id===id)?.end??null;
+  },{w:workspaceId,t:taskId,id:originalEventId})).toBe(105);
+
+  await page.evaluate(()=>window.setStudioTab?.('sponsors'));
   await page.evaluate(()=>window.seekVideo?.(10));
   await page.getByRole('button',{name:/Adidas x Messi.*OFF/}).first().click();
   await page.evaluate(()=>window.seekVideo?.(20));
