@@ -29,6 +29,8 @@ import { nextSavedSponsorStart, retagSponsorFromTimestamp } from '../src/domain/
 import { preserveAnnotationsOnRewind } from '../src/domain/annotationRewind';
 import { assertNoBulkAnnotationDeletion } from '../src/api/sync';
 import { editSingleInterval } from '../src/domain/isolatedInterval';
+import { editRecordedCamera } from '../src/domain/cameraIntervalEdit';
+import { sponsorProperties, distinctSponsorPropertyValues, sponsorPropertyIntervals } from '../src/domain/sponsorProperties';
 import { annotationChanges, lastAnnotatedTimestamp, nextBoundary, sameAnnotationContent, serverSnapshotMatchesRow, snapshotAnnotations } from '../src/domain/annotationUndo';
 import { AttributesScreen, SponsorLibraryScreen, TeamScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
@@ -49,6 +51,53 @@ const data:StudioData = {
   cameraGroups:[{id:'c1',name:'Cameras',items:[{id:'camera',name:'Wide'}]}],
   tasks:[task],
 };
+
+test('recorded camera edit preserves every unrelated timeline row and is a no-op at the original time',()=>{
+  const base={createdAt:'2026-10-29',createdBy:'a1'};
+  const rows=[
+    {id:'a',cameraId:'wide',start:0,end:30,...base},
+    {id:'b',cameraId:'goal',start:30,end:50,...base},
+    {id:'c',cameraId:'wide',start:50,end:70,...base},
+  ];
+  assert.equal(editRecordedCamera(rows,'a',0,30).status,'unchanged');
+  assert.deepEqual(rows[0].end,30);
+  const shortened=editRecordedCamera(rows,'a',0,15);
+  assert.equal(shortened.status,'updated');
+  assert.deepEqual(shortened.rows.filter(row=>row.id!=='a'),rows.slice(1));
+  const conflict=editRecordedCamera(rows,'a',0,35);
+  assert.equal(conflict.status,'conflict');
+  assert.equal(conflict.rows,rows,'a rejected overlap must preserve the original array');
+  const merged=editRecordedCamera([{...rows[0],end:29.5},{...rows[1],cameraId:'wide',start:29.5}], 'a',0,31);
+  assert.equal(merged.status,'updated');
+  assert.deepEqual(merged.rows.map(row=>row.id),['a']);
+  assert.equal(merged.rows[0].end,50);
+  assert.equal(merged.rows[0].start,0);
+});
+
+test('sponsor clarity is inherited by legacy sponsors and default remains implicit',()=>{
+  const legacy={id:'legacy',name:'Sponsor'};
+  const [clarity]=sponsorProperties(legacy);
+  assert.equal(clarity.defaultOptionId,'clearly-visible');
+  assert.equal(distinctSponsorPropertyValues({},legacy).length,0);
+  assert.deepEqual(distinctSponsorPropertyValues({clarity:'unclear'},legacy).map(property=>property.name),['Clarity']);
+  const annotated={...studio,selectedTab:'sponsors' as const,task:{...studio.task,sponsors:[{
+    ...task.sponsors[0],properties:{clarity:'unclear'},
+  }]}};
+  const rail=renderToStaticMarkup(<StudioRail model={annotated}/>);
+  assert.match(rail,/Clarity: Unclear/);
+  assert.match(rail,/\+ Details/);
+  const defaultRail=renderToStaticMarkup(<StudioRail model={{...annotated,task:{...annotated.task,sponsors:[{
+    ...task.sponsors[0],properties:{},
+  }]}}}/>);
+  assert.doesNotMatch(defaultRail,/Clarity: Clearly visible/);
+  const saved={...task.sponsors[0],start:60,end:180,properties:{clarity:'unclear'}};
+  assert.deepEqual(sponsorPropertyIntervals(saved,legacy).map(({start,end})=>[start,end]),[[60,180]]);
+  assert.deepEqual(sponsorPropertyIntervals({...saved,end:null},legacy).map(({start,end})=>[start,end]),[[60,null]]);
+  assert.deepEqual(sponsorPropertyIntervals({...saved,end:120},legacy).map(({start,end})=>[start,end]),[[60,120]]);
+  const timeline=renderToStaticMarkup(<StudioTimeline model={{...annotated,task:{...annotated.task,sponsors:[saved]}}}/>);
+  assert.match(timeline,/↳ Clarity: Unclear/);
+  assert.match(timeline,/block property/);
+});
 
 test('Team tab distinguishes owners and permits only owners to remove members',()=>{
   const team:StudioData={...data,users:[
@@ -573,14 +622,27 @@ test('recorded annotations are visible at the playhead, and admin task deletion 
   const rail=renderToStaticMarkup(<StudioRail model={at}/>);
   assert.match(rail,/SAVED at this time, click to re-tag from here/);
   assert.match(rail,/● SAVED/);
-  assert.match(renderToStaticMarkup(<StudioControls model={at}/>),/SAVED at this time, tap to resume LIVE with confirmation/);
+  assert.match(renderToStaticMarkup(<StudioControls model={at}/>),/SAVED at this time, tap to edit this interval/);
   const cameraAt={...at,selectedTab:'cameras' as const};
-  assert.match(renderToStaticMarkup(<StudioRail model={cameraAt}/>),/SAVED at this time, tap to resume LIVE with confirmation/);
+  assert.match(renderToStaticMarkup(<StudioRail model={cameraAt}/>),/SAVED at this time, tap to edit this interval/);
   const cameraLive={...cameraAt,task:{...cameraAt.task,cameras:[{...cameraAt.task.cameras[0],start:20,end:null}]}};
   assert.match(renderToStaticMarkup(<StudioRail model={cameraLive}/>),/LIVE, tap to end/);
   const studioHtml=renderToStaticMarkup(<AnnotationStudioScreen model={at} isAdmin/>);
   assert.match(studioHtml,/DELETE TASK/);
-  assert.match(studioHtml,/REOPEN TASK/);
+  assert.match(studioHtml,/REOPEN SPONSOR TAGGING/);
+  assert.match(studioHtml,/REOPEN EVENTS &amp; CAMERAS/);
+});
+
+test('completing one annotation stream does not offer or imply whole-match completion',()=>{
+  const partial:StudioScreenModel={...studio,status:'progress',canSponsor:false,canContext:true,
+    submitted:{sponsors:true,context:false},task:{...studio.task,submitted:{sponsors:true,context:false}}};
+  const markup=renderToStaticMarkup(<AnnotationStudioScreen model={partial} isAdmin={false}/>);
+  assert.match(markup,/COMPLETE EVENTS &amp; CAMERAS/);
+  assert.doesNotMatch(markup,/COMPLETE SPONSOR TAGGING/);
+  assert.match(markup,/In progress/);
+  assert.match(markup,/SPONSORS · COMPLETE/);
+  assert.match(markup,/EVENTS &amp; CAMERAS · PENDING/);
+  assert.doesNotMatch(markup,/MARK COMPLETE/);
 });
 
 test('interval editing keeps the selected sponsor category active', () => {

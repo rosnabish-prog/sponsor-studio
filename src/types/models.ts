@@ -1,3 +1,10 @@
+export interface SponsorProperty {
+  id: string;
+  name: string;
+  options: { id: string; label: string }[];
+  defaultOptionId: string;
+}
+
 export interface Sponsor {
   id: string;
   name: string;
@@ -5,6 +12,7 @@ export interface Sponsor {
   color?: string;
   logoTrimmed?: boolean;
   hotkey?: string;
+  properties?: SponsorProperty[];
 }
 
 export interface SponsorGroup {
@@ -49,6 +57,7 @@ export interface SponsorAnnotation extends AnnotationBase {
   sponsorId: string;
   placement?: string | null;
   quality?: string | null;
+  properties?: Record<string, string>;
 }
 
 export interface EventAnnotation extends AnnotationBase {

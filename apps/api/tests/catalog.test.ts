@@ -24,3 +24,16 @@ test('server enforces its bounded 8 MB catalog cap',()=>{
   ]}],eventGroups:[],cameraGroups:[]};
   assert.throws(()=>validateCatalog(payload),/8 MB/);
 });
+
+test('server preserves nested sponsor properties and rejects invalid defaults',()=>{
+  const sponsor={id:'sponsor',name:'Gatorade',properties:[{
+    id:'clarity',name:'Clarity',defaultOptionId:'clearly-visible',
+    options:[{id:'clearly-visible',label:'Clearly visible'},{id:'unclear',label:'Unclear'}],
+  }]};
+  const payload={sponsorGroups:[{id:'brands',name:'Brands',sponsors:[sponsor]}],eventGroups:[],cameraGroups:[]};
+  const saved=validateCatalog(payload) as typeof payload;
+  assert.deepEqual(saved.sponsorGroups[0].sponsors[0].properties,sponsor.properties);
+  assert.throws(()=>validateCatalog({...payload,sponsorGroups:[{id:'brands',name:'Brands',sponsors:[
+    {...sponsor,properties:[{...sponsor.properties[0],defaultOptionId:'not-an-option'}]},
+  ]}]}),/default sponsor property value/);
+});

@@ -31,7 +31,8 @@ export function assertNoBulkAnnotationDeletion(before:TaskSummary,after:TaskSumm
 }
 
 function attributes(a:StudioAnnotation) {
-  return {end:a.end,placement:'placement' in a?a.placement??null:null,quality:'quality' in a?a.quality??null:null};
+  return {end:a.end,placement:'placement' in a?a.placement??null:null,quality:'quality' in a?a.quality??null:null,
+    properties:'properties' in a?a.properties??{}:{}};
 }
 
 /** Sends the changes made by legacy controller actions to authoritative server APIs.
@@ -65,12 +66,9 @@ export async function persistStudio(
     const oldAnnotations=previous?annotations(previous):[];
     const newAnnotations=annotations(task);
     if(previous)assertNoBulkAnnotationDeletion(previous,task);
-    for (const old of oldAnnotations) {
-      if (!newAnnotations.some(row=>row.item.id===old.item.id)) {
-        await api.removeAnnotation(workspaceId,task.id,old.item.id,old.item.revision??1);
-      }
-    }
-    // Close old camera intervals before starting the next one.
+    // Commit the selected ID's edits before soft-deleting a merged neighbour.
+    // If a revision conflict rejects the edit, no existing annotation is lost.
+    // Closing existing LIVE intervals still precedes new LIVE creates.
     for (const current of newAnnotations) {
       const old=oldAnnotations.find(row=>row.item.id===current.item.id);
       if (!old) continue;
@@ -87,6 +85,16 @@ export async function persistStudio(
        onRevision?.(current.item.id,result.revision);
       }
     }
+    // Removing superseded rows only after editing their survivor. A failure can leave two
+    // overlapping saved records, but never erase the untouched neighbour first.
+    for (const old of oldAnnotations) {
+      if (!newAnnotations.some(row=>row.item.id===old.item.id)) {
+        await api.removeAnnotation(workspaceId,task.id,old.item.id,old.item.revision??1);
+      }
+    }
+
+    // Create new LIVE tags last, after the old LIVE tag has been closed or
+    // intentionally removed, preserving the server's one-LIVE-camera guard.
     for (const current of newAnnotations) {
       if (oldAnnotations.some(row=>row.item.id===current.item.id)) continue;
       const result=await api.addAnnotation(workspaceId,task.id,{

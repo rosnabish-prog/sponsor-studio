@@ -2,7 +2,7 @@ import {
   BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException,
   Get, Injectable, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
-import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Length, Min } from 'class-validator';
+import { IsEnum, IsInt, IsNumber, IsObject, IsOptional, IsString, Length, Min } from 'class-validator';
 import { AnnotationKind, type Annotation, type Prisma } from '../generated/prisma/client';
 import { AuthRequest, SessionGuard } from './auth';
 import { DatabaseService } from './database';
@@ -16,6 +16,7 @@ export class CreateAnnotationDto {
   @IsOptional() @IsNumber({ allowNaN: false, allowInfinity: false }) end?: number | null;
   @IsOptional() @IsString() @Length(1, 100) placement?: string | null;
   @IsOptional() @IsString() @Length(1, 100) quality?: string | null;
+  @IsOptional() @IsObject() properties?: Record<string,string>;
 }
 
 export class UpdateAnnotationDto {
@@ -25,6 +26,7 @@ export class UpdateAnnotationDto {
   @IsOptional() @IsNumber({ allowNaN: false, allowInfinity: false }) end?: number | null;
   @IsOptional() @IsString() @Length(1, 100) placement?: string | null;
   @IsOptional() @IsString() @Length(1, 100) quality?: string | null;
+  @IsOptional() @IsObject() properties?: Record<string,string>;
 }
 
 export class DeleteAnnotationDto {
@@ -40,14 +42,22 @@ export class RestoreAnnotationDto {
 export function annotationSnapshot(annotation: Annotation): Prisma.InputJsonValue {
   return {
     kind:annotation.kind, labelId:annotation.labelId, start:annotation.start, end:annotation.end,
-    placement:annotation.placement, quality:annotation.quality,
+    placement:annotation.placement, quality:annotation.quality, properties:annotation.properties,
     createdBy:annotation.createdBy, createdAt:annotation.createdAt.toISOString(),
     deletedAt:annotation.deletedAt?.toISOString()??null,
   };
 }
 
 type SavedSnapshot = {kind:AnnotationKind;labelId:string;start:number;end:number|null;
-  placement:string|null;quality:string|null;createdBy:string;createdAt:string;deletedAt:string|null};
+  placement:string|null;quality:string|null;properties?:Record<string,string>;createdBy:string;createdAt:string;deletedAt:string|null};
+
+function validProperties(raw:Record<string,string>|undefined):Record<string,string>|undefined {
+  if(raw===undefined)return undefined;
+  const entries=Object.entries(raw);
+  if(entries.length>8||entries.some(([key,value])=>!/^[a-zA-Z][a-zA-Z0-9_-]{0,49}$/.test(key)||typeof value!=='string'||
+    !/^[a-zA-Z][a-zA-Z0-9_-]{0,49}$/.test(value)))throw new BadRequestException('Invalid sponsor property values');
+  return Object.fromEntries(entries);
+}
 
 @Injectable()
 export class AnnotationService {
@@ -116,8 +126,8 @@ export class AnnotationService {
     const task = await this.requireStreamEdit(workspaceId, taskId, userId, input.kind);
     try { checkAnnotationTimes(input.start, input.end ?? null, task.durationSeconds); }
     catch (error) { throw new BadRequestException((error as Error).message); }
-    if (input.kind !== 'SPONSOR' && (input.placement || input.quality)) {
-      throw new BadRequestException('Placement and quality apply only to sponsor annotations');
+    if (input.kind !== 'SPONSOR' && (input.placement || input.quality || input.properties !== undefined)) {
+      throw new BadRequestException('Sponsor properties apply only to sponsor annotations');
     }
     try{return await this.db.$transaction(async tx => {
       await this.lockStream(tx,workspaceId,taskId,input.kind);
@@ -135,6 +145,7 @@ export class AnnotationService {
       const annotation = await tx.annotation.create({ data: {
         taskId, kind: input.kind, labelId: input.labelId.trim(), start: input.start,
         end: input.end ?? null, placement: input.placement ?? null, quality: input.quality ?? null,
+        properties:validProperties(input.properties)??{},
         createdBy: userId,
       } });
       await this.recordRevision(tx,annotation,'CREATED',userId);
@@ -154,13 +165,14 @@ export class AnnotationService {
     if (input.end === null && current.end !== null) throw new BadRequestException('A closed annotation cannot be reopened');
     try { checkAnnotationTimes(input.start ?? current.start, input.end === undefined ? current.end : input.end, task.durationSeconds); }
     catch (error) { throw new BadRequestException((error as Error).message); }
-    if (current.kind !== 'SPONSOR' && (input.placement !== undefined || input.quality !== undefined)) {
-      throw new BadRequestException('Placement and quality apply only to sponsor annotations');
+    if (current.kind !== 'SPONSOR' && (input.placement !== undefined || input.quality !== undefined || input.properties !== undefined)) {
+      throw new BadRequestException('Sponsor properties apply only to sponsor annotations');
     }
     if (input.labelId !== undefined && current.kind !== 'CAMERA') {
       throw new BadRequestException('Only camera annotations can change labels');
     }
     const {expectedRevision,...changes}=input;
+    if(changes.properties!==undefined)changes.properties=validProperties(changes.properties);
     return this.db.$transaction(async tx => {
       await this.lockStream(tx,workspaceId,taskId,current.kind);
       const fresh=await tx.annotation.findFirst({where:{id:annotationId,taskId,deletedAt:null}});
@@ -213,7 +225,7 @@ export class AnnotationService {
       catch(error){throw new BadRequestException((error as Error).message)}
       const annotation=await tx.annotation.update({where:{id:annotationId},data:{
         labelId:snapshot.labelId,start:snapshot.start,end:snapshot.end,
-        placement:snapshot.placement,quality:snapshot.quality,
+        placement:snapshot.placement,quality:snapshot.quality,properties:snapshot.properties??{},
         deletedAt:null,deletedBy:null,revision:{increment:1},
       }});
       await this.ensureAvailable(tx,annotation);

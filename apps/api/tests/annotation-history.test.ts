@@ -6,7 +6,7 @@ import { AnnotationService, annotationSnapshot } from '../src/modules/annotation
 test('API edits, soft-deletes, and restores exactly one camera interval with immutable history',async()=>{
   const now=new Date('2026-10-30T12:00:00.000Z');
   const first={id:'a',taskId:'task',kind:'CAMERA' as const,labelId:'wide',start:10,end:20,
-    placement:null,quality:null,createdBy:'admin',createdAt:now,updatedAt:now,revision:1,deletedAt:null as Date|null,deletedBy:null as string|null};
+    placement:null,quality:null,properties:{},createdBy:'admin',createdAt:now,updatedAt:now,revision:1,deletedAt:null as Date|null,deletedBy:null as string|null};
   const later={...first,id:'b',labelId:'bench',start:20,end:40};
   const rows=[first,later];
   const laterBefore=JSON.stringify(later);
@@ -70,4 +70,12 @@ test('API edits, soft-deletes, and restores exactly one camera interval with imm
   assert.equal(revisions.at(-1)?.action,'RESTORED');
   assert.equal(JSON.stringify(later),laterBefore,'second camera untouched after restore');
   assert.equal(revisions.length,4,'history keeps all four states');
+});
+
+test('annotation revisions capture explicit sponsor clarity values for restoration',()=>{
+  const now=new Date('2026-11-01T00:00:00.000Z');
+  const annotation={id:'a',taskId:'task',kind:'SPONSOR' as const,labelId:'sponsor',start:10,end:30,
+    placement:null,quality:null,properties:{clarity:'unclear'},createdBy:'worker',createdAt:now,updatedAt:now,
+    revision:2,deletedAt:null,deletedBy:null};
+  assert.deepEqual((annotationSnapshot(annotation) as unknown as {properties:Record<string,string>}).properties,{clarity:'unclear'});
 });

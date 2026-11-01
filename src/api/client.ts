@@ -28,13 +28,13 @@ export interface ApiProvisionResult { user: ApiUser; temporaryPassword: string |
 export interface ApiCatalog { version: number; payload: Pick<StudioData,'sponsorGroups'|'eventGroups'|'cameraGroups'> }
 export interface ApiAnnotation {
   id:string; kind:'SPONSOR'|'EVENT'|'CAMERA';labelId:string;
-  start:number;end:number|null;placement:string|null;quality:string|null;createdBy:string;createdAt:string;
+  start:number;end:number|null;placement:string|null;quality:string|null;properties?:Record<string,string>;createdBy:string;createdAt:string;
   revision:number;deletedAt:string|null;
 }
 export interface ApiAnnotationRevision {
   id:string;taskId:string;annotationId:string;version:number;actorId:string;action:string;createdAt:string;
   snapshot:{kind:'SPONSOR'|'EVENT'|'CAMERA';labelId:string;start:number;end:number|null;
-    placement:string|null;quality:string|null;createdBy:string;createdAt:string;deletedAt:string|null};
+    placement:string|null;quality:string|null;properties?:Record<string,string>;createdBy:string;createdAt:string;deletedAt:string|null};
 }
 export interface ApiTask {
   id:string;workspaceId:string;number:string;name:string;fixtureId:string|null;
@@ -98,7 +98,7 @@ export function fromApiTask(t:ApiTask):TaskSummary {
     videoName:t.videos?.[0]?.filename,
     videoAssetId:t.videos?.[0]?.id,
     periods:m.periods && typeof m.periods==='object'?m.periods as TaskSummary['periods']:null,
-    sponsors:annotations.filter(a=>a.kind==='SPONSOR').map(a=>({...common(a),sponsorId:a.labelId,placement:a.placement,quality:a.quality})),
+    sponsors:annotations.filter(a=>a.kind==='SPONSOR').map(a=>({...common(a),sponsorId:a.labelId,placement:a.placement,quality:a.quality,properties:a.properties??{}})),
     events:annotations.filter(a=>a.kind==='EVENT').map(a=>({...common(a),eventId:a.labelId,kind:'range' as const})),
     cameras:annotations.filter(a=>a.kind==='CAMERA').map(a=>({...common(a),cameraId:a.labelId})),
     createdAt:t.createdAt,

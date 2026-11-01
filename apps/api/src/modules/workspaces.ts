@@ -70,6 +70,7 @@ export function validateCatalog(input: unknown): Prisma.InputJsonValue {
               logo: typeof item.logo === 'string' && /^(https:\/\/|data:image\/(png|jpeg|webp);base64,)/.test(item.logo) ? item.logo : '',
               color: typeof item.color === 'string' && /^#[\da-f]{6}$/i.test(item.color) ? item.color : '#888888',
               logoTrimmed: item.logoTrimmed === true,
+              properties: validateSponsorPropertyDefinitions(item.properties),
             } : { kind: item.kind === 'point' ? 'point' : 'range', highValue: item.highValue === true }),
           };
         }),
@@ -79,6 +80,31 @@ export function validateCatalog(input: unknown): Prisma.InputJsonValue {
   const json = JSON.stringify(groups);
   if (Buffer.byteLength(json, 'utf8') > 8 * 1024 * 1024) throw new BadRequestException('Catalog exceeds the 8 MB limit');
   return groups as Prisma.InputJsonValue;
+}
+
+function validateSponsorPropertyDefinitions(raw:unknown) {
+  if(raw===undefined)return undefined; // Existing catalogs inherit default clarity in the UI.
+  if(!Array.isArray(raw)||raw.length>8)throw new BadRequestException('A sponsor may have up to 8 properties');
+  const ids=new Set<string>();
+  return raw.map(value=>{
+    if(!value||typeof value!=='object'||Array.isArray(value))throw new BadRequestException('Invalid sponsor property');
+    const property=value as Record<string,unknown>;
+    if(typeof property.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,49}$/.test(property.id)||ids.has(property.id)||
+      typeof property.name!=='string'||!property.name.trim()||property.name.length>80)throw new BadRequestException('Invalid or duplicate sponsor property');
+    ids.add(property.id);
+    if(!Array.isArray(property.options)||property.options.length<2||property.options.length>20)throw new BadRequestException('Each sponsor property needs 2–20 options');
+    const optionIds=new Set<string>();
+    const options=property.options.map(rawOption=>{
+      if(!rawOption||typeof rawOption!=='object'||Array.isArray(rawOption))throw new BadRequestException('Invalid sponsor property option');
+      const option=rawOption as Record<string,unknown>;
+      if(typeof option.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,49}$/.test(option.id)||optionIds.has(option.id)||
+        typeof option.label!=='string'||!option.label.trim()||option.label.length>80)throw new BadRequestException('Invalid or duplicate sponsor property option');
+      optionIds.add(option.id);
+      return {id:option.id,label:option.label.trim()};
+    });
+    if(typeof property.defaultOptionId!=='string'||!optionIds.has(property.defaultOptionId))throw new BadRequestException('Select a valid default sponsor property value');
+    return {id:property.id,name:property.name.trim(),options,defaultOptionId:property.defaultOptionId};
+  });
 }
 
 @Injectable()

@@ -133,6 +133,7 @@ model Annotation {
   end       Float?
   placement String?        @db.VarChar(100)
   quality   String?        @db.VarChar(100)
+  properties Json           @default("{}")
   revision  Int            @default(1)
   deletedAt DateTime?
   deletedBy String?        @db.Uuid

@@ -1,5 +1,5 @@
 import type { StudioMount } from '../types/screen';
-import type { AnnotationBase, CameraAnnotation, EventAnnotation, Fixture, Sponsor, SponsorAnnotation, StudioData, TaskSummary, TeamMember } from '../types/models';
+import type { AnnotationBase, CameraAnnotation, EventAnnotation, Fixture, Sponsor, SponsorAnnotation, SponsorProperty, StudioData, TaskSummary, TeamMember } from '../types/models';
 import type { DialogModel } from '../components/StudioModals';
 import { computeInsights } from '../domain/analytics';
 import { annotatedEndpoint } from '../domain/labelingProgress';
@@ -13,7 +13,9 @@ import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
 import { mergeFixtureCatalog } from '../domain/fixtures';
 import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
 import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } from '../domain/catalogEditing';
-import { hasRecordedCameraAfter, nextSavedCameraStart, resumeCameraFromTimestamp, selectCameraAngle } from '../domain/cameraSwitch';
+import { hasRecordedCameraAfter, nextSavedCameraStart, selectCameraAngle } from '../domain/cameraSwitch';
+import { editRecordedCamera } from '../domain/cameraIntervalEdit';
+import { sponsorProperties } from '../domain/sponsorProperties';
 import { captureStudioSpacebar } from '../domain/studioKeyboard';
 import { supportedPlaybackRate } from '../domain/videoPlayback';
 import { retagSponsorFromTimestamp, nextSavedSponsorStart } from '../domain/sponsorRetag';
@@ -236,7 +238,8 @@ let view: ProductView=initialRoute.view;
 let selectedTaskId=initialRoute.view==='studio'?initialRoute.taskId:'',reportTaskId=initialRoute.view==='reports'?initialRoute.taskId:'',taskFilter='all',insightFocusId='',fixtureSyncLabel='Bundled schedule';
 let studioTab:'all'|'sponsors'|'events'|'cameras'='all';
 let tick=0,seekStep=5,videoEl:HTMLVideoElement|null=null,modalOpen=false;
-let editingInterval:{key:'sponsors'|'events'|'cameras';id:string;start:number;end:number}|null=null;
+let editingInterval:{key:'sponsors'|'events'|'cameras';id:string;start:number;end:number;cameraId?:string}|null=null;
+let cameraEditOpenedAt:number|null=null;
 const localVideos:Record<string,{url:string;name:string}>={};
 const videoDurations:Record<string,number>={};
 function clearLocalVideos(){for(const video of Object.values(localVideos))URL.revokeObjectURL(video.url);for(const id of Object.keys(localVideos))delete localVideos[id];for(const id of Object.keys(videoDurations))delete videoDurations[id];}
@@ -291,7 +294,7 @@ window.login=async e=>{
 window.selectWorkspace=id=>{if(liveWorkspaces.some(w=>w.workspace.id===id)){view='dashboard';selectedTaskId='';writeStudioRoute(view);void loadWorkspace(id).catch(error=>notify('Workspace load failed: '+error.message))}};
 window.logout=()=>{if(backfillDrafts.length)return notify('End your in-progress gap tags before signing out so their intervals can be saved.');void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];catalogClipboard=null;selectedTaskId='';view='dashboard';writeStudioRoute(view,'',true);if(videoEl){videoEl.pause()}clearLocalVideos();render()};
 window.showWorkspaceSwitcher=()=>{if(!flushBackfills(currentTask()))return;workspaceId='';render()};
-window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;if(!flushBackfills(currentTask()))return;view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';editingInterval=null;writeStudioRoute(view);render();window.scrollTo(0,0)};
+window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;if(!flushBackfills(currentTask()))return;view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';editingInterval=null;cameraEditOpenedAt=null;writeStudioRoute(view);render();window.scrollTo(0,0)};
 function restoreRoute(){const route=readStudioRoute();if((route.view!=='studio'||route.taskId!==selectedTaskId)&&!flushBackfills(currentTask())){writeStudioRoute(view,selectedTaskId,true);return;}view=route.view;selectedTaskId=view==='studio'?route.taskId:'';reportTaskId=view==='reports'?route.taskId:reportTaskId;if(videoEl)videoEl.pause();if(workspaceId)render();window.scrollTo(0,0)}
 window.addEventListener('popstate',restoreRoute);
 window.addEventListener('hashchange',restoreRoute);
@@ -306,7 +309,7 @@ window.openTask=id=>{
  if(!visibleTasks().some(task=>task.id===id))return notify('This task is not available in your workspace.');
  if(selectedTaskId!==id&&!flushBackfills(currentTask()))return;
  videoRecovery?.dispose();videoRecovery=null;videoError='';
- selectedTaskId=id;view='studio';tick=0;studioTab='all';editingInterval=null;writeStudioRoute(view,id);render();window.scrollTo(0,0);
+ selectedTaskId=id;view='studio';tick=0;studioTab='all';editingInterval=null;cameraEditOpenedAt=null;writeStudioRoute(view,id);render();window.scrollTo(0,0);
  const asset=db.tasks.find(t=>t.id===id)?.videoAssetId;
   if(asset&&!localVideos[id]){void api.playback(workspaceId,id,asset).then(result=>{
   const task=db.tasks.find(t=>t.id===id);if(!task)return;
@@ -329,6 +332,19 @@ function studioSidebarHeading(){
  const before=snapshotAnnotations(t);
  item[field]=value||null;
  recordAnnotationChange(t,before,'Change sponsor '+field);notify('Sponsor exposure '+(field==='placement'?'placement':'quality')+' saved');
+};
+window.setSponsorProperty=(annotationId,propertyId,value)=>{
+ const t=currentTask();if(!t||!canEdit(t,'sponsors'))return;
+ const row=t.sponsors.find(item=>item.id===annotationId);
+ const sponsor=row&&sponsorFor(t).find(item=>item.id===row.sponsorId);
+ const property=sponsor&&sponsorProperties(sponsor).find(item=>item.id===propertyId);
+ if(!row||!property||!property.options.some(option=>option.id===value))return notify('Unknown sponsor property value.');
+ const before=snapshotAnnotations(t);
+ const values={...row.properties};
+ if(value===property.defaultOptionId)delete values[propertyId];else values[propertyId]=value;
+ row.properties=values;
+ recordAnnotationChange(t,before,`Set ${property.name} for one sponsor interval`);
+ notify(`${property.name} saved for this exposure only.`);
 };
 window.setStudioTab=k=>{if(!['all','sponsors','events','cameras'].includes(k))return;studioTab=k;refreshStudio();};
 function refreshStudio(){if(currentTask()&&view==='studio')render();}
@@ -475,7 +491,8 @@ window.editRecordedAnnotation=(key,id)=>{
  if(!task||!row||row.end===null||!canEdit(task,key==='sponsors'?'sponsors':'context'))return;
  const name=labelFor(task,key,key==='sponsors'?(row as SponsorAnnotation).sponsorId:key==='events'?(row as EventAnnotation).eventId:(row as CameraAnnotation).cameraId);
  confirmInApp('Edit recorded interval',`You are about to change the saved ${name} interval (${fmt(row.start)}–${fmt(row.end!)}). Continue to the editor?`,()=>{
-  editingInterval={key,id,start:row.start,end:row.end!};
+  editingInterval={key,id,start:row.start,end:row.end!,...(key==='cameras'?{cameraId:(row as CameraAnnotation).cameraId}:{})};
+  cameraEditOpenedAt=key==='cameras'?seconds(task):null;
   refreshStudio();notify('Drag either edge of the highlighted timeline segment, then Save.');
  },{actionLabel:'CONTINUE TO EDIT',danger:false});
 };
@@ -496,17 +513,26 @@ window.retagRecordedSponsor=(id,at)=>{
   recordAnnotationChange(current,before,`Re-tag ${name}`);notify(`${name} LIVE from ${fmt(at)}.`);
  },{actionLabel:'RE-TAG FROM HERE',danger:false});
 };
-window.cancelTimelineEdit=()=>{editingInterval=null;refreshStudio()};
+window.cancelTimelineEdit=()=>{editingInterval=null;cameraEditOpenedAt=null;refreshStudio()};
 window.saveTimelineEdit=(key,id,start,end)=>{
  const task=currentTask(),row=task?.[key].find(entry=>entry.id===id);
  if(!task||!row||row.end===null||!canEdit(task,key==='sponsors'?'sponsors':'context'))return;
  if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start||end>videoDuration(task))return notify('The adjusted interval must remain within the video and have a positive duration.');
  const before=snapshotAnnotations(task);
+ if(key==='cameras'){
+  const chosenCameraId=editingInterval?.id===id?editingInterval.cameraId:undefined;
+  const changed=editRecordedCamera(task.cameras,id,start,end,chosenCameraId);
+  if(changed.status==='unchanged'){editingInterval=null;cameraEditOpenedAt=null;refreshStudio();return notify('Interval unchanged. Original saved annotation retained.');}
+  if(changed.status!=='updated')return notify(changed.status==='conflict'?'Another camera angle occupies that time. Nothing was changed.':changed.status==='too-many-merges'?'Multiple camera records touch this interval. Edit them separately to preserve their histories.':'Selected camera interval no longer exists.');
+  task.cameras=changed.rows;
+  editingInterval=null;cameraEditOpenedAt=null;
+  recordAnnotationChange(task,before,'Edit one recorded camera interval');
+  notify('Camera interval saved. Only this camera record and a directly continuous same-angle record were changed.');
+  return;
+ }
  const result=key==='sponsors'
   ?editSingleInterval(task.sponsors,id,start,end,(a,b)=>a.sponsorId===b.sponsorId)
-  :key==='events'
-   ?editSingleInterval(task.events,id,start,end,(a,b)=>a.eventId===b.eventId)
-   :editSingleInterval(task.cameras,id,start,end,()=>true);
+  :editSingleInterval(task.events,id,start,end,(a,b)=>a.eventId===b.eventId);
  if(result==='overlap')return notify('This edit overlaps another interval in the same timeline. No annotations were changed.');
  if(result!=='updated')return notify('The selected interval no longer exists. Refresh before editing.');
  editingInterval=null;recordAnnotationChange(task,before,'Edit selected interval');notify('Annotation interval updated');
@@ -605,7 +631,22 @@ window.tagEvent=id=>{
 window.tagCamera=id=>{
  const t=currentTask();if(!t||!canEdit(t,'context'))return;
  if(!camerasFor(t).some(x=>x.id===id))return;
- const at=seconds(t),draft=backfillDrafts.find(row=>row.taskId===t.id&&row.track==='cameras');
+ const at=seconds(t);
+ if(editingInterval?.key==='cameras'){
+  const editing=t.cameras.find(row=>row.id===editingInterval!.id);
+  if(!editing||editing.end===null){editingInterval=null;cameraEditOpenedAt=null;return notify('The camera record changed. Reopen the saved interval.');}
+  if(id!==(editingInterval.cameraId??editing.cameraId)){
+   editingInterval={...editingInterval,cameraId:id};
+   refreshStudio();
+   return notify('Camera angle selected for this record. Tap it again at the desired end to save, or use Save interval. No other records changed.');
+  }
+  const unchanged=cameraEditOpenedAt!==null&&Math.abs(at-cameraEditOpenedAt)<0.001;
+  // A tap without moving the playhead is explicitly a no-op, even if it
+  // started in the middle of a previously recorded interval.
+  window.saveTimelineEdit?.('cameras',editing.id,editing.start,unchanged?editing.end:at);
+  return;
+ }
+ const draft=backfillDrafts.find(row=>row.taskId===t.id&&row.track==='cameras');
  if(draft){
   finishBackfill(t,draft,at);
   if(draft.labelId===id)return;
@@ -620,20 +661,25 @@ window.tagCamera=id=>{
  const currentLive=t.cameras.find(x=>x.end===null);
  const nextSaved=currentLive?nextSavedCameraStart(t.cameras,currentLive.start):null;
  if(currentLive&&nextSaved!==null&&at>nextSaved)return notify(`This camera tag reached another saved interval at ${fmt(nextSaved)}. Return there to edit that interval separately.`);
- if(!active&&hasRecordedCameraAfter(t.cameras,at)){
-  if(otherLive)return notify('End the current LIVE camera interval before editing saved footage.');
-  const crossing=t.cameras.find(row=>row.end!==null&&row.start<=at&&at<row.end);
-  videoEl?.pause();
-  confirmInApp('Resume camera tagging',`Start LIVE camera tagging from ${fmt(at)}? ${crossing?'Only the saved interval at this timestamp will be split.':'This timestamp is between saved intervals.'} Every other recorded camera interval is preserved.`,()=>{
-   const current=currentTask();
-   if(!current||!canEdit(current,'context'))return;
-   if(current.cameras.some(row=>row.end===null))return notify('End the current LIVE camera interval first.');
-   const before=snapshotAnnotations(current);
-   current.cameras=resumeCameraFromTimestamp(current.cameras,id,at,logged,tstamp(),uid).rows;
-   editingInterval=null;
-   recordAnnotationChange(current,before,'Resume camera from saved footage');notify(`Camera LIVE from ${fmt(at)}. Other recorded intervals were preserved.`);
-  },{actionLabel:'RE-TAG FROM HERE',danger:false});
-  return;
+ if(!active){
+  const crossing=t.cameras.find(row=>row.end!==null&&row.cameraId===id&&row.start<=at&&at<row.end)
+   ??t.cameras.find(row=>row.end!==null&&row.start<=at&&at<row.end);
+  if(crossing){
+   if(otherLive)return notify('End the current LIVE camera interval before editing recorded footage.');
+   videoEl?.pause();
+   editingInterval={key:'cameras',id:crossing.id,start:crossing.start,end:crossing.end!,cameraId:id};
+   cameraEditOpenedAt=at;
+   refreshStudio();
+   notify('Editing this saved camera record. Seek to a new end and tap the selected angle to save, or drag its edges and Save. Cancel preserves it.');
+   return;
+  }
+  if(hasRecordedCameraAfter(t.cameras,at)){
+   if(otherLive)return notify('End the current LIVE camera interval before editing saved footage.');
+   const occupying=t.cameras.find(row=>row.end!==null&&row.start<=at&&at<row.end);
+   if(occupying)return notify('A different camera is saved here. Select its saved chip or timeline segment to edit that specific record.');
+   if(!draftFor(t,'cameras',id))beginBackfill(t,'cameras',id,at);
+   return;
+  }
  }
  const before=snapshotAnnotations(t);
  const result=selectCameraAngle(t.cameras,id,at,logged,tstamp(),uid);
@@ -769,19 +815,32 @@ document.addEventListener('keypress',runPlaybackKey,true);
 document.addEventListener('keyup',runPlaybackKey,true);
 document.addEventListener('keydown',runShortcut,true);
 document.addEventListener('keydown',runKeydown);
-window.submitMyTask=()=>{
- let t=currentTask();if(!t)return;
+window.submitTaskStream=(stream)=>{
+ const t=currentTask();if(!t)return;
  if(backfillDrafts.some(draft=>draft.taskId===t.id))return notify('Finish the currently open gap annotation before submitting.');
- let mineS=allowed(t,'sponsors')&&!t.submitted.sponsors,mineC=allowed(t,'context')&&!t.submitted.context;
- if(!mineS&&!mineC)return notify('No open assigned stream to submit.');
- if(mineS&&t.sponsors.some(x=>x.end==null))return notify('Close all active sponsor visibility tags before submitting.');
- if(mineC&&t.events.some(x=>x.end==null))return notify('Close all active duration events before submitting.');
- const parts=[mineS?'sponsor visibility':'',mineC?'events & camera':''].filter(Boolean).join(' and ');
- confirmInApp('Submit annotation streams',`Submit ${parts}? These streams will be locked until an administrator reopens them.`,()=>{
-  if(mineS)t.submitted.sponsors=true;
-  if(mineC){t.submitted.context=true;t.cameras.forEach(x=>{if(x.end==null)x.end=videoDuration(t)})}
-  save();render();notify('Assigned work submitted.');
+ if(!allowed(t,stream)||t.submitted[stream])return notify('This annotation stream is not assigned to you or is already complete.');
+ if(stream==='sponsors'&&t.sponsors.some(row=>row.end===null))return notify('End all LIVE sponsor tags before submitting sponsor work.');
+ if(stream==='context'&&t.events.some(row=>row.end===null))return notify('End all LIVE match events before submitting context work.');
+ if(stream==='context'&&t.cameras.some(row=>row.end===null))return notify('End the LIVE camera angle before submitting. The system will not invent an end timestamp.');
+ const name=stream==='sponsors'?'Sponsor visibility':'Events & camera angles';
+ confirmInApp(`Complete ${name}`,`Submit only ${name}? This stream will be locked. The match remains IN PROGRESS until both annotation streams are submitted.`,()=>{
+  const current=currentTask();if(!current||current.id!==t.id||current.submitted[stream])return;
+  current.submitted[stream]=true;
+  save();render();notify(`${name} submitted. ${current.submitted.sponsors&&current.submitted.context?'Match fully complete.':'Other annotation stream is still pending.'}`);
  },{actionLabel:'SUBMIT',danger:false});
+};
+window.submitMyTask=()=>{
+ if(studioTab==='sponsors')window.submitTaskStream?.('sponsors');
+ else if(studioTab==='events'||studioTab==='cameras')window.submitTaskStream?.('context');
+ else notify('Select a specific annotation stream to submit. Completing one stream must not complete the other.');
+};
+window.reopenTaskStream=(stream)=>{
+ const t=currentTask();if(!t||!isManager()||!t.submitted[stream])return;
+ const name=stream==='sponsors'?'Sponsor visibility':'Events & camera';
+ confirmInApp(`Reopen ${name}`,`Reopen only ${name} for editing? Other completed streams will remain locked.`,()=>{
+  const current=currentTask();if(!current||current.id!==t.id)return;
+  current.submitted[stream]=false;save();render();notify(`${name} reopened. Other streams were not changed.`);
+ },{actionLabel:'REOPEN',danger:false});
 };
 window.reopenTask=()=>{
  const t=currentTask();if(!t||!isManager())return;
@@ -958,13 +1017,16 @@ window.saveSponsor=async(gid,sid)=>{
  const file=(document.getElementById('simage') as HTMLInputElement|null)?.files?.[0];
  if(!group||!name)return notify('Sponsor name required');
  const shortcut=normalizeHotkey(formVal('shotkey'));
+ let properties:SponsorProperty[];
+ try{properties=JSON.parse(formVal('sproperties')) as SponsorProperty[];}catch{return notify('Invalid sponsor property definitions.');}
+ if(!Array.isArray(properties)||properties.length>8||properties.some(property=>!property.name.trim()||property.options.length<2||!property.options.some(option=>option.id===property.defaultOptionId)||property.options.some(option=>!option.label.trim())))return notify('Give every sponsor property a name, at least two labeled choices, and a default.');
  if(shortcut&&shortcutTaken(shortcut,sid))return notify('This shortcut is already assigned to another sponsor, event, or camera.');
  let logoData:string|undefined;
  try{if(file)logoData=await readOriginalPng(file)}catch(error){return notify(error instanceof Error?error.message:'Could not read this PNG image.');}
  let sponsor=group.sponsors.find(row=>row.id===sid);
  const before=sponsor?{...sponsor}:null;
  if(!sponsor){sponsor={id:uid(),name};group.sponsors.push(sponsor)}
- sponsor.name=name;sponsor.color=formVal('scolor');sponsor.hotkey=shortcut;
+ sponsor.name=name;sponsor.color=formVal('scolor');sponsor.hotkey=shortcut;sponsor.properties=properties;
  if(logoData){sponsor.logo=logoData;sponsor.logoTrimmed=false;}
  if(!catalogFits()){
   if(before){const index=group.sponsors.findIndex(item=>item.id===sponsor!.id);if(index>=0)group.sponsors[index]=before;}
@@ -1072,7 +1134,7 @@ function insightExport(d:ReturnType<typeof insightData>){
   disclaimer:'Presence and duration only. Placement and readability are manually classified per appearance; unclassified intervals are excluded from categories. Exposure by half requires explicit video-clock mapping. One primary placement and one overall quality label per visibility interval; multiple simultaneous placements and intra-interval quality changes are not measured. No impressions, logo size, screen coverage, attention, or value inferred.'
  };
 }
-function exportObject(t:TaskSummary){let spo=sponsorFor(t),evt=eventsFor(t),cam=camerasFor(t),d=insightData(t);return {schema:'seebot.sponsor_visibility.v1',exportedAt:tstamp(),task:{id:t.id,number:t.number,name:t.name,date:t.date,videoDurationSeconds:t.duration,videoSourceType:t.videoType,videoSourceUrl:me()?.role==='viewer'?null:t.videoUrl||null,videoFileName:t.videoName||null,matchPeriods:t.periods||null},assignment:{sponsorAnalyst:{id:t.sponsorAnalystId,name:nameUser(t.sponsorAnalystId)},eventAndCameraAnalyst:{id:t.contextAnalystId,name:nameUser(t.contextAnalystId)}},status:{label:taskStatus(t),...t.submitted},definition:{visibility:'Sponsor is visible anywhere in frame; simultaneous placements of the same sponsor are counted once.',timebase:'Seconds from beginning of video',eventOverlap:'Sponsors and event intervals are matched by positive duration overlap. Legacy point annotations (if present) are checked at their original timestamps.'},attributes:{sponsors:spo.map(s=>({id:s.id,name:s.name,list:s.groupName})),keyEvents:evt,cameraAngles:cam},annotations:{sponsorVisibility:t.sponsors.map(x=>({...x,durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null})),keyEvents:t.events.map(x=>({...x,name:labelFor(t,'events',x.eventId),durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null})),cameraAngles:t.cameras.map(x=>({...x,name:labelFor(t,'cameras',x.cameraId),durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null}))},analytics:{uniqueSponsorsSeen:d.active.length,combinedBrandExposureSeconds:d.sumSeconds,sponsors:d.active.map(s=>({id:s.id,name:s.name,exposureSeconds:s.seconds,percentageOfVideo:Math.round(10000*s.seconds/t.duration)/100,visibilityIntervals:s.entries,keyEventOverlaps:s.eventHits})),eventSponsorAssociations:t.events.map(e=>({eventId:e.id,tag:e.eventId,startSeconds:e.start,endSeconds:e.end,durationSeconds:e.end==null?null:e.end-e.start,sponsorIds:spo.filter(s=>d.active.some(b=>b.id===s.id&&d.eventRows.some(event=>event.id===e.id&&event.brands.some(match=>match.id===s.id)))).map(s=>s.id)})),advanced:insightExport(d)}}}
+function exportObject(t:TaskSummary){let spo=sponsorFor(t),evt=eventsFor(t),cam=camerasFor(t),d=insightData(t);return {schema:'seebot.sponsor_visibility.v1',exportedAt:tstamp(),task:{id:t.id,number:t.number,name:t.name,date:t.date,videoDurationSeconds:t.duration,videoSourceType:t.videoType,videoSourceUrl:me()?.role==='viewer'?null:t.videoUrl||null,videoFileName:t.videoName||null,matchPeriods:t.periods||null},assignment:{sponsorAnalyst:{id:t.sponsorAnalystId,name:nameUser(t.sponsorAnalystId)},eventAndCameraAnalyst:{id:t.contextAnalystId,name:nameUser(t.contextAnalystId)}},status:{label:taskStatus(t),...t.submitted},definition:{visibility:'Sponsor is visible anywhere in frame; simultaneous placements of the same sponsor are counted once.',timebase:'Seconds from beginning of video',eventOverlap:'Sponsors and event intervals are matched by positive duration overlap. Legacy point annotations (if present) are checked at their original timestamps.'},attributes:{sponsors:spo.map(s=>({id:s.id,name:s.name,list:s.groupName,properties:sponsorProperties(s)})),keyEvents:evt,cameraAngles:cam},annotations:{sponsorVisibility:t.sponsors.map(x=>({...x,effectiveProperties:Object.fromEntries(sponsorProperties(spo.find(s=>s.id===x.sponsorId)??{id:x.sponsorId,name:''}).map(property=>[property.id,x.properties?.[property.id]??property.defaultOptionId])),durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null})),keyEvents:t.events.map(x=>({...x,name:labelFor(t,'events',x.eventId),durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null})),cameraAngles:t.cameras.map(x=>({...x,name:labelFor(t,'cameras',x.cameraId),durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null}))},analytics:{uniqueSponsorsSeen:d.active.length,combinedBrandExposureSeconds:d.sumSeconds,sponsors:d.active.map(s=>({id:s.id,name:s.name,exposureSeconds:s.seconds,percentageOfVideo:Math.round(10000*s.seconds/t.duration)/100,visibilityIntervals:s.entries,keyEventOverlaps:s.eventHits})),eventSponsorAssociations:t.events.map(e=>({eventId:e.id,tag:e.eventId,startSeconds:e.start,endSeconds:e.end,durationSeconds:e.end==null?null:e.end-e.start,sponsorIds:spo.filter(s=>d.active.some(b=>b.id===s.id&&d.eventRows.some(event=>event.id===e.id&&event.brands.some(match=>match.id===s.id)))).map(s=>s.id)})),advanced:insightExport(d)}}}
 window.exportTask=id=>{let t=db.tasks.find(x=>x.id===id);if(!t||!visibleTasks().some(x=>x.id===id))return;let s=JSON.stringify(exportObject(t),null,2),a=document.createElement('a'),url=URL.createObjectURL(new Blob([s],{type:'application/json'}));a.href=url;a.download=(t.number||'match')+'_sponsor_annotations.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('JSON exported — '+t.number)};
  function render(){
  if(view!=='studio'||!workspaceId||!logged){videoRecovery?.dispose();videoRecovery=null;}

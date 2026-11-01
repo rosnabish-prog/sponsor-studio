@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import type { Fixture, Sponsor, SponsorGroup, StudioData, TagAttribute, TagGroup, TaskSummary, TeamMember } from '../types/models';
+import type { Fixture, Sponsor, SponsorGroup, SponsorProperty, StudioData, TagAttribute, TagGroup, TaskSummary, TeamMember } from '../types/models';
+import { DEFAULT_CLARITY, sponsorProperties } from '../domain/sponsorProperties';
 import { displayHotkey, hotkeyFromKeyboard, HOTKEY_PLACEHOLDER } from '../domain/hotkeys';
 
 export type DialogModel =
@@ -109,6 +110,9 @@ function GroupModal({ group, kind }: Extract<DialogModel, { type: 'group' }>) {
 
 function SponsorModal({ group, sponsor }: Extract<DialogModel, { type: 'sponsor' }>) {
   const [preview, setPreview] = useState(sponsor?.logo || '');
+  const [properties,setProperties]=useState<SponsorProperty[]>(()=>JSON.parse(JSON.stringify(sponsor?sponsorProperties(sponsor):[DEFAULT_CLARITY])));
+  const updateProperty=(id:string,update:(property:SponsorProperty)=>SponsorProperty)=>setProperties(current=>current.map(property=>property.id===id?update(property):property));
+  const newId=(prefix:string)=>`${prefix}${Math.random().toString(36).slice(2,10)}`;
   const handleImage = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || (file.type !== 'image/png' && !file.name.toLowerCase().endsWith('.png'))) { setPreview(''); return; }
@@ -123,6 +127,22 @@ function SponsorModal({ group, sponsor }: Extract<DialogModel, { type: 'sponsor'
       </Field>
       <Field title="Fallback brand color"><input type="color" id="scolor" defaultValue={sponsor?.color || '#7059c4'} style={{ padding: 5, height: 45 }} /></Field>
       <HotkeyField id="shotkey" initial={sponsor?.hotkey} />
+      <div className="field full sponsor-property-editor">
+        <label>SPONSOR SUB-ATTRIBUTES</label>
+        <small>Define properties inside this sponsor class. The selected default is implicit and hidden from tag cards; only non-default values (such as Unclear) are shown. These values are saved with each exposure interval.</small>
+        <input id="sproperties" type="hidden" value={JSON.stringify(properties)} readOnly />
+        {properties.map(property=><div className="sponsor-property" key={property.id}>
+          <div className="sponsor-property-heading"><input aria-label="Property name" value={property.name} maxLength={80} onChange={event=>updateProperty(property.id,item=>({...item,name:event.target.value}))} />
+            <button className="button ghost tiny" type="button" onClick={()=>setProperties(rows=>rows.filter(item=>item.id!==property.id))}>Remove property</button></div>
+          <div className="property-choices">{property.options.map(option=><div key={option.id} className="property-choice">
+            <input aria-label={`Option for ${property.name}`} maxLength={80} value={option.label} onChange={event=>updateProperty(property.id,item=>({...item,options:item.options.map(current=>current.id===option.id?{...current,label:event.target.value}:current)}))} />
+            <label title="Select as default"><input type="radio" name={`default-${property.id}`} checked={property.defaultOptionId===option.id} onChange={()=>updateProperty(property.id,item=>({...item,defaultOptionId:option.id}))} />Default</label>
+            <button className="button ghost tiny" type="button" disabled={property.options.length<=2} onClick={()=>updateProperty(property.id,item=>({...item,options:item.options.filter(current=>current.id!==option.id),defaultOptionId:item.defaultOptionId===option.id?item.options.find(current=>current.id!==option.id)!.id:item.defaultOptionId}))}>×</button>
+          </div>)}</div>
+          <button className="button ghost tiny" type="button" disabled={property.options.length>=20} onClick={()=>updateProperty(property.id,item=>({...item,options:[...item.options,{id:newId('choice'),label:'New option'}]}))}>+ Option</button>
+        </div>)}
+        <button className="button ghost tiny" type="button" disabled={properties.length>=8} onClick={()=>{const id=newId('property');setProperties(rows=>[...rows,{id,name:'New property',options:[{id:newId('choice'),label:'Default'},{id:newId('choice'),label:'Alternative'}],defaultOptionId:''}].map(item=>item.id===id?{...item,defaultOptionId:item.options[0].id}:item));}}>+ Add property</button>
+      </div>
     </div></div>
     <Footer><Cancel />{sponsor && <button className="button warn" type="button" onClick={() => { window.closeModal?.(); window.deleteSponsor?.(group.id, sponsor.id); }}>Delete</button>}<Save>Save sponsor</Save></Footer>
   </form>;

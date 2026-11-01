@@ -5,9 +5,10 @@ import { formatTimestamp as fmt } from '../domain/intervals';
 import { annotatedEndpoint } from '../domain/labelingProgress';
 import { PLACEMENT_TYPES, VISIBILITY_QUALITIES } from '../domain/classifications';
 import { displayHotkey } from '../domain/hotkeys';
+import { sponsorProperties, sponsorPropertyIntervals } from '../domain/sponsorProperties';
 
 type StudioProps = { model: StudioScreenModel };
-type TrackKind = 'sponsor' | 'event' | 'camera';
+type TrackKind = 'sponsor' | 'event' | 'camera' | 'property';
 
 function Icon({ name }: { name: string }) { return <svg className="ic"><use href={`#i-${name}`} /></svg>; }
 
@@ -17,15 +18,15 @@ export function BrandLogo({ sponsor, className = 'tinylogo' }: { sponsor: Sponso
   return <div className={className} style={style}>{sponsor.logo ? <img src={sponsor.logo} alt="" /> : initials}</div>;
 }
 
-function EventChip({ item, active, recorded, disabled, camera }: { item: TagAttribute; active: boolean; recorded: boolean; disabled: boolean; camera: boolean }) {
-  const recordedAction = camera ? 'SAVED at this time, tap to resume LIVE with confirmation' : 'SAVED at this time, tap to edit with confirmation';
+function EventChip({ item, active, recorded, editing, disabled, camera }: { item: TagAttribute; active: boolean; recorded: boolean; editing: boolean; disabled: boolean; camera: boolean }) {
+  const recordedAction = 'SAVED at this time, tap to edit this interval';
   return <button type="button" className={`event-chip tagged-state-chip ${camera ? 'camera-chip' : ''} ${active ? 'active' : ''} ${recorded ? 'recorded' : ''}`}
     onClick={() => camera ? window.tagCamera?.(item.id) : window.tagEvent?.(item.id)} disabled={disabled}
-    aria-pressed={active || recorded} aria-label={`${item.name}${item.hotkey ? `, ${displayHotkey(item.hotkey)}` : ''} · ${active ? 'LIVE, tap to end' : recorded ? recordedAction : 'OFF, tap to start'}`}
-    title={`${item.name}${item.hotkey ? ` · ${displayHotkey(item.hotkey)}` : ''} · ${active ? 'LIVE' : recorded ? camera ? 'SAVED — click to resume LIVE' : 'SAVED — click to edit' : 'OFF'}`}>
+    aria-pressed={active || recorded || editing} aria-label={`${item.name}${item.hotkey ? `, ${displayHotkey(item.hotkey)}` : ''} · ${editing ? 'EDITING, seek to new end and tap to save' : active ? 'LIVE, tap to end' : recorded ? recordedAction : 'OFF, tap to start'}`}
+    title={`${item.name}${item.hotkey ? ` · ${displayHotkey(item.hotkey)}` : ''} · ${editing ? 'EDITING — tap to save at playhead' : active ? 'LIVE' : recorded ? 'SAVED — click to edit this interval' : 'OFF'}`}>
     <span className="chip-symbol">{camera ? '◎' : '↔'}</span><span className="chip-label">{item.name}</span>
     {item.hotkey && <kbd className="hotkey-hint">{displayHotkey(item.hotkey)}</kbd>}
-    <span className={`tag-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
+    <span className={`tag-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {editing ? 'EDITING' : active ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
   </button>;
 }
 
@@ -35,7 +36,8 @@ function EventButtons({ model, camera }: StudioProps & { camera: boolean }) {
   return <>{items.map(item => {
     const matching=active.filter(annotation=>(camera?(annotation as CameraAnnotation).cameraId:(annotation as EventAnnotation).eventId)===item.id);
     const live=matching.some(row=>row.end==null&&row.start<=model.tick);
-    return <EventChip key={item.id} item={item} camera={camera} disabled={!model.canContext}
+    const editing=camera&&model.editingInterval?.key==='cameras'&&model.editingInterval.cameraId===item.id;
+    return <EventChip key={item.id} item={item} camera={camera} disabled={!model.canContext} editing={editing}
       active={live}
       recorded={!live&&matching.some(row=>row.end!==null&&(row.start<=model.tick&&model.tick<row.end||('kind' in row&&row.kind==='point'&&Math.abs(row.start-model.tick)<.5)))} />;
   })}</>;
@@ -52,6 +54,7 @@ export function StudioControls({ model }: StudioProps) {
 }
 
 export function StudioRail({ model }: StudioProps) {
+  const [expanded,setExpanded]=useState<string|null>(null);
   if (model.selectedTab === 'events' || model.selectedTab === 'cameras') {
     const camera = model.selectedTab === 'cameras';
     const items = camera ? model.cameras : model.events;
@@ -61,21 +64,29 @@ export function StudioRail({ model }: StudioProps) {
   return <div className="rail-cards">{model.sponsors.map(sponsor => {
     const active = model.task.sponsors.some(row => row.sponsorId === sponsor.id && row.end == null && row.start <= model.tick);
     const recorded = !active&&model.task.sponsors.some(row=>row.sponsorId===sponsor.id&&row.end!==null&&row.start<=model.tick&&model.tick<row.end);
-    return <button key={sponsor.id} className={`rail-brand ${active ? 'isactive' : ''} ${recorded?'isrecorded':''}`} type="button"
+    const appearance=model.task.sponsors.find(row=>row.sponsorId===sponsor.id&&row.end===null&&row.start<=model.tick) || model.task.sponsors.find(row=>row.sponsorId===sponsor.id&&row.end!==null&&row.start<=model.tick&&model.tick<row.end);
+    const properties=sponsorProperties(sponsor);
+    return <div className="rail-brand-wrap" key={sponsor.id}><button className={`rail-brand ${active ? 'isactive' : ''} ${recorded?'isrecorded':''}`} type="button"
       onClick={() => window.tagSponsor?.(sponsor.id)} disabled={!model.canSponsor}
       aria-label={`${sponsor.name}${sponsor.hotkey ? `, ${displayHotkey(sponsor.hotkey)}` : ''} · ${active ? 'LIVE, click to stop' : recorded ? 'SAVED at this time, click to re-tag from here' : 'OFF, click to start'}`} aria-pressed={active||recorded}
       title={`${sponsor.name}${sponsor.hotkey ? ` · ${displayHotkey(sponsor.hotkey)}` : ''} · ${active ? 'LIVE' : recorded ? 'SAVED — click to re-tag from here' : 'OFF'}`}>
       <span className="rail-logo"><BrandLogo sponsor={sponsor} /></span>
       {sponsor.hotkey && <kbd className="hotkey-hint rail-hotkey">{displayHotkey(sponsor.hotkey)}</kbd>}
       <span className={`rail-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
-    </button>;
+    </button>
+    {appearance&&properties.length>0&&<div className="rail-appearance-properties">
+      {sponsorPropertyIntervals(appearance,sponsor).map(property=><span className="property-value-badge" key={property.propertyId}>{property.propertyName}: {property.optionLabel} · {fmt(property.start)}–{property.end===null?'LIVE':fmt(property.end)}</span>)}
+      <button type="button" className="button ghost tiny" disabled={!model.canSponsor} onClick={()=>setExpanded(expanded===appearance.id?null:appearance.id)}>{expanded===appearance.id?'Close details':'+ Details'}</button>
+      {expanded===appearance.id&&properties.map(property=><label key={property.id}>{property.name}<select aria-label={`${property.name} for ${sponsor.name}`} value={appearance.properties?.[property.id]??property.defaultOptionId} disabled={!model.canSponsor} onChange={event=>window.setSponsorProperty?.(appearance.id,property.id,event.target.value)}>{property.options.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}</select></label>)}
+    </div>}
+    </div>;
   })}</div>;
 }
 
 type TimelineDelete = { key: 'sponsors'|'events'|'cameras'; id: string; name: string; x: number; y: number };
 type IntervalEdit = {key:'sponsors'|'events'|'cameras';id:string;start:number;end:number};
 function TimelineTrack({ name, items, kind, color, model, duration, onContextMenu, draft, setDraft }: { name: string; items: AnnotationBase[]; kind: TrackKind; color?: string; model: StudioScreenModel; duration: number; onContextMenu: (next: TimelineDelete) => void; draft:IntervalEdit|null;setDraft:(edit:IntervalEdit)=>void }) {
-  const canDelete = kind === 'sponsor' ? model.canSponsor : model.canContext;
+  const canDelete = kind === 'property' ? false : kind === 'sponsor' ? model.canSponsor : model.canContext;
   const nudge=(event:React.KeyboardEvent<HTMLSpanElement>,side:'start'|'end',base:IntervalEdit)=>{
     if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
     event.preventDefault();event.stopPropagation();
@@ -102,7 +113,7 @@ function TimelineTrack({ name, items, kind, color, model, duration, onContextMen
       if (rect.width > 0) window.seekVideo?.(Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * duration);
     }}>
       {items.map(item => {
-        const key=kind==='sponsor'?'sponsors':kind==='event'?'events':'cameras';
+        const key=kind==='sponsor'||kind==='property'?'sponsors':kind==='event'?'events':'cameras';
         const editing=!!draft&&draft.key===key&&draft.id===item.id;
         const start = Math.max(0, Math.min(editing?draft.start:item.start, duration));
         const end = Math.max(0, Math.min(editing?draft.end:item.end == null ? Math.max(item.start, model.task.observedTime || 0, model.tick) : item.end, duration));
@@ -167,10 +178,19 @@ export function StudioTimeline({ model }: StudioProps) {
     document.addEventListener('keydown', closeEscape);
     return () => { document.removeEventListener('pointerdown', closeOutside);document.removeEventListener('keydown', closeEscape); };
   }, [menu]);
-  const show = (kind: TrackKind) => filter === 'all' || filter === `${kind}s`;
+  const show = (kind: TrackKind) => filter === 'all' || filter === (kind==='property'?'sponsors':`${kind}s`);
   const lines: { name: string; items: AnnotationBase[]; kind: TrackKind; color?:string }[] = [];
   const measurable = (row:AnnotationBase) => row.end == null || row.end > row.start;
-  if (show('sponsor')) model.sponsors.forEach(item => {const items=model.task.sponsors.filter(row => row.sponsorId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'sponsor',color:item.color});});
+  if (show('sponsor')) model.sponsors.forEach(item => {
+    const items=model.task.sponsors.filter(row => row.sponsorId === item.id && measurable(row));
+    if(items.length)lines.push({name:item.name,items,kind:'sponsor',color:item.color});
+    // Child lanes inherit exact parent boundaries, including LIVE end:null.
+    const nested=items.flatMap(row=>sponsorPropertyIntervals(row,item).map(property=>({row,property})));
+    for(const propertyName of [...new Set(nested.map(entry=>`${entry.property.propertyName}: ${entry.property.optionLabel}`))]){
+      const intervals=nested.filter(entry=>`${entry.property.propertyName}: ${entry.property.optionLabel}`===propertyName).map(entry=>entry.row);
+      if(intervals.length)lines.push({name:`↳ ${propertyName}`,items:intervals,kind:'property',color:'#dca25f'});
+    }
+  });
   if (show('event')) model.events.forEach(item => {const items=model.task.events.filter(row => row.eventId === item.id && (measurable(row)||row.kind==='point'));if(items.length)lines.push({name:item.name,items,kind:'event'});});
   if (show('camera')) model.cameras.forEach(item => {const items=model.task.cameras.filter(row => row.cameraId === item.id && measurable(row));if(items.length)lines.push({name:item.name,items,kind:'camera'});});
   const endpoint=annotatedEndpoint(model.task,model.tick);
@@ -194,8 +214,8 @@ export function StudioTimeline({ model }: StudioProps) {
   return <div className="timeline-content">
     <div className="timeline-filter"><label htmlFor="timelineLayerFilter">SHOW TRACKS</label><select id="timelineLayerFilter" value={filter} onChange={event => {setFilter(event.target.value as typeof filter);setMenu(null);}}>
       <option value="all">All annotations</option><option value="sponsors">Sponsors</option><option value="events">Events</option><option value="cameras">Cameras</option>
-    </select><span>{lines.length} recorded tracks · timeline through {fmt(endpoint)} · Ctrl + scroll to zoom{model.tick>duration?' · playhead is beyond recorded range':''}</span><span className="timeline-zoom-label">{zoom}×</span><button type="button" className="button ghost tiny" onClick={()=>setZoom(1)}>Reset zoom</button></div>
-    {draft && <div className="timeline-edit-toolbar"><strong>EDIT INTERVAL · Drag either edge · ←/→ moves 0.1 sec</strong><span>{fmt(draft.start)} – {fmt(draft.end)}</span><button type="button" className="button ghost tiny" onClick={()=>setEditExtra(x=>x+60)}>+ 1 min view</button><button type="button" className="button primary tiny" onClick={()=>window.saveTimelineEdit?.(draft.key,draft.id,draft.start,draft.end)} disabled={draft.end<=draft.start}>Save interval</button><button type="button" className="button ghost tiny" onClick={()=>window.cancelTimelineEdit?.()}>Cancel</button></div>}
+    </select><span>{lines.length} recorded tracks · timeline through {fmt(endpoint)} · Ctrl + scroll to zoom{model.tick>duration?' · playhead is beyond recorded range':''}</span><span className="timeline-zoom-label">{zoom}×</span><button type="button" className="button ghost tiny studio-control-button" onClick={()=>setZoom(1)}>Reset zoom</button></div>
+    {draft && <div className="timeline-edit-toolbar"><strong>{draft.key==='cameras'?'EDIT SAVED CAMERA · Seek, then tap its chip to end · Or drag an edge':'EDIT INTERVAL · Drag either edge · ←/→ moves 0.1 sec'}</strong><span>{fmt(draft.start)} – {fmt(draft.end)}</span><button type="button" className="button ghost tiny studio-control-button" onClick={()=>setEditExtra(x=>x+60)}>+ 1 min view</button><button type="button" className="button primary tiny studio-control-button" onClick={()=>window.saveTimelineEdit?.(draft.key,draft.id,draft.start,draft.end)} disabled={draft.end<=draft.start}>Save interval</button><button type="button" className="button ghost tiny studio-control-button" onClick={()=>window.cancelTimelineEdit?.()}>Cancel</button></div>}
     {lines.length ? <div className="timeline-viewport" ref={timelineRef} aria-label="Zoomable annotated timeline"><div className="timeline-scaled" style={{width:`${zoom*100}%`}}><div className="track-top" onPointerDown={beginScrub} onPointerMove={moveScrub} onPointerUp={endScrub} onPointerCancel={endScrub}>{[0, .25, .5, .75, 1].map(share => <span key={share}>{fmt(duration * share)}</span>)}</div>
       <div className="timeline-track-stack" onPointerDown={beginScrub} onPointerMove={moveScrub} onPointerUp={endScrub} onPointerCancel={endScrub}>
         {lines.map((line, index) => <TimelineTrack key={`${line.kind}:${index}`} {...line} duration={duration} model={model} onContextMenu={setMenu} draft={draft} setDraft={setDraft} />)}
@@ -213,6 +233,7 @@ type LogEntry = (SponsorAnnotation & { key: 'sponsors'; type: string; itemId: st
   (CameraAnnotation & { key: 'cameras'; type: string; itemId: string; color: string });
 
 export function StudioLogs({ model }: StudioProps) {
+  const [expandedProperties,setExpandedProperties]=useState<string|null>(null);
   const logs: LogEntry[] = [
     ...model.task.sponsors.map(row => ({ ...row, key: 'sponsors' as const, type: 'Sponsor', itemId: row.sponsorId, color: '#ff9b36' })),
     ...model.task.events.map(row => ({ ...row, key: 'events' as const, type: 'Event', itemId: row.eventId, color: '#d7c7b5' })),
@@ -222,8 +243,10 @@ export function StudioLogs({ model }: StudioProps) {
     const items = row.key === 'sponsors' ? model.sponsors : row.key === 'events' ? model.events : model.cameras;
     return items.find(item => item.id === row.itemId)?.name || row.itemId;
   }
-  return <div className="logtable"><table className="table"><thead><tr>
-    <th>START</th><th>TYPE</th><th>ATTRIBUTE</th><th>END</th><th>PLACEMENT TYPE / VISIBILITY QUALITY</th><th>ACTIONS</th>
+  return <div className="logtable studio-recorded-log"><table className="table"><colgroup>
+    <col style={{width:'7%'}} /><col style={{width:'8%'}} /><col style={{width:'15%'}} /><col style={{width:'7%'}} /><col style={{width:'48%'}} /><col style={{width:'15%'}} />
+  </colgroup><thead><tr>
+    <th>START</th><th>TYPE</th><th>ATTRIBUTE</th><th>END</th><th>PLACEMENT / SUB-ATTRIBUTES</th><th>ACTIONS</th>
   </tr></thead><tbody>{logs.map(row => <tr key={row.id}>
     <td className="nowrap" style={{ fontWeight: 900 }}>{fmt(row.start)}</td>
     <td><span style={{ color: row.color, fontWeight: 800 }}>{row.type}</span></td>
@@ -233,16 +256,24 @@ export function StudioLogs({ model }: StudioProps) {
       <label>PRIMARY PLACEMENT<select aria-label={`Placement type for ${label(row)}`} value={row.placement || ''} disabled={!model.canSponsor} onChange={event => window.setExposureAttribute?.(row.id, 'placement', event.target.value)}>
         <option value="">NOT CLASSIFIED</option>{PLACEMENT_TYPES.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
       </select></label>
-      <label>VISIBILITY QUALITY<select aria-label={`Visibility quality for ${label(row)}`} value={row.quality || ''} disabled={!model.canSponsor} onChange={event => window.setExposureAttribute?.(row.id, 'quality', event.target.value)}>
+      {row.quality&&<label>LEGACY VISIBILITY QUALITY<select aria-label={`Visibility quality for ${label(row)}`} value={row.quality} disabled={!model.canSponsor} onChange={event => window.setExposureAttribute?.(row.id, 'quality', event.target.value)}>
         <option value="">NOT CLASSIFIED</option>{VISIBILITY_QUALITIES.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
-      </select></label></div> : <span className="muted small">—</span>}</td>
-    <td><button type="button" className="button ghost tiny" onClick={() => window.seekVideo?.(row.start)} title="Jump to time"><Icon name="play" /></button>
+      </select></label>}
+      {(()=>{const sponsor=model.sponsors.find(item=>item.id===row.sponsorId);if(!sponsor)return null;
+        const properties=sponsorProperties(sponsor);
+        return properties.length>0&&<div className="recorded-properties">
+          {sponsorPropertyIntervals(row,sponsor).map(property=><span key={property.propertyId} className="property-value-badge">{property.propertyName}: {property.optionLabel} · {fmt(property.start)}–{property.end===null?'LIVE':fmt(property.end)}</span>)}
+          <button type="button" className="button ghost tiny" disabled={!model.canSponsor} onClick={()=>setExpandedProperties(expandedProperties===row.id?null:row.id)}>{expandedProperties===row.id?'Hide details':'+ Properties'}</button>
+          {expandedProperties===row.id&&properties.map(property=><label key={property.id}>{property.name}<select aria-label={`${property.name} for ${sponsor.name} interval`} value={row.properties?.[property.id]??property.defaultOptionId} disabled={!model.canSponsor} onChange={event=>window.setSponsorProperty?.(row.id,property.id,event.target.value)}>{property.options.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}</select></label>)}
+        </div>;
+      })()}</div> : <span className="muted small">—</span>}</td>
+    <td><div className="studio-log-actions"><button type="button" className="button ghost tiny studio-control-button studio-log-icon" onClick={() => window.seekVideo?.(row.start)} title="Jump to time" aria-label={`Jump to ${fmt(row.start)}`}><Icon name="play" /></button>
       {model.pendingBackfillIds.includes(row.id)?<span className="tag" title="This early-gap interval will be saved when you end the tag">GAP DRAFT · END TAG TO SAVE</span>:<>
-        <button type="button" className="button ghost tiny" onClick={()=>window.openAnnotationHistory?.(row.id)} title="View item history and restore a previous version">HISTORY</button>
-        {(row.key === 'sponsors' ? model.canSponsor : model.canContext) && <button type="button" className="button ghost tiny" onClick={() => window.deleteLog?.(row.key, row.id)} title="Remove log"><Icon name="close" /></button>}
-      </>}</td>
+        <button type="button" className="button ghost tiny studio-control-button" onClick={()=>window.openAnnotationHistory?.(row.id)} title="View item history and restore a previous version">HISTORY</button>
+        {(row.key === 'sponsors' ? model.canSponsor : model.canContext) && <button type="button" className="button ghost tiny studio-control-button studio-log-icon" onClick={() => window.deleteLog?.(row.key, row.id)} title="Remove log" aria-label={`Remove ${label(row)} annotation`}><Icon name="close" /></button>}
+      </>}</div></td>
   </tr>)}{!logs.length && <tr><td colSpan={6} style={{ textAlign: 'center', color: '#999', padding: 20 }}>No actions recorded yet</td></tr>}</tbody></table>
-    <p className="exposure-meta-note">For each sponsor appearance, select the primary placement and readability. Unknown stays unclassified. If placement or clarity changes materially during an appearance, end the interval and start a new one.</p>
+    <p className="exposure-meta-note">Each sponsor property inherits its parent exposure's complete start and end time, including when added after tagging. Default property values stay hidden; legacy quality ratings remain available on existing records.</p>
   </div>;
 }
 
@@ -252,6 +283,7 @@ declare global {
     tagEvent?: (id: string) => void;
     tagCamera?: (id: string) => void;
     setExposureAttribute?: (id: string, field: 'placement' | 'quality', value: string) => void;
+    setSponsorProperty?: (annotationId:string,propertyId:string,value:string) => void;
     deleteLog?: (key: 'sponsors' | 'events' | 'cameras', id: string) => void;
     editRecordedAnnotation?: (key: 'sponsors'|'events'|'cameras', id:string)=>void;
     retagRecordedSponsor?: (id:string, at:number)=>void;

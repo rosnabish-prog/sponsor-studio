@@ -68,7 +68,7 @@ export interface StudioScreenModel {
   sponsors: Sponsor[];
   events: TagAttribute[];
   cameras: TagAttribute[];
-  editingInterval?: {key:'sponsors'|'events'|'cameras';id:string;start:number;end:number};
+  editingInterval?: {key:'sponsors'|'events'|'cameras';id:string;start:number;end:number;cameraId?:string};
 }
 
 /** Synchronous commit so annotation handlers can immediately access mounted DOM. */

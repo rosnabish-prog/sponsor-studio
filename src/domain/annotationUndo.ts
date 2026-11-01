@@ -39,17 +39,19 @@ export function sameAnnotationContent(a: UndoRow | null, b: UndoRow | null) {
   labelId:'sponsorId' in row?row.sponsorId:'eventId' in row?row.eventId:row.cameraId,
   placement:'placement' in row?row.placement??null:null,
   quality:'quality' in row?row.quality??null:null,
+  properties:'properties' in row?row.properties??{}:{},
  });
  return JSON.stringify(content(a)) === JSON.stringify(content(b));
 }
 
 export function serverSnapshotMatchesRow(snapshot: {
-  labelId:string;start:number;end:number|null;placement:string|null;quality:string|null;
+  labelId:string;start:number;end:number|null;placement:string|null;quality:string|null;properties?:Record<string,string>;
 },row:UndoRow) {
  const labelId='sponsorId' in row?row.sponsorId:'eventId' in row?row.eventId:row.cameraId;
  return snapshot.labelId===labelId&&snapshot.start===row.start&&snapshot.end===row.end&&
   snapshot.placement===('placement' in row?row.placement??null:null)&&
-  snapshot.quality===('quality' in row?row.quality??null:null);
+  snapshot.quality===('quality' in row?row.quality??null:null)&&
+  JSON.stringify(snapshot.properties??{})===JSON.stringify('properties' in row?row.properties??{}:{});
 }
 
 export function lastAnnotatedTimestamp(task: TaskSummary): number | null {

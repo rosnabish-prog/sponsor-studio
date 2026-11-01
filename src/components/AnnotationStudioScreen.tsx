@@ -15,16 +15,16 @@ function StudioAction({ children, onClick, className = '' }: { children: React.R
 }
 
 function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boolean }) {
-  const completed=model.submitted.sponsors&&model.submitted.context;
   return <div className="task-actions-dropdown">
     <details className="task-actions" id="taskActionMenu">
       <summary aria-label="Task actions"><span>ACTIONS</span><span className="menu-glyph" aria-hidden="true">⋯</span></summary>
       <div className="task-menu-content">
         <StudioAction onClick={() => window.chooseVideo?.()}><Icon name="video" /> {model.isLocalVideo ? 'REPLACE LOCAL VIDEO' : 'OPEN LOCAL VIDEO'}</StudioAction>
         <StudioAction onClick={() => window.exportTask?.(model.id)}><Icon name="download" /> EXPORT JSON</StudioAction>
-        {completed
-          ? isAdmin && <StudioAction className="task-menu-reopen" onClick={() => window.reopenTask?.()}><Icon name="check" /> REOPEN TASK</StudioAction>
-          : <StudioAction className="task-menu-complete" onClick={() => window.submitMyTask?.()}><Icon name="check" /> MARK COMPLETE</StudioAction>}
+        {model.canSponsor&&!model.submitted.sponsors&&<StudioAction className="task-menu-complete" onClick={() => window.submitTaskStream?.('sponsors')}><Icon name="check" /> COMPLETE SPONSOR TAGGING</StudioAction>}
+        {model.canContext&&!model.submitted.context&&<StudioAction className="task-menu-complete" onClick={() => window.submitTaskStream?.('context')}><Icon name="check" /> COMPLETE EVENTS & CAMERAS</StudioAction>}
+        {isAdmin&&model.submitted.sponsors&&<StudioAction className="task-menu-reopen" onClick={() => window.reopenTaskStream?.('sponsors')}><Icon name="check" /> REOPEN SPONSOR TAGGING</StudioAction>}
+        {isAdmin&&model.submitted.context&&<StudioAction className="task-menu-reopen" onClick={() => window.reopenTaskStream?.('context')}><Icon name="check" /> REOPEN EVENTS & CAMERAS</StudioAction>}
         {isAdmin && <>
           <StudioAction onClick={() => window.assignTaskModal?.(model.id)}><Icon name="users" /> ASSIGN TASK</StudioAction>
           <StudioAction onClick={() => window.addSponsorToCurrentTask?.()}><Icon name="plus" /> ADD SPONSOR / LOGO</StudioAction>
@@ -44,7 +44,7 @@ function VideoPanel({ model }: { model: StudioScreenModel }) {
   const sourceNote = model.videoError || (isLocalVideo ? `${videoName || 'Video'} · Available in this browser session only. Select it again after refreshing.` : videoSrc ? `${videoName || 'Video'}${model.videoDimensions ? ` · ${model.videoDimensions}` : ''}` : 'Open a local video or configure a direct HTTPS source.');
   return <div className="video-box">
     <div className="video-header"><span>LIVE TAGGING CONSOLE</span><div className="video-header-actions">
-      <button type="button" className="video-jump-last" onClick={()=>window.jumpToLastAnnotation?.()} disabled={model.lastAnnotatedAt===null} title="Jump to the end of the most recent saved annotation">↪ LAST ANNOTATED {model.lastAnnotatedAt!==null?formatTimestamp(model.lastAnnotatedAt):''}</button>
+      <button type="button" className="button ghost tiny studio-control-button video-jump-last" onClick={()=>window.jumpToLastAnnotation?.()} disabled={model.lastAnnotatedAt===null} title="Jump to the end of the most recent saved annotation"><Icon name="clock" /> LAST ANNOTATED {model.lastAnnotatedAt!==null?formatTimestamp(model.lastAnnotatedAt):''}</button>
       <span id="videoSourceState">{sourceState}</span>
     </div></div>
     <div id="videoFileStatus" className="video-source-note" role="status" aria-live="polite">{sourceNote}</div>
@@ -98,6 +98,10 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
             <span>Sponsor tagging: {model.sponsorAnalyst === 'Unassigned' ? 'Unassigned' : `Assigned to ${model.sponsorAnalyst}`}</span><span>·</span>
             <span>Events & cameras: {model.contextAnalyst === 'Unassigned' ? 'Unassigned' : `Assigned to ${model.contextAnalyst}`}</span>
           </div>
+          <div className="studio-stream-statuses" aria-label="Independent annotation stream completion status">
+            <span className={`studio-stream-state ${model.submitted.sponsors?'complete':'pending'}`}>SPONSORS · {model.submitted.sponsors?'COMPLETE':'PENDING'}</span>
+            <span className={`studio-stream-state ${model.submitted.context?'complete':'pending'}`}>EVENTS & CAMERAS · {model.submitted.context?'COMPLETE':'PENDING'}</span>
+          </div>
         </div>
         <ActionMenu model={model} isAdmin={isAdmin} />
       </div>
@@ -110,14 +114,14 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
               key={key} type="button" data-studio-tab={key} aria-pressed={model.selectedTab === key}
               className={model.selectedTab === key ? 'on' : ''} onClick={() => window.setStudioTab?.(key)}>{label}</button>)}</div>
           </div>
-          <div className="studio-undo-toolbar"><button type="button" className="button ghost tiny studio-undo-button" onClick={()=>window.undoLastAnnotationChange?.()} disabled={!model.undoCount} title="Undo up to 10 recently saved annotation actions in this session (Ctrl+Z)">↶ UNDO LAST CHANGE <span>{model.undoCount}/10</span></button><small>Ctrl+Z · Changes restore only their original annotation IDs</small></div>
+          <div className="studio-undo-toolbar"><button type="button" className="button ghost tiny studio-control-button studio-undo-button" onClick={()=>window.undoLastAnnotationChange?.()} disabled={!model.undoCount} title="Undo up to 10 recently saved annotation actions in this session (Ctrl+Z)">↶ UNDO LAST CHANGE <span>{model.undoCount}/10</span></button><small>Ctrl+Z · Changes restore only their original annotation IDs</small></div>
           <div className="contextline"><Icon name="clock" /> Current video timestamp <b id="currentT">{formatTimestamp(model.tick)}</b>
             <span style={{ marginLeft: 'auto' }}>{model.canSponsor ? 'Sponsor tagging enabled' : 'Sponsor tagging view only'} · {model.canContext ? 'Context tagging enabled' : 'Context view only'}</span>
           </div>
           <div id="controlsBody"><StudioControls model={model} /></div>
           <div className="tline-wrap">
-            <div className="sectionhead"><div><h3>Unified match timeline</h3><p className="sub">Review recorded intervals by layer. Right-click a segment to delete it, if you have editing permission.</p></div>
-              <div className="tline-legend"><span><i className="key" style={{ background: '#ff9b36' }} />Sponsors</span><span><i className="key" style={{ background: '#d7c7b5' }} />Events</span><span><i className="key" style={{ background: '#9cabb0' }} />Cameras</span></div></div>
+            <div className="sectionhead"><div><h3>Unified match timeline</h3><p className="sub">Review recorded intervals by layer. Sponsor property lanes inherit the exact start and end of their parent exposure.</p></div>
+              <div className="tline-legend"><span><i className="key" style={{ background: '#ff9b36' }} />Sponsors</span><span><i className="key" style={{ background: '#dca25f' }} />Properties</span><span><i className="key" style={{ background: '#d7c7b5' }} />Events</span><span><i className="key" style={{ background: '#9cabb0' }} />Cameras</span></div></div>
             <div id="timelineBody"><StudioTimeline model={model} /></div>
           </div>
         </div>
@@ -125,7 +129,7 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
         <AnnotationHistoryPanel model={model} isAdmin={isAdmin} />
       </div>
       <aside className="sponsor-rail" aria-label={`${model.railTitle} tagging panel`} tabIndex={0}>
-        <div className="rail-compact-heading"><div className="rail-heading-row"><h2 id="railTagTitle">{model.railTitle}</h2>{model.selectedTab!=='events'&&model.selectedTab!=='cameras'&&<button type="button" className={`sponsor-hide-all ${model.sponsorsHidden?'is-hidden':''}`} onClick={()=>window.toggleHideAllSponsors?.()} disabled={!model.canSponsor} aria-pressed={model.sponsorsHidden}>{model.sponsorsHidden?'UNHIDE ALL':'HIDE ALL'}</button>}</div><p id="railTagHint">{model.railHint}</p></div>
+        <div className="rail-compact-heading"><div className="rail-heading-row"><h2 id="railTagTitle">{model.railTitle}</h2>{model.selectedTab!=='events'&&model.selectedTab!=='cameras'&&<button type="button" className={`studio-control-button sponsor-hide-all ${model.sponsorsHidden?'is-hidden':''}`} onClick={()=>window.toggleHideAllSponsors?.()} disabled={!model.canSponsor} aria-pressed={model.sponsorsHidden}>{model.sponsorsHidden?'UNHIDE ALL':'HIDE ALL'}</button>}</div><p id="railTagHint">{model.railHint}</p></div>
         <div id="sponsorRail" className="rail-scroll"><StudioRail model={model} /></div>
       </aside>
   </div>;
@@ -137,6 +141,8 @@ declare global {
     chooseVideo?: () => void;
     exportTask?: (id: string) => void;
     submitMyTask?: () => void;
+    submitTaskStream?: (stream:'sponsors'|'context') => void;
+    reopenTaskStream?: (stream:'sponsors'|'context') => void;
     assignTaskModal?: (id: string) => void;
     addSponsorToCurrentTask?: () => void;
     reopenTask?: () => void;
