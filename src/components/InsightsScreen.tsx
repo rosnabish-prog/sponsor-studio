@@ -24,7 +24,7 @@ export function InsightsScreen({ model, viewer = false }: { model: ReportsScreen
         {!viewer && <button className="button primary" onClick={() => window.openTask?.(model.selectedId!)}>Open studio <Icon name="arrow" /></button>}
       </div>
     </div>
-    <ReportsBody model={model} />
+    <ReportsBody model={model} viewer={viewer} />
   </>;
 }
 
