@@ -239,7 +239,7 @@ let selectedTaskId=initialRoute.view==='studio'?initialRoute.taskId:'',reportTas
 let studioTab:'all'|'sponsors'|'events'|'cameras'='all';
 let tick=0,seekStep=5,videoEl:HTMLVideoElement|null=null,modalOpen=false;
 let editingInterval:{key:'sponsors'|'events'|'cameras';id:string;start:number;end:number;cameraId?:string}|null=null;
-let cameraEditOpenedAt:number|null=null;
+let chipEditOpenedAt:number|null=null;
 const localVideos:Record<string,{url:string;name:string}>={};
 const videoDurations:Record<string,number>={};
 function clearLocalVideos(){for(const video of Object.values(localVideos))URL.revokeObjectURL(video.url);for(const id of Object.keys(localVideos))delete localVideos[id];for(const id of Object.keys(videoDurations))delete videoDurations[id];}
@@ -294,7 +294,7 @@ window.login=async e=>{
 window.selectWorkspace=id=>{if(liveWorkspaces.some(w=>w.workspace.id===id)){view='dashboard';selectedTaskId='';writeStudioRoute(view);void loadWorkspace(id).catch(error=>notify('Workspace load failed: '+error.message))}};
 window.logout=()=>{if(backfillDrafts.length)return notify('End your in-progress gap tags before signing out so their intervals can be saved.');void api.logout().catch(()=>{});logged='';remoteUser=null;passwordChangeRequired=false;workspaceId='';liveWorkspaces=[];catalogClipboard=null;selectedTaskId='';view='dashboard';writeStudioRoute(view,'',true);if(videoEl){videoEl.pause()}clearLocalVideos();render()};
 window.showWorkspaceSwitcher=()=>{if(!flushBackfills(currentTask()))return;workspaceId='';render()};
-window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;if(!flushBackfills(currentTask()))return;view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';editingInterval=null;cameraEditOpenedAt=null;writeStudioRoute(view);render();window.scrollTo(0,0)};
+window.navigate=(v)=>{if(v==='workspace'){window.showWorkspaceSwitcher?.();return}if(v==='loading')return;if(!flushBackfills(currentTask()))return;view=me()?.role==='viewer'?'reports':v==='login'?'dashboard':v;if(videoEl){videoEl.pause()}selectedTaskId='';editingInterval=null;chipEditOpenedAt=null;writeStudioRoute(view);render();window.scrollTo(0,0)};
 function restoreRoute(){const route=readStudioRoute();if((route.view!=='studio'||route.taskId!==selectedTaskId)&&!flushBackfills(currentTask())){writeStudioRoute(view,selectedTaskId,true);return;}view=route.view;selectedTaskId=view==='studio'?route.taskId:'';reportTaskId=view==='reports'?route.taskId:reportTaskId;if(videoEl)videoEl.pause();if(workspaceId)render();window.scrollTo(0,0)}
 window.addEventListener('popstate',restoreRoute);
 window.addEventListener('hashchange',restoreRoute);
@@ -309,7 +309,7 @@ window.openTask=id=>{
  if(!visibleTasks().some(task=>task.id===id))return notify('This task is not available in your workspace.');
  if(selectedTaskId!==id&&!flushBackfills(currentTask()))return;
  videoRecovery?.dispose();videoRecovery=null;videoError='';
- selectedTaskId=id;view='studio';tick=0;studioTab='all';editingInterval=null;cameraEditOpenedAt=null;writeStudioRoute(view,id);render();window.scrollTo(0,0);
+ selectedTaskId=id;view='studio';tick=0;studioTab='all';editingInterval=null;chipEditOpenedAt=null;writeStudioRoute(view,id);render();window.scrollTo(0,0);
  const asset=db.tasks.find(t=>t.id===id)?.videoAssetId;
   if(asset&&!localVideos[id]){void api.playback(workspaceId,id,asset).then(result=>{
   const task=db.tasks.find(t=>t.id===id);if(!task)return;
@@ -492,7 +492,7 @@ window.editRecordedAnnotation=(key,id)=>{
  const name=labelFor(task,key,key==='sponsors'?(row as SponsorAnnotation).sponsorId:key==='events'?(row as EventAnnotation).eventId:(row as CameraAnnotation).cameraId);
  confirmInApp('Edit recorded interval',`You are about to change the saved ${name} interval (${fmt(row.start)}–${fmt(row.end!)}). Continue to the editor?`,()=>{
   editingInterval={key,id,start:row.start,end:row.end!,...(key==='cameras'?{cameraId:(row as CameraAnnotation).cameraId}:{})};
-  cameraEditOpenedAt=key==='cameras'?seconds(task):null;
+  chipEditOpenedAt=key==='cameras'?seconds(task):null;
   refreshStudio();notify('Drag either edge of the highlighted timeline segment, then Save.');
  },{actionLabel:'CONTINUE TO EDIT',danger:false});
 };
@@ -513,7 +513,7 @@ window.retagRecordedSponsor=(id,at)=>{
   recordAnnotationChange(current,before,`Re-tag ${name}`);notify(`${name} LIVE from ${fmt(at)}.`);
  },{actionLabel:'RE-TAG FROM HERE',danger:false});
 };
-window.cancelTimelineEdit=()=>{editingInterval=null;cameraEditOpenedAt=null;refreshStudio()};
+window.cancelTimelineEdit=()=>{editingInterval=null;chipEditOpenedAt=null;refreshStudio()};
 window.saveTimelineEdit=(key,id,start,end)=>{
  const task=currentTask(),row=task?.[key].find(entry=>entry.id===id);
  if(!task||!row||row.end===null||!canEdit(task,key==='sponsors'?'sponsors':'context'))return;
@@ -522,10 +522,10 @@ window.saveTimelineEdit=(key,id,start,end)=>{
  if(key==='cameras'){
   const chosenCameraId=editingInterval?.id===id?editingInterval.cameraId:undefined;
   const changed=editRecordedCamera(task.cameras,id,start,end,chosenCameraId);
-  if(changed.status==='unchanged'){editingInterval=null;cameraEditOpenedAt=null;refreshStudio();return notify('Interval unchanged. Original saved annotation retained.');}
+  if(changed.status==='unchanged'){editingInterval=null;chipEditOpenedAt=null;refreshStudio();return notify('Interval unchanged. Original saved annotation retained.');}
   if(changed.status!=='updated')return notify(changed.status==='conflict'?'Another camera angle occupies that time. Nothing was changed.':changed.status==='too-many-merges'?'Multiple camera records touch this interval. Edit them separately to preserve their histories.':'Selected camera interval no longer exists.');
   task.cameras=changed.rows;
-  editingInterval=null;cameraEditOpenedAt=null;
+  editingInterval=null;chipEditOpenedAt=null;
   recordAnnotationChange(task,before,'Edit one recorded camera interval');
   notify('Camera interval saved. Only this camera record and a directly continuous same-angle record were changed.');
   return;
@@ -535,7 +535,7 @@ window.saveTimelineEdit=(key,id,start,end)=>{
   :editSingleInterval(task.events,id,start,end,(a,b)=>a.eventId===b.eventId);
  if(result==='overlap')return notify('This edit overlaps another interval in the same timeline. No annotations were changed.');
  if(result!=='updated')return notify('The selected interval no longer exists. Refresh before editing.');
- editingInterval=null;recordAnnotationChange(task,before,'Edit selected interval');notify('Annotation interval updated');
+ editingInterval=null;chipEditOpenedAt=null;recordAnnotationChange(task,before,'Edit selected interval');notify('Annotation interval updated');
 };
 window.tagSponsor=id=>{
  const t=currentTask();if(!t||!canEdit(t,'sponsors'))return;
@@ -605,12 +605,29 @@ window.toggleHideAllSponsors=()=>{
 window.tagEvent=id=>{
  const t=currentTask();if(!t||!canEdit(t,'context'))return;
  if(!eventsFor(t).some(x=>x.id===id))return;
- const at=seconds(t),draft=draftFor(t,'events',id);
+ const at=seconds(t);
+ if(editingInterval?.key==='events'){
+  const editing=t.events.find(row=>row.id===editingInterval!.id);
+  if(!editing||editing.end===null){editingInterval=null;chipEditOpenedAt=null;refreshStudio();return notify('The event record changed. Reopen the saved interval.');}
+  if(id!==editing.eventId)return notify('End the current LIVE event edit before tagging another event.');
+  if(chipEditOpenedAt!==null&&sameVideoTimestamp(at,chipEditOpenedAt)){
+   editingInterval=null;chipEditOpenedAt=null;refreshStudio();return notify('No time change. Original event interval retained.');
+  }
+  window.saveTimelineEdit?.('events',editing.id,editing.start,at);
+  return;
+ }
+ const draft=draftFor(t,'events',id);
  if(draft){finishBackfill(t,draft,at);return;}
  const active=t.events.find(x=>x.eventId===id&&x.end==null&&x.start<=at);
  if(!active){
   const recorded=recordedAt(t.events.filter(row=>row.eventId===id),at);
-  if(recorded)return window.editRecordedAnnotation?.('events',recorded.id);
+  if(recorded){
+   videoEl?.pause();
+   editingInterval={key:'events',id:recorded.id,start:recorded.start,end:recorded.end!};
+   chipEditOpenedAt=at;
+   refreshStudio();
+   return notify('Event LIVE edit started. Seek to the new end and tap the same event again to save. No other records change.');
+  }
   if(t.events.some(row=>row.eventId===id&&row.end===null&&row.start>at)){
    beginBackfill(t,'events',id,at);return;
   }
@@ -634,13 +651,13 @@ window.tagCamera=id=>{
  const at=seconds(t);
  if(editingInterval?.key==='cameras'){
   const editing=t.cameras.find(row=>row.id===editingInterval!.id);
-  if(!editing||editing.end===null){editingInterval=null;cameraEditOpenedAt=null;return notify('The camera record changed. Reopen the saved interval.');}
+ if(!editing||editing.end===null){editingInterval=null;chipEditOpenedAt=null;return notify('The camera record changed. Reopen the saved interval.');}
   if(id!==(editingInterval.cameraId??editing.cameraId)){
    editingInterval={...editingInterval,cameraId:id};
    refreshStudio();
    return notify('Camera angle selected for this record. Tap it again at the desired end to save, or use Save interval. No other records changed.');
   }
-  const unchanged=cameraEditOpenedAt!==null&&Math.abs(at-cameraEditOpenedAt)<0.001;
+  const unchanged=chipEditOpenedAt!==null&&Math.abs(at-chipEditOpenedAt)<0.001;
   // A tap without moving the playhead is explicitly a no-op, even if it
   // started in the middle of a previously recorded interval.
   window.saveTimelineEdit?.('cameras',editing.id,editing.start,unchanged?editing.end:at);
@@ -668,9 +685,9 @@ window.tagCamera=id=>{
    if(otherLive)return notify('End the current LIVE camera interval before editing recorded footage.');
    videoEl?.pause();
    editingInterval={key:'cameras',id:crossing.id,start:crossing.start,end:crossing.end!,cameraId:id};
-   cameraEditOpenedAt=at;
+   chipEditOpenedAt=at;
    refreshStudio();
-   notify('Editing this saved camera record. Seek to a new end and tap the selected angle to save, or drag its edges and Save. Cancel preserves it.');
+   notify('Camera LIVE edit started. Seek to the new end and tap the selected angle again to save. Cancel retains the original record.');
    return;
   }
   if(hasRecordedCameraAfter(t.cameras,at)){

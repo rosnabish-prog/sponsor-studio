@@ -288,18 +288,44 @@ const studio:StudioScreenModel={
     cameras:data.cameraGroups[0].items,isLocalVideo:false,
 };
 
-test('studio places class buttons below video and moves video metadata under category tabs',()=>{
+test('studio keeps class buttons below video and moves last annotated into timeline without the redundant header',()=>{
   const html=renderToStaticMarkup(<AnnotationStudioScreen model={studio} isAdmin={false}/>);
-  const sequence=['class="video-controls"','id="controlsBody"','class="tag-toolbar"','class="video-header"','id="videoFileStatus"','class="studio-undo-toolbar"'];
+  const sequence=['class="video-controls"','id="controlsBody"','class="tag-toolbar"','class="studio-undo-toolbar"','class="tline-wrap"','LAST ANNOTATED'];
   let previous=-1;
   for(const marker of sequence){
     const offset=html.indexOf(marker);
     assert.ok(offset>previous,`${marker} must follow the preceding section`);
     previous=offset;
   }
-  assert.match(html,/id="controlsBody"[\s\S]*KEY MATCH EVENTS[\s\S]*id="videoFileStatus"/);
+  assert.match(html,/id="controlsBody"[\s\S]*KEY MATCH EVENTS[\s\S]*class="tag-toolbar"/);
   assert.match(html,/data-studio-tab="all"/);
   assert.match(html,/LAST ANNOTATED/);
+  assert.doesNotMatch(html,/LIVE TAGGING CONSOLE|videoFileStatus|videoSourceState|video-header/);
+});
+
+test('saved camera and event chips show LIVE while editing and keep other records',()=>{
+  const base={createdBy:'a1',createdAt:'now'};
+  const editingCamera={...studio,selectedTab:'cameras' as const,editingInterval:{key:'cameras' as const,id:'saved',start:0,end:600,cameraId:'camera'},task:{...task,cameras:[
+    {id:'saved',cameraId:'camera',start:0,end:600,...base},
+    {id:'later',cameraId:'other',start:610,end:650,...base},
+  ]}};
+  const cameraMarkup=renderToStaticMarkup(<StudioRail model={editingCamera}/>);
+  assert.match(cameraMarkup,/Wide[^]*LIVE edit, tap to end and save this interval/);
+  assert.doesNotMatch(cameraMarkup,/EDITING/);
+  const savedCamera=editRecordedCamera(editingCamera.task.cameras,'saved',0,300);
+  assert.equal(savedCamera.status,'updated');
+  assert.deepEqual(savedCamera.rows.find(row=>row.id==='later'),editingCamera.task.cameras[1]);
+
+  const editingEvent={...studio,selectedTab:'events' as const,editingInterval:{key:'events' as const,id:'goal',start:60,end:600},task:{...task,events:[
+    {id:'goal',eventId:'event',kind:'range' as const,start:60,end:600,...base},
+    {id:'later-goal',eventId:'event',kind:'range' as const,start:620,end:650,...base},
+  ]}};
+  const eventMarkup=renderToStaticMarkup(<StudioRail model={editingEvent}/>);
+  assert.match(eventMarkup,/Goal[^]*LIVE edit, tap to end and save this interval/);
+  assert.doesNotMatch(eventMarkup,/EDITING/);
+  const nextEvent=structuredClone(editingEvent.task.events);
+  assert.equal(editSingleInterval(nextEvent,'goal',60,300,(a,b)=>a.eventId===b.eventId),'updated');
+  assert.deepEqual(nextEvent[1],editingEvent.task.events[1]);
 });
 
 test('editing a camera segment changes only its selected ID and preserves all later camera segments',()=>{

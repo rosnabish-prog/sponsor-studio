@@ -38,19 +38,6 @@ function ActionMenu({ model, isAdmin }: { model: StudioScreenModel; isAdmin: boo
   </div>;
 }
 
-function VideoMetadata({ model }: { model: StudioScreenModel }) {
-  const { videoSrc, videoName, videoType, isLocalVideo } = model;
-  const sourceState = isLocalVideo ? 'LOCAL VIDEO' : videoType === 's3' ? 'PRIVATE VIDEO · CLOUDFRONT' : videoType === 'buildup' ? 'BUILDUP VIDEO' : videoType === 'ftp' ? 'FTP LINK · INGEST REQUIRED' : videoSrc ? 'HTTPS VIDEO' : 'NO VIDEO ATTACHED';
-  const sourceNote = model.videoError || (isLocalVideo ? `${videoName || 'Video'} · Available in this browser session only. Select it again after refreshing.` : videoSrc ? `${videoName || 'Video'}${model.videoDimensions ? ` · ${model.videoDimensions}` : ''}` : 'Open a local video or configure a direct HTTPS source.');
-  return <>
-    <div className="video-header"><span>LIVE TAGGING CONSOLE</span><div className="video-header-actions">
-      <button type="button" className="button ghost tiny studio-control-button video-jump-last" onClick={()=>window.jumpToLastAnnotation?.()} disabled={model.lastAnnotatedAt===null} title="Jump to the end of the most recent saved annotation"><Icon name="clock" /> LAST ANNOTATED {model.lastAnnotatedAt!==null?formatTimestamp(model.lastAnnotatedAt):''}</button>
-      <span id="videoSourceState">{sourceState}</span>
-    </div></div>
-    <div id="videoFileStatus" className="video-source-note" role="status" aria-live="polite">{sourceNote}</div>
-  </>;
-}
-
 function VideoPanel({ model }: { model: StudioScreenModel }) {
   const { videoSrc, videoType } = model;
   return <div className="video-box">
@@ -121,14 +108,13 @@ export function AnnotationStudioScreen({ model, isAdmin }: { model: StudioScreen
               key={key} type="button" data-studio-tab={key} aria-pressed={model.selectedTab === key}
               className={model.selectedTab === key ? 'on' : ''} onClick={() => window.setStudioTab?.(key)}>{label}</button>)}</div>
           </div>
-          <VideoMetadata model={model} />
           <div className="studio-undo-toolbar"><button type="button" className="button ghost tiny studio-control-button studio-undo-button" onClick={()=>window.undoLastAnnotationChange?.()} disabled={!model.undoCount} title="Undo up to 10 recently saved annotation actions in this session (Ctrl+Z)">↶ UNDO LAST CHANGE <span>{model.undoCount}/10</span></button><small>Ctrl+Z · Changes restore only their original annotation IDs</small></div>
           <div className="contextline"><Icon name="clock" /> Current video timestamp <b id="currentT">{formatTimestamp(model.tick)}</b>
             <span style={{ marginLeft: 'auto' }}>{model.canSponsor ? 'Sponsor tagging enabled' : 'Sponsor tagging view only'} · {model.canContext ? 'Context tagging enabled' : 'Context view only'}</span>
           </div>
           <div className="tline-wrap">
             <div className="sectionhead"><div><h3>Unified match timeline</h3><p className="sub">Review recorded intervals by layer. Sponsor property lanes inherit the exact start and end of their parent exposure.</p></div>
-              <div className="tline-legend"><span><i className="key" style={{ background: '#ff9b36' }} />Sponsors</span><span><i className="key" style={{ background: '#dca25f' }} />Properties</span><span><i className="key" style={{ background: '#d7c7b5' }} />Events</span><span><i className="key" style={{ background: '#9cabb0' }} />Cameras</span></div></div>
+              <div className="tline-legend"><button type="button" className="button ghost tiny studio-control-button video-jump-last" onClick={()=>window.jumpToLastAnnotation?.()} disabled={model.lastAnnotatedAt===null} title="Jump to the end of the most recent saved annotation"><Icon name="clock" /> LAST ANNOTATED {model.lastAnnotatedAt!==null?formatTimestamp(model.lastAnnotatedAt):''}</button><span><i className="key" style={{ background: '#ff9b36' }} />Sponsors</span><span><i className="key" style={{ background: '#dca25f' }} />Properties</span><span><i className="key" style={{ background: '#d7c7b5' }} />Events</span><span><i className="key" style={{ background: '#9cabb0' }} />Cameras</span></div></div>
             <div id="timelineBody"><StudioTimeline model={model} /></div>
           </div>
         </div>

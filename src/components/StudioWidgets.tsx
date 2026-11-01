@@ -22,11 +22,11 @@ function EventChip({ item, active, recorded, editing, disabled, camera }: { item
   const recordedAction = 'SAVED at this time, tap to edit this interval';
   return <button type="button" className={`event-chip tagged-state-chip ${camera ? 'camera-chip' : ''} ${active ? 'active' : ''} ${recorded ? 'recorded' : ''}`}
     onClick={() => camera ? window.tagCamera?.(item.id) : window.tagEvent?.(item.id)} disabled={disabled}
-    aria-pressed={active || recorded || editing} aria-label={`${item.name}${item.hotkey ? `, ${displayHotkey(item.hotkey)}` : ''} · ${editing ? 'EDITING, seek to new end and tap to save' : active ? 'LIVE, tap to end' : recorded ? recordedAction : 'OFF, tap to start'}`}
-    title={`${item.name}${item.hotkey ? ` · ${displayHotkey(item.hotkey)}` : ''} · ${editing ? 'EDITING — tap to save at playhead' : active ? 'LIVE' : recorded ? 'SAVED — click to edit this interval' : 'OFF'}`}>
+    aria-pressed={active || recorded || editing} aria-label={`${item.name}${item.hotkey ? `, ${displayHotkey(item.hotkey)}` : ''} · ${editing ? 'LIVE edit, tap to end and save this interval' : active ? 'LIVE, tap to end' : recorded ? recordedAction : 'OFF, tap to start'}`}
+    title={`${item.name}${item.hotkey ? ` · ${displayHotkey(item.hotkey)}` : ''} · ${editing ? 'LIVE EDIT — tap to end at playhead' : active ? 'LIVE' : recorded ? 'SAVED — click to edit this interval' : 'OFF'}`}>
     <span className="chip-symbol">{camera ? '◎' : '↔'}</span><span className="chip-label">{item.name}</span>
     {item.hotkey && <kbd className="hotkey-hint">{displayHotkey(item.hotkey)}</kbd>}
-    <span className={`tag-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {editing ? 'EDITING' : active ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
+    <span className={`tag-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active || editing ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
   </button>;
 }
 
@@ -36,10 +36,12 @@ function EventButtons({ model, camera }: StudioProps & { camera: boolean }) {
   return <>{items.map(item => {
     const matching=active.filter(annotation=>(camera?(annotation as CameraAnnotation).cameraId:(annotation as EventAnnotation).eventId)===item.id);
     const live=matching.some(row=>row.end==null&&row.start<=model.tick);
-    const editing=camera&&model.editingInterval?.key==='cameras'&&model.editingInterval.cameraId===item.id;
+    const editing=model.editingInterval?.key===(camera?'cameras':'events') && (camera
+      ? model.editingInterval.cameraId===item.id
+      : matching.some(row=>row.id===model.editingInterval?.id));
     return <EventChip key={item.id} item={item} camera={camera} disabled={!model.canContext} editing={editing}
-      active={live}
-      recorded={!live&&matching.some(row=>row.end!==null&&(row.start<=model.tick&&model.tick<row.end||('kind' in row&&row.kind==='point'&&Math.abs(row.start-model.tick)<.5)))} />;
+      active={live||editing}
+      recorded={!live&&!editing&&matching.some(row=>row.end!==null&&(row.start<=model.tick&&model.tick<row.end||('kind' in row&&row.kind==='point'&&Math.abs(row.start-model.tick)<.5)))} />;
   })}</>;
 }
 
