@@ -6,6 +6,7 @@ import { annotatedEndpoint } from '../domain/labelingProgress';
 import { PLACEMENT_TYPES, VISIBILITY_QUALITIES } from '../domain/classifications';
 import { displayHotkey } from '../domain/hotkeys';
 import { sponsorProperties, sponsorPropertyIntervals } from '../domain/sponsorProperties';
+import { cameraOverlaps } from '../domain/cameraSwitch';
 
 type StudioProps = { model: StudioScreenModel };
 type TrackKind = 'sponsor' | 'event' | 'camera' | 'property';
@@ -18,28 +19,31 @@ export function BrandLogo({ sponsor, className = 'tinylogo' }: { sponsor: Sponso
   return <div className={className} style={style}>{sponsor.logo ? <img src={sponsor.logo} alt="" /> : initials}</div>;
 }
 
-function EventChip({ item, active, recorded, editing, disabled, camera }: { item: TagAttribute; active: boolean; recorded: boolean; editing: boolean; disabled: boolean; camera: boolean }) {
+function EventChip({ item, active, recorded, editing, disabled, camera, conflict=false }: { item: TagAttribute; active: boolean; recorded: boolean; editing: boolean; disabled: boolean; camera: boolean; conflict?:boolean }) {
   const recordedAction = 'SAVED at this time, tap to edit this interval';
   return <button type="button" className={`event-chip tagged-state-chip ${camera ? 'camera-chip' : ''} ${active ? 'active' : ''} ${recorded ? 'recorded' : ''}`}
     onClick={() => camera ? window.tagCamera?.(item.id) : window.tagEvent?.(item.id)} disabled={disabled}
-    aria-pressed={active || recorded || editing} aria-label={`${item.name}${item.hotkey ? `, ${displayHotkey(item.hotkey)}` : ''} · ${editing ? 'LIVE edit, tap to end and save this interval' : active ? 'LIVE, tap to end' : recorded ? recordedAction : 'OFF, tap to start'}`}
-    title={`${item.name}${item.hotkey ? ` · ${displayHotkey(item.hotkey)}` : ''} · ${editing ? 'LIVE EDIT — tap to end at playhead' : active ? 'LIVE' : recorded ? 'SAVED — click to edit this interval' : 'OFF'}`}>
+    aria-pressed={active || recorded || editing} aria-label={`${item.name}${item.hotkey ? `, ${displayHotkey(item.hotkey)}` : ''} · ${conflict?'CONFLICT — overlapping camera annotation must be repaired':editing ? 'LIVE edit, tap to end and save this interval' : active ? 'LIVE, tap to end' : recorded ? recordedAction : 'OFF, tap to start'}`}
+    title={`${item.name}${item.hotkey ? ` · ${displayHotkey(item.hotkey)}` : ''} · ${conflict?'CONFLICT — repair overlapping camera records':editing ? 'LIVE EDIT — tap to end at playhead' : active ? 'LIVE' : recorded ? 'SAVED — click to edit this interval' : 'OFF'}`}>
     <span className="chip-symbol">{camera ? '◎' : '↔'}</span><span className="chip-label">{item.name}</span>
     {item.hotkey && <kbd className="hotkey-hint">{displayHotkey(item.hotkey)}</kbd>}
-    <span className={`tag-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {active || editing ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
+    <span className={`tag-live-pill ${active ? 'on' : recorded ? 'recorded' : 'off'}`} aria-hidden="true">● {conflict?'CONFLICT':active || editing ? 'LIVE' : recorded ? 'SAVED' : 'OFF'}</span>
   </button>;
 }
 
 function EventButtons({ model, camera }: StudioProps & { camera: boolean }) {
   const items = camera ? model.cameras : model.events;
   const active = camera ? model.task.cameras : model.task.events;
+  const liveCamera=camera?model.task.cameras.filter(row=>row.end===null&&row.start<=model.tick).sort((a,b)=>b.start-a.start)[0]:undefined;
+  const invalidCamera=camera&&cameraOverlaps(model.task.cameras).length>0;
   return <>{items.map(item => {
     const matching=active.filter(annotation=>(camera?(annotation as CameraAnnotation).cameraId:(annotation as EventAnnotation).eventId)===item.id);
-    const live=matching.some(row=>row.end==null&&row.start<=model.tick);
+    const live=camera?liveCamera?.cameraId===item.id:matching.some(row=>row.end==null&&row.start<=model.tick);
     const editing=model.editingInterval?.key===(camera?'cameras':'events') && (camera
       ? model.editingInterval.cameraId===item.id
       : matching.some(row=>row.id===model.editingInterval?.id));
-    return <EventChip key={item.id} item={item} camera={camera} disabled={!model.canContext} editing={editing}
+    const conflict=!!invalidCamera&&!live&&!editing&&matching.some(row=>row.end===null&&row.start<=model.tick);
+    return <EventChip key={item.id} item={item} camera={camera} disabled={!model.canContext||conflict} editing={editing} conflict={conflict}
       active={live||editing}
       recorded={!live&&!editing&&matching.some(row=>row.end!==null&&(row.start<=model.tick&&model.tick<row.end||('kind' in row&&row.kind==='point'&&Math.abs(row.start-model.tick)<.5)))} />;
   })}</>;
@@ -60,7 +64,8 @@ export function StudioRail({ model }: StudioProps) {
   if (model.selectedTab === 'events' || model.selectedTab === 'cameras') {
     const camera = model.selectedTab === 'cameras';
     const items = camera ? model.cameras : model.events;
-    return <div className="side-tag-list">{items.length ? <EventButtons model={model} camera={camera} /> : <span className="rail-empty">No {camera ? 'camera angles' : 'key event tags'} assigned to this match.</span>}</div>;
+    const conflicts=camera?cameraOverlaps(model.task.cameras):[];
+    return <div className="side-tag-list">{conflicts.length>0&&<div className="studio-layer-hint" role="alert"><strong>CAMERA DATA CONFLICT · {conflicts.length} overlapping intervals</strong><p>Only one camera can be recorded at a time. New tagging is paused until these records are repaired.</p><button type="button" className="button primary tiny studio-control-button" disabled={!model.canContext} onClick={()=>window.repairCameraConflicts?.()}>REPAIR CAMERA CONFLICTS</button></div>}{items.length ? <EventButtons model={model} camera={camera} /> : <span className="rail-empty">No {camera ? 'camera angles' : 'key event tags'} assigned to this match.</span>}</div>;
   }
   if (!model.sponsors.length) return <div className="rail-empty">No sponsors assigned to this match.</div>;
   return <div className="rail-cards">{model.sponsors.map(sponsor => {
@@ -307,6 +312,7 @@ declare global {
     deleteLog?: (key: 'sponsors' | 'events' | 'cameras', id: string) => void;
     editRecordedAnnotation?: (key: 'sponsors'|'events'|'cameras', id:string)=>void;
     retagRecordedSponsor?: (id:string, at:number)=>void;
+    repairCameraConflicts?: ()=>void;
     saveTimelineEdit?: (key:'sponsors'|'events'|'cameras',id:string,start:number,end:number)=>void;
     cancelTimelineEdit?: ()=>void;
     openAnnotationHistory?: (id:string)=>void;

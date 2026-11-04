@@ -74,6 +74,7 @@ export const api = {
   annotationHistory:(w:string,id:string,a?:string) => apiRequest<ApiAnnotationRevision[]>(`/workspaces/${w}/tasks/${id}/annotations/${a?`${a}/history`:'history'}`),
   restoreAnnotation:(w:string,id:string,a:string,version:number,expectedRevision:number) =>
     apiRequest<ApiAnnotation>(`/workspaces/${w}/tasks/${id}/annotations/${a}/restore`,'POST',{version,expectedRevision}),
+  repairCameraTimeline:(w:string,id:string)=>apiRequest<{ok:boolean;trimmed:number;softDeleted:number}>(`/workspaces/${w}/tasks/${id}/annotations/camera/repair`,'POST'),
   startUpload:(w:string,t:string,body:{filename:string;mimeType:string;sizeBytes:number})=>apiRequest<{assetId:string;partSize:number;partCount:number}>(`/workspaces/${w}/tasks/${t}/videos`,'POST',body),
   signParts:(w:string,t:string,a:string,parts:number[])=>apiRequest<{parts:{partNumber:number;url:string}[]}>(`/workspaces/${w}/tasks/${t}/videos/${a}/parts`,'POST',{parts}),
   finishUpload:(w:string,t:string,a:string,parts:{partNumber:number;eTag:string}[])=>apiRequest<{id:string;filename:string;status:string}>(`/workspaces/${w}/tasks/${t}/videos/${a}/complete`,'POST',{parts}),

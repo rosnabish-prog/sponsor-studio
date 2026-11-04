@@ -8,6 +8,7 @@ import { AuthRequest, SessionGuard } from './auth';
 import { DatabaseService } from './database';
 import { checkAnnotationTimes, mayEditStream } from './permissions';
 import { TaskService } from './tasks';
+import { planCameraRepairs } from './camera-integrity';
 
 export class CreateAnnotationDto {
   @IsEnum(AnnotationKind) kind!: AnnotationKind;
@@ -98,7 +99,11 @@ export class AnnotationService {
   }
 
   private async ensureAvailable(tx:Prisma.TransactionClient,annotation:Annotation) {
-    if(annotation.deletedAt!==null||annotation.end!==null)return;
+    if(annotation.deletedAt!==null)return;
+    if(annotation.kind==='CAMERA'){
+      await this.ensureCameraSlot(tx,annotation.taskId,annotation.start,annotation.end,annotation.id);
+    }
+    if(annotation.end!==null)return;
     const active=await tx.annotation.findFirst({where:{
       taskId:annotation.taskId,kind:annotation.kind,labelId:annotation.labelId,
       end:null,deletedAt:null,id:{not:annotation.id},
@@ -110,6 +115,15 @@ export class AnnotationService {
       }});
       if(activeCamera)throw new ConflictException('Only one camera angle can be LIVE');
     }
+  }
+
+  private async ensureCameraSlot(tx:Prisma.TransactionClient,taskId:string,start:number,end:number|null,excludeId?:string){
+    const overlap=await tx.annotation.findFirst({where:{
+      taskId,kind:'CAMERA',deletedAt:null,...(excludeId?{id:{not:excludeId}}:{}),
+      start:{lt:end??Number.MAX_SAFE_INTEGER},
+      OR:[{end:null},{end:{gt:start}}],
+    }});
+    if(overlap)throw new ConflictException('Camera interval overlaps another saved or LIVE angle. Only one camera is permitted at any timestamp.');
   }
 
   private async requireStreamEdit(workspaceId: string, taskId: string, userId: string, kind: AnnotationKind) {
@@ -142,17 +156,21 @@ export class AnnotationService {
           if (count >= 1) throw new ConflictException('Only one camera angle can be live. End the current interval before starting another');
         }
       }
+      if(input.kind==='CAMERA')await this.ensureCameraSlot(tx,taskId,input.start,input.end??null);
       const annotation = await tx.annotation.create({ data: {
         taskId, kind: input.kind, labelId: input.labelId.trim(), start: input.start,
         end: input.end ?? null, placement: input.placement ?? null, quality: input.quality ?? null,
         properties:validProperties(input.properties)??{},
         createdBy: userId,
       } });
+      await this.ensureAvailable(tx,annotation);
       await this.recordRevision(tx,annotation,'CREATED',userId);
       await tx.auditLog.create({ data: { workspaceId, actorId: userId, action: 'ANNOTATION_CREATED', subjectId: annotation.id } });
       return annotation;
     });}catch(error){
       if((error as {code?:string}).code==='P2002')throw new ConflictException('Another active interval already exists');
+      if((error as {code?:string}).code==='P2004'||(error as {code?:string}).code==='23P01')
+        throw new ConflictException('Camera angle overlaps an existing interval. Resolve camera conflicts before continuing.');
       throw error;
     }
   }
@@ -178,6 +196,7 @@ export class AnnotationService {
       const fresh=await tx.annotation.findFirst({where:{id:annotationId,taskId,deletedAt:null}});
       if(!fresh)throw new NotFoundException('Annotation was removed');
       this.checkRevision(fresh,expectedRevision);
+      await this.ensureAvailable(tx,{...fresh,...changes} as Annotation);
       const annotation = await tx.annotation.update({ where: { id: annotationId }, data: {...changes,revision:{increment:1}} });
       await this.ensureAvailable(tx,annotation);
       await this.recordRevision(tx,annotation,'UPDATED',userId);
@@ -223,6 +242,7 @@ export class AnnotationService {
       if(snapshot.deletedAt!==null)throw new BadRequestException('Select a revision with an annotation to restore');
       try{checkAnnotationTimes(snapshot.start,snapshot.end,task.durationSeconds)}
       catch(error){throw new BadRequestException((error as Error).message)}
+      await this.ensureAvailable(tx,{...fresh,labelId:snapshot.labelId,start:snapshot.start,end:snapshot.end,deletedAt:null});
       const annotation=await tx.annotation.update({where:{id:annotationId},data:{
         labelId:snapshot.labelId,start:snapshot.start,end:snapshot.end,
         placement:snapshot.placement,quality:snapshot.quality,properties:snapshot.properties??{},
@@ -233,6 +253,26 @@ export class AnnotationService {
       await tx.auditLog.create({data:{workspaceId,actorId:userId,action:'ANNOTATION_RESTORED',subjectId:annotationId,
         details:{fromVersion:fresh.revision,restoredVersion:input.version,toVersion:annotation.revision}}});
       return annotation;
+    });
+  }
+
+  /** Explicit operator-approved repair; existing data is never modified on page load. */
+  async repairCameraTimeline(workspaceId:string,taskId:string,userId:string) {
+    await this.requireStreamEdit(workspaceId,taskId,userId,'CAMERA');
+    return this.db.$transaction(async tx=>{
+      await this.lockStream(tx,workspaceId,taskId,'CAMERA');
+      const cameras=await tx.annotation.findMany({where:{taskId,kind:'CAMERA',deletedAt:null}});
+      const plan=planCameraRepairs(cameras);
+      for(const change of plan){
+        const previous=cameras.find(row=>row.id===change.id)!;
+        const fixed=await tx.annotation.update({where:{id:change.id},data:change.remove?
+          {deletedAt:new Date(),deletedBy:userId,revision:{increment:1}}:
+          {end:change.end,revision:{increment:1}}});
+        await this.recordRevision(tx,fixed,change.remove?'CAMERA_CONFLICT_SOFT_DELETED':'CAMERA_CONFLICT_AUTO_CLIPPED',userId);
+        await tx.auditLog.create({data:{workspaceId,actorId:userId,action:'ANNOTATION_UPDATED',subjectId:change.id,
+          details:{repair:'camera-overlap',beforeStart:previous.start,beforeEnd:previous.end,afterEnd:change.remove?null:change.end,softDeleted:!!change.remove}}});
+      }
+      return {ok:true,trimmed:plan.filter(change=>!change.remove).length,softDeleted:plan.filter(change=>change.remove).length};
     });
   }
 }
@@ -261,6 +301,11 @@ export class AnnotationController {
   @Post()
   create(@Req() req: AuthRequest, @Param('workspaceId', ParseUUIDPipe) workspaceId: string, @Param('taskId', ParseUUIDPipe) taskId: string, @Body() input: CreateAnnotationDto) {
     return this.annotations.create(workspaceId, taskId, req.userId, input);
+  }
+
+  @Post('camera/repair')
+  repairCameraTimeline(@Req() req:AuthRequest,@Param('workspaceId',ParseUUIDPipe) workspaceId:string,@Param('taskId',ParseUUIDPipe) taskId:string){
+    return this.annotations.repairCameraTimeline(workspaceId,taskId,req.userId);
   }
 
   @Patch(':annotationId')

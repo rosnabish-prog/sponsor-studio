@@ -23,7 +23,7 @@ import { hasFinalResult, mergeFixtureCatalog } from '../src/domain/fixtures';
 import { StudioModal } from '../src/components/StudioModals';
 import { readOriginalPng, MAX_ORIGINAL_PNG_BYTES } from '../src/domain/logoUpload';
 import { copyCatalogEntry, reorderById } from '../src/domain/catalogEditing';
-import { hasRecordedCameraAfter, nextSavedCameraStart, resumeCameraFromTimestamp, selectCameraAngle } from '../src/domain/cameraSwitch';
+import { cameraOverlaps, hasRecordedCameraAfter, nextSavedCameraStart, resumeCameraFromTimestamp, retagSavedCamera, selectCameraAngle } from '../src/domain/cameraSwitch';
 import { captureStudioSpacebar } from '../src/domain/studioKeyboard';
 import { VIDEO_PLAYBACK_RATES, supportedPlaybackRate } from '../src/domain/videoPlayback';
 import { nextSavedSponsorStart, retagSponsorFromTimestamp } from '../src/domain/sponsorRetag';
@@ -126,11 +126,10 @@ test('recorded camera edit preserves every unrelated timeline row and is a no-op
   const conflict=editRecordedCamera(rows,'a',0,35);
   assert.equal(conflict.status,'conflict');
   assert.equal(conflict.rows,rows,'a rejected overlap must preserve the original array');
-  const merged=editRecordedCamera([{...rows[0],end:29.5},{...rows[1],cameraId:'wide',start:29.5}], 'a',0,31);
-  assert.equal(merged.status,'updated');
-  assert.deepEqual(merged.rows.map(row=>row.id),['a']);
-  assert.equal(merged.rows[0].end,50);
-  assert.equal(merged.rows[0].start,0);
+  const overlappingSameAngle=editRecordedCamera([{...rows[0],end:29.5},{...rows[1],cameraId:'wide',start:29.5}], 'a',0,31);
+  assert.equal(overlappingSameAngle.status,'conflict','same-angle overlaps also corrupt camera integrity');
+  const touching=editRecordedCamera([{...rows[0],end:29.5},{...rows[1],cameraId:'wide',start:29.5}], 'a',0,29.5);
+  assert.equal(touching.status,'unchanged');
 });
 
 test('sponsor clarity is inherited by legacy sponsors and default remains implicit',()=>{
@@ -628,8 +627,8 @@ test('camera selections switch without a manual stop and keep one live interval'
   assert.deepEqual(sameMomentSwitch.rows.map(row=>[row.cameraId,row.start,row.end]),[['closeup',10,null]]);
   const legacyTwo=[...initial.rows,{id:'old',cameraId:'bench',start:12,end:null,createdBy:'analyst',createdAt:'now'}];
   const normalized=selectCameraAngle(legacyTwo,'replay',30,'analyst','now',makeId);
-  assert.equal(normalized.rows.filter(row=>row.end===null).length,1);
-  assert.deepEqual(normalized.rows.filter(row=>row.cameraId!=='replay').map(row=>row.end),[30,30]);
+  assert.equal(normalized.action,'conflict','overlapping legacy tags require audited repair');
+  assert.equal(normalized.rows,legacyTwo,'conflict detection must not erase existing records');
 });
 
 test('resuming a SAVED camera edits only the affected interval and preserves future labels',()=>{
@@ -638,29 +637,24 @@ test('resuming a SAVED camera edits only the affected interval and preserves fut
   assert.equal(hasRecordedCameraAfter(saved,20),true);
   assert.equal(hasRecordedCameraAfter(saved,61),false);
   const resumed=resumeCameraFromTimestamp(saved,'wide',20,'analyst','now',()=> 'wide-live');
-  assert.deepEqual(resumed.rows.map(row=>[row.id,row.cameraId,row.start,row.end]),[
-    ['close-old','close',30,50],['replay-old','replay',52,60],
-    ['wide-old','wide',10,20],['wide-live','wide',20,null],
-  ]);
+  assert.equal(resumed.rows,saved,'a LIVE camera must not extend across later saved footage');
   assert.equal(resumed.removed,0);
-  assert.equal(resumed.trimmed,1);
+  assert.equal(resumed.trimmed,0);
   assert.equal(saved[0].end,30,'source saved interval is not mutated');
   assert.equal(nextSavedCameraStart(resumed.rows,20),30);
-  assert.equal(resumed.rows.filter(row=>row.end===null).length,1);
-  const switched=selectCameraAngle(resumed.rows,'close',26,'analyst','now',()=> 'close-live');
-  assert.deepEqual(switched.rows.map(row=>[row.cameraId,row.start,row.end]),[
-    ['close',30,50],['replay',52,60],
-    ['wide',10,20],['wide',20,26],['close',26,null],
+  const retag=retagSavedCamera(saved,'wide-old','replay',20,27,'analyst','now',()=> 'new-replay');
+  assert.ok(retag);
+  assert.deepEqual(retag.rows.map(row=>[row.id,row.cameraId,row.start,row.end]),[
+    ['wide-old','wide',10,20],['close-old','close',30,50],['replay-old','replay',52,60],['new-replay','replay',20,27],
   ]);
+  assert.equal(cameraOverlaps(retag.rows).length,0);
+  assert.equal(retagSavedCamera(saved,'wide-old','replay',20,35,'analyst','now',()=> 'bounded')?.end,30);
   const boundary=resumeCameraFromTimestamp(saved,'close',30,'analyst','now',()=> 'new-close');
-  assert.deepEqual(boundary.rows.map(row=>[row.cameraId,row.start,row.end]),[
-    ['wide',10,30],['replay',52,60],['close',30,null],
-  ]);
-  assert.equal(boundary.removed,1,'at the exact start only the selected interval is replaced');
+  assert.equal(boundary.rows,saved,'future camera segments remain protected');
   const zero=resumeCameraFromTimestamp([make('a','wide',5,15)],'replay',5,'analyst','now',()=> 'new');
   assert.deepEqual(zero.rows.map(row=>[row.cameraId,row.start,row.end]),[['replay',5,null]]);
-  const blocked=resumeCameraFromTimestamp(resumed.rows,'wide',25,'analyst','now',()=> 'should-not-appear');
-  assert.equal(blocked.rows,resumed.rows,'existing LIVE camera labels cannot be silently removed');
+  const blocked=resumeCameraFromTimestamp([...saved,make('live','wide',61,null)],'wide',25,'analyst','now',()=> 'should-not-appear');
+  assert.equal(blocked.trimmed,0,'existing LIVE camera labels cannot be silently removed');
 });
 
 test('rewinding never deletes saved labels or unfinished work, and bulk removal is blocked',()=>{
