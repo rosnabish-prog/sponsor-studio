@@ -13,7 +13,7 @@ import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
 import { mergeFixtureCatalog } from '../domain/fixtures';
 import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
 import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } from '../domain/catalogEditing';
-import { hasRecordedCameraAfter, nextSavedCameraStart, selectCameraAngle } from '../domain/cameraSwitch';
+import { cameraOverlaps, hasRecordedCameraAfter, nextSavedCameraStart, retagSavedCamera, selectCameraAngle } from '../domain/cameraSwitch';
 import { editRecordedCamera } from '../domain/cameraIntervalEdit';
 import { sponsorProperties } from '../domain/sponsorProperties';
 import { captureStudioSpacebar } from '../domain/studioKeyboard';
@@ -359,6 +359,12 @@ function draftFor(task:TaskSummary,track:TrackKey,labelId:string){
 }
 function beginBackfill(task:TaskSummary,track:TrackKey,labelId:string,at:number){
  if(draftFor(task,track,labelId))return false;
+ if(track==='cameras'&&backfillDrafts.some(draft=>draft.taskId===task.id&&draft.track==='cameras')){
+  notify('Finish the current camera interval before choosing another angle.');return false;
+ }
+ if(track==='cameras'&&(task.cameras.some(row=>row.end===null)||cameraOverlaps(task.cameras).length)){
+  notify('Camera timeline conflict. End or repair the existing camera tag before starting a new one.');return false;
+ }
  backfillDrafts.push({taskId:task.id,track,labelId,start:at,id:uid()});
  notify(`Recording the gap from ${fmt(at)}. End this tag to save it; existing later annotations will stay untouched.`);
  refreshStudio();return true;
@@ -492,7 +498,7 @@ window.editRecordedAnnotation=(key,id)=>{
  const name=labelFor(task,key,key==='sponsors'?(row as SponsorAnnotation).sponsorId:key==='events'?(row as EventAnnotation).eventId:(row as CameraAnnotation).cameraId);
  confirmInApp('Edit recorded interval',`You are about to change the saved ${name} interval (${fmt(row.start)}–${fmt(row.end!)}). Continue to the editor?`,()=>{
   editingInterval={key,id,start:row.start,end:row.end!,...(key==='cameras'?{cameraId:(row as CameraAnnotation).cameraId}:{})};
-  chipEditOpenedAt=key==='cameras'?seconds(task):null;
+  chipEditOpenedAt=null;
   refreshStudio();notify('Drag either edge of the highlighted timeline segment, then Save.');
  },{actionLabel:'CONTINUE TO EDIT',danger:false});
 };
@@ -520,6 +526,17 @@ window.saveTimelineEdit=(key,id,start,end)=>{
  if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start||end>videoDuration(task))return notify('The adjusted interval must remain within the video and have a positive duration.');
  const before=snapshotAnnotations(task);
  if(key==='cameras'){
+  if(cameraOverlaps(task.cameras).length)return notify('Camera timeline contains overlapping saved intervals. Repair the conflict before editing.');
+  if(chipEditOpenedAt!==null&&editingInterval?.id===id){
+   const chosen=editingInterval.cameraId??(row as CameraAnnotation).cameraId;
+   const changed=retagSavedCamera(task.cameras,id,chosen,chipEditOpenedAt,end,logged,tstamp(),uid);
+   if(!changed)return notify('Cannot save the new camera interval here. Move forward within an available range; existing data is unchanged.');
+   task.cameras=changed.rows;
+   editingInterval=null;chipEditOpenedAt=null;
+   recordAnnotationChange(task,before,'Re-tag saved camera segment');
+   notify(`New camera segment saved through ${fmt(changed.end)}. Previous angle stopped at the new start.`);
+   return;
+  }
   const chosenCameraId=editingInterval?.id===id?editingInterval.cameraId:undefined;
   const changed=editRecordedCamera(task.cameras,id,start,end,chosenCameraId);
   if(changed.status==='unchanged'){editingInterval=null;chipEditOpenedAt=null;refreshStudio();return notify('Interval unchanged. Original saved annotation retained.');}
@@ -527,7 +544,7 @@ window.saveTimelineEdit=(key,id,start,end)=>{
   task.cameras=changed.rows;
   editingInterval=null;chipEditOpenedAt=null;
   recordAnnotationChange(task,before,'Edit one recorded camera interval');
-  notify('Camera interval saved. Only this camera record and a directly continuous same-angle record were changed.');
+  notify('Camera interval saved. No other camera records were changed.');
   return;
  }
  const result=key==='sponsors'
@@ -649,23 +666,24 @@ window.tagCamera=id=>{
  const t=currentTask();if(!t||!canEdit(t,'context'))return;
  if(!camerasFor(t).some(x=>x.id===id))return;
  const at=seconds(t);
+ if(cameraOverlaps(t.cameras).length)return notify('Overlapping camera records were detected. Use REPAIR CAMERA CONFLICTS in the camera panel before adding or editing tags.');
  if(editingInterval?.key==='cameras'){
   const editing=t.cameras.find(row=>row.id===editingInterval!.id);
  if(!editing||editing.end===null){editingInterval=null;chipEditOpenedAt=null;return notify('The camera record changed. Reopen the saved interval.');}
   if(id!==(editingInterval.cameraId??editing.cameraId)){
    editingInterval={...editingInterval,cameraId:id};
    refreshStudio();
-   return notify('Camera angle selected for this record. Tap it again at the desired end to save, or use Save interval. No other records changed.');
+   return notify('New angle selected. Seek forward, then tap this angle again to save the new segment.');
   }
-  const unchanged=chipEditOpenedAt!==null&&Math.abs(at-chipEditOpenedAt)<0.001;
-  // A tap without moving the playhead is explicitly a no-op, even if it
-  // started in the middle of a previously recorded interval.
-  window.saveTimelineEdit?.('cameras',editing.id,editing.start,unchanged?editing.end:at);
+  if(chipEditOpenedAt!==null&&sameVideoTimestamp(at,chipEditOpenedAt)){
+   editingInterval=null;chipEditOpenedAt=null;refreshStudio();return notify('No time change. Original camera segment retained.');
+  }
+  window.saveTimelineEdit?.('cameras',editing.id,editing.start,at);
   return;
  }
  const draft=backfillDrafts.find(row=>row.taskId===t.id&&row.track==='cameras');
  if(draft){
-  finishBackfill(t,draft,at);
+  if(!finishBackfill(t,draft,at))return;
   if(draft.labelId===id)return;
   if(t.cameras.some(row=>row.end===null&&row.start>at)){
    beginBackfill(t,'cameras',id,at);return;
@@ -682,7 +700,7 @@ window.tagCamera=id=>{
   const crossing=t.cameras.find(row=>row.end!==null&&row.cameraId===id&&row.start<=at&&at<row.end)
    ??t.cameras.find(row=>row.end!==null&&row.start<=at&&at<row.end);
   if(crossing){
-   if(otherLive)return notify('End the current LIVE camera interval before editing recorded footage.');
+   if(currentLive)return notify('End the current LIVE camera interval before editing recorded footage.');
    videoEl?.pause();
    editingInterval={key:'cameras',id:crossing.id,start:crossing.start,end:crossing.end!,cameraId:id};
    chipEditOpenedAt=at;
@@ -700,10 +718,32 @@ window.tagCamera=id=>{
  }
  const before=snapshotAnnotations(t);
  const result=selectCameraAngle(t.cameras,id,at,logged,tstamp(),uid);
+ if(result.action==='conflict')return notify('A camera is already recorded at this timestamp. End or repair the conflicting interval first.');
  t.cameras=result.rows;
  recordAnnotationChange(t,before,'Switch camera angle');
  if(result.action==='switched')notify('Camera switched — previous interval ended automatically.');
  if(result.action==='cancelled')notify('Camera interval removed — same timestamp.');
+};
+window.repairCameraConflicts=()=>{
+ const task=currentTask();
+ if(!task||!workspaceId||!canEdit(task,'context'))return;
+ if(syncDirty||syncRunning)return notify('Wait for pending changes to save before repairing camera intervals.');
+ const count=cameraOverlaps(task.cameras).length;
+ if(!count)return notify('No overlapping camera intervals were found.');
+ confirmInApp('Repair overlapping camera angles',
+  `${count} camera conflict${count===1?'':'s'} found. Earlier angles will stop when the next angle starts; exact-time duplicates will be soft-deleted. Every change is recorded in annotation history and can be reviewed. Continue?`,()=>{
+   void (async()=>{
+    try{
+     const result=await api.repairCameraTimeline(workspaceId,task.id);
+     editingInterval=null;chipEditOpenedAt=null;
+     await loadWorkspace(workspaceId);
+     notify(`Camera conflicts repaired: ${result.trimmed} clipped, ${result.softDeleted} duplicate segments archived.`);
+    }catch(error){
+     await loadWorkspace(workspaceId).catch(()=>{});
+     notify('Camera repair failed: '+(error instanceof Error?error.message:String(error)));
+    }
+   })();
+  },{actionLabel:'REPAIR CAMERA INTERVALS',danger:false});
 };
 window.deleteLog=(key,id)=>{const t=currentTask(),kind=key==='sponsors'?'sponsors':'context';if(!t||!canEdit(t,kind))return;confirmInApp('Remove annotation','Hide this recorded annotation? You can restore it from Annotation History.',()=>{
   const before=snapshotAnnotations(t);
