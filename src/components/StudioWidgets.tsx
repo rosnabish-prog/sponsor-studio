@@ -35,7 +35,7 @@ function EventButtons({ model, camera }: StudioProps & { camera: boolean }) {
   const items = camera ? model.cameras : model.events;
   const active = camera ? model.task.cameras : model.task.events;
   const liveCamera=camera?model.task.cameras.filter(row=>row.end===null&&row.start<=model.tick).sort((a,b)=>b.start-a.start)[0]:undefined;
-  const invalidCamera=camera&&cameraOverlaps(model.task.cameras).length>0;
+  const invalidCamera=camera&&cameraOverlaps(model.task.cameras.filter(row=>!model.pendingBackfillIds.includes(row.id))).length>0;
   return <>{items.map(item => {
     const matching=active.filter(annotation=>(camera?(annotation as CameraAnnotation).cameraId:(annotation as EventAnnotation).eventId)===item.id);
     const live=camera?liveCamera?.cameraId===item.id:matching.some(row=>row.end==null&&row.start<=model.tick);
@@ -64,7 +64,9 @@ export function StudioRail({ model }: StudioProps) {
   if (model.selectedTab === 'events' || model.selectedTab === 'cameras') {
     const camera = model.selectedTab === 'cameras';
     const items = camera ? model.cameras : model.events;
-    const conflicts=camera?cameraOverlaps(model.task.cameras):[];
+    // Pending gap drafts render as open-ended for the chip state, but have a
+    // bounded save range; they must not be diagnosed as persisted overlaps.
+    const conflicts=camera?cameraOverlaps(model.task.cameras.filter(row=>!model.pendingBackfillIds.includes(row.id))):[];
     return <div className="side-tag-list">{conflicts.length>0&&<div className="studio-layer-hint" role="alert"><strong>CAMERA DATA CONFLICT · {conflicts.length} overlapping intervals</strong><p>Only one camera can be recorded at a time. New tagging is paused until these records are repaired.</p><button type="button" className="button primary tiny studio-control-button" disabled={!model.canContext} onClick={()=>window.repairCameraConflicts?.()}>REPAIR CAMERA CONFLICTS</button></div>}{items.length ? <EventButtons model={model} camera={camera} /> : <span className="rail-empty">No {camera ? 'camera angles' : 'key event tags'} assigned to this match.</span>}</div>;
   }
   if (!model.sponsors.length) return <div className="rail-empty">No sponsors assigned to this match.</div>;
