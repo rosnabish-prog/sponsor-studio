@@ -631,6 +631,19 @@ test('camera selections switch without a manual stop and keep one live interval'
   assert.equal(normalized.rows,legacyTwo,'conflict detection must not erase existing records');
 });
 
+test('a pending gap draft before later footage does not trigger false camera repair',()=>{
+ const base={createdAt:'2026-10-29',createdBy:'a1'};
+ const pending={...studio,selectedTab:'cameras' as const,tick:15,
+  task:{...task,cameras:[
+   {id:'gap-draft',cameraId:'camera',start:10,end:null,...base},
+   {id:'saved-future',cameraId:'other',start:30,end:40,...base},
+  ]},cameras:[{id:'camera',name:'Wide'},{id:'other',name:'Close'}],
+  pendingBackfillIds:['gap-draft']};
+ const html=renderToStaticMarkup(<StudioRail model={pending}/>);
+ assert.doesNotMatch(html,/REPAIR CAMERA CONFLICTS/);
+ assert.match(html,/● LIVE/);
+});
+
 test('resuming a SAVED camera edits only the affected interval and preserves future labels',()=>{
   const make=(id:string,cameraId:string,start:number,end:number|null)=>({id,cameraId,start,end,createdBy:'analyst',createdAt:'then'});
   const saved=[make('wide-old','wide',10,30),make('close-old','close',30,50),make('replay-old','replay',52,60)];
