@@ -5,9 +5,10 @@ function Icon({ name }: { name: string }) {
   return <svg className="ic"><use href={`#i-${name}`} /></svg>;
 }
 
-export function InsightsScreen({ model, viewer = false }: { model: ReportsScreenModel; viewer?: boolean }) {
+export function InsightsScreen({ model, viewer = false, owner = false }: { model: ReportsScreenModel; viewer?: boolean; owner?: boolean }) {
+  const downloadAll = owner && <button className="button ghost" onClick={() => window.downloadAllInsights?.()}><Icon name="download" /> Download All</button>;
   if (!model.tasks.length || !model.selectedId) {
-    return <div className="pagehead"><div><h1>Intelligence reports</h1><p className="sub">No assigned matches yet.</p></div></div>;
+    return <div className="pagehead"><div><h1>Intelligence reports</h1><p className="sub">No assigned matches yet.</p></div>{downloadAll}</div>;
   }
   return <>
     <div className="pagehead">
@@ -17,6 +18,7 @@ export function InsightsScreen({ model, viewer = false }: { model: ReportsScreen
         <p className="sub">Understand brand visibility against key events and camera contexts.</p>
       </div>
       <div className="row wrap">
+        {downloadAll}
         <select className="smallselect" defaultValue={model.selectedId} onChange={event => window.chooseReport?.(event.currentTarget.value)}>
           {model.tasks.map(task => <option key={task.id} value={task.id}>{task.number} · {task.name}</option>)}
         </select>
@@ -31,5 +33,6 @@ export function InsightsScreen({ model, viewer = false }: { model: ReportsScreen
 declare global {
   interface Window {
     chooseReport?: (id: string) => void;
+    downloadAllInsights?: () => void;
   }
 }

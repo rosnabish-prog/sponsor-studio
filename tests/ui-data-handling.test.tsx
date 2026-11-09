@@ -35,6 +35,9 @@ import { sponsorProperties, distinctSponsorPropertyValues, sponsorPropertyInterv
 import { annotationChanges, lastAnnotatedTimestamp, nextBoundary, sameAnnotationContent, serverSnapshotMatchesRow, snapshotAnnotations } from '../src/domain/annotationUndo';
 import { AttributesScreen, SponsorLibraryScreen, TeamScreen } from '../src/components/AdminScreens';
 import { Screen } from '../src/components/Screens';
+import { InsightsScreen } from '../src/components/InsightsScreen';
+import { createDownloadAllZip } from '../src/domain/downloadAll';
+import JSZip from 'jszip';
 import type { TaskSummary, StudioData } from '../src/types/models';
 import type { StudioScreenModel } from '../src/types/screen';
 
@@ -52,6 +55,27 @@ const data:StudioData = {
   cameraGroups:[{id:'c1',name:'Cameras',items:[{id:'camera',name:'Wide'}]}],
   tasks:[task],
 };
+
+test('bulk download preserves JSON and image bytes, and avoids filename collisions', async () => {
+  const logo='data:image/png;base64,iVBORw0KGgo=';
+  const zip=await JSZip.loadAsync(await (await createDownloadAllZip([
+    {number:'M13',json:'{"match":1}'}, {number:'M13',json:'{"match":2}'},
+  ],[{id:'g',name:'Brands',sponsors:[
+    {id:'a',name:'Brand/Name',logo},{id:'b',name:'Brand_Name',logo},
+    {id:'a',name:'Brand/Name',logo},{id:'c',name:'No image'},
+  ]}])).arrayBuffer());
+  assert.equal(await zip.file('insights/M13_sponsor_annotations.json')!.async('string'),'{"match":1}');
+  assert.equal(await zip.file('insights/M13_sponsor_annotations (2).json')!.async('string'),'{"match":2}');
+  assert.deepEqual(await zip.file('sponsors/Brand_Name.png')!.async('uint8array'),Uint8Array.from([137,80,78,71,13,10,26,10]));
+  assert.ok(zip.file('sponsors/Brand_Name (2).png'));
+  assert.equal(Object.keys(zip.files).filter(name=>name.startsWith('sponsors/')&&!name.endsWith('/')).length,2);
+});
+
+test('bulk download is visible only to owners even without matches', () => {
+  const model={tasks:[],data,focusId:'',fixtures:[],badges:[],visibleTasks:[]};
+  assert.match(renderToStaticMarkup(<InsightsScreen model={model} owner />),/Download All/);
+  assert.doesNotMatch(renderToStaticMarkup(<InsightsScreen model={model} />),/Download All/);
+});
 
 test('context intelligence measures close-up visibility, moment phases, brand overlap and camera-cut continuity without double counting',()=>{
   const base={createdBy:'a1',createdAt:'2026-10-29'};

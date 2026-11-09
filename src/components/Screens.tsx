@@ -23,7 +23,7 @@ export function Screen({ id, context }: { id: ScreenId; context: ScreenContext }
     case 'sponsors': content = data && <SponsorLibraryScreen data={data} />; break;
     case 'attributes': content = data && <AttributesScreen data={data} />; break;
     case 'users': content = data && <TeamScreen data={data} viewerRole={context.user?.role} />; break;
-    case 'reports': content = context.reports && <InsightsScreen model={context.reports} viewer={context.user?.role==='viewer'}/>; break;
+    case 'reports': content = context.reports && <InsightsScreen model={context.reports} viewer={context.user?.role==='viewer'} owner={context.user?.role==='owner'}/>; break;
   }
   return <AppShell screen={id} context={context}>{content}</AppShell>;
 }

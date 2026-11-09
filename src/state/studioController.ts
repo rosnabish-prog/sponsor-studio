@@ -12,6 +12,7 @@ import { readStudioRoute, writeStudioRoute, type ProductView } from './routes';
 import { normalizeHotkey, hotkeyFromKeyboard } from '../domain/hotkeys';
 import { mergeFixtureCatalog } from '../domain/fixtures';
 import { MAX_CATALOG_BYTES, readOriginalPng } from '../domain/logoUpload';
+import { createDownloadAllZip } from '../domain/downloadAll';
 import { copyCatalogEntry, reorderById, type CatalogKind, type DropPlacement } from '../domain/catalogEditing';
 import { cameraOverlaps, hasRecordedCameraAfter, nextSavedCameraStart, retagSavedCamera, selectCameraAngle } from '../domain/cameraSwitch';
 import { editRecordedCamera } from '../domain/cameraIntervalEdit';
@@ -1193,6 +1194,18 @@ function insightExport(d:ReturnType<typeof insightData>){
 }
 function exportObject(t:TaskSummary){let spo=sponsorFor(t),evt=eventsFor(t),cam=camerasFor(t),d=insightData(t);return {schema:'seebot.sponsor_visibility.v1',exportedAt:tstamp(),task:{id:t.id,number:t.number,name:t.name,date:t.date,videoDurationSeconds:t.duration,videoSourceType:t.videoType,videoSourceUrl:me()?.role==='viewer'?null:t.videoUrl||null,videoFileName:t.videoName||null,matchPeriods:t.periods||null},assignment:{sponsorAnalyst:{id:t.sponsorAnalystId,name:nameUser(t.sponsorAnalystId)},eventAndCameraAnalyst:{id:t.contextAnalystId,name:nameUser(t.contextAnalystId)}},status:{label:taskStatus(t),...t.submitted},definition:{visibility:'Sponsor is visible anywhere in frame; simultaneous placements of the same sponsor are counted once.',timebase:'Seconds from beginning of video',eventOverlap:'Sponsors and event intervals are matched by positive duration overlap. Legacy point annotations (if present) are checked at their original timestamps.'},attributes:{sponsors:spo.map(s=>({id:s.id,name:s.name,list:s.groupName,properties:sponsorProperties(s)})),keyEvents:evt,cameraAngles:cam},annotations:{sponsorVisibility:t.sponsors.map(x=>({...x,effectiveProperties:Object.fromEntries(sponsorProperties(spo.find(s=>s.id===x.sponsorId)??{id:x.sponsorId,name:''}).map(property=>[property.id,x.properties?.[property.id]??property.defaultOptionId])),durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null})),keyEvents:t.events.map(x=>({...x,name:labelFor(t,'events',x.eventId),durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null})),cameraAngles:t.cameras.map(x=>({...x,name:labelFor(t,'cameras',x.cameraId),durationSeconds:x.end==null?null:x.end-x.start,open:x.end==null}))},analytics:{uniqueSponsorsSeen:d.active.length,combinedBrandExposureSeconds:d.sumSeconds,sponsors:d.active.map(s=>({id:s.id,name:s.name,exposureSeconds:s.seconds,percentageOfVideo:Math.round(10000*s.seconds/t.duration)/100,visibilityIntervals:s.entries,keyEventOverlaps:s.eventHits})),eventSponsorAssociations:t.events.map(e=>({eventId:e.id,tag:e.eventId,startSeconds:e.start,endSeconds:e.end,durationSeconds:e.end==null?null:e.end-e.start,sponsorIds:spo.filter(s=>d.active.some(b=>b.id===s.id&&d.eventRows.some(event=>event.id===e.id&&event.brands.some(match=>match.id===s.id)))).map(s=>s.id)})),advanced:insightExport(d)}}}
 window.exportTask=id=>{let t=db.tasks.find(x=>x.id===id);if(!t||!visibleTasks().some(x=>x.id===id))return;let s=JSON.stringify(exportObject(t),null,2),a=document.createElement('a'),url=URL.createObjectURL(new Blob([s],{type:'application/json'}));a.href=url;a.download=(t.number||'match')+'_sponsor_annotations.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('JSON exported — '+t.number)};
+let downloadingAll=false;
+window.downloadAllInsights=()=>{
+ if(me()?.role!=='owner'||downloadingAll)return;
+ downloadingAll=true;
+ const exports=db.tasks.map(task=>({number:task.number,json:JSON.stringify(exportObject(task),null,2)}));
+ const groups=cloneStudio(db).sponsorGroups;
+ void createDownloadAllZip(exports,groups).then(blob=>{
+  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='insights_and_sponsors.zip';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('Insights and sponsor images downloaded');
+ }).catch(error=>notify('Could not download all: '+(error instanceof Error?error.message:String(error))))
+  .finally(()=>{downloadingAll=false});
+};
  function render(){
  if(view!=='studio'||!workspaceId||!logged){videoRecovery?.dispose();videoRecovery=null;}
  if(sessionPending){mount('loading',{});return}

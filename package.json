@@ -21,6 +21,7 @@
     "db:deploy": "npm run db:deploy --workspace @sponsor-studio/api"
   },
   "dependencies": {
+    "jszip": "^3.10.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
